@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gather Holidays 🎃🎄🧧</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!-- Landing -->
+<div id="landing" class="overlay">
+  <div class="panel">
+    <h1>🎉 Gather Holidays</h1>
+    <p class="sub">Cùng nhau đón lễ hội — đi dạo, trang trí, gửi thiệp, xem YouTube chung.</p>
+    <label>Tên của bạn <input id="inName" maxlength="16" placeholder="Tên hiển thị"></label>
+    <div id="avatars" class="avatars"></div>
+    <label>Mã phòng <input id="inRoom" maxlength="24" placeholder="vd: halloween-party"></label>
+    <label>Chủ đề (khi tạo phòng mới) <select id="inTheme"></select></label>
+    <label>Mật khẩu admin (tuỳ chọn, để build map) <input id="inAdmin" type="password" placeholder="Bỏ trống nếu không cần"></label>
+    <button id="btnJoin" class="primary">Vào phòng</button>
+    <p class="hint">Chưa có ai trong phòng? Bạn sẽ là người tạo phòng. Chia sẻ link để bạn bè vào.</p>
+  </div>
+</div>
+
+<!-- Game -->
+<canvas id="game"></canvas>
+<div id="topbar">
+  <span id="roomInfo"></span>
+  <button id="btnCopy">🔗 Link</button>
+  <button id="btnCard">💌 Viết thiệp</button>
+  <button id="btnInbox">📬 <span id="inboxCount">0</span></button>
+  <button id="btnDecor">🎨 Trang trí</button>
+  <button id="btnMedia">🎵 Nhạc/Video</button>
+  <button id="btnAdmin">🛠️ Admin</button>
+</div>
+<div id="decorBar" class="bar hidden"></div>
+<div id="peerMenu" class="menu hidden"></div>
+<div id="chat"><div id="chatLog"></div><input id="chatIn" maxlength="140" placeholder="Enter để chat… (WASD/mũi tên để di chuyển, click để đi)"></div>
+<div id="mediaBox" class="hidden"><div id="yt"></div></div>
+
+<!-- Dialogs -->
+<div id="dlgCard" class="overlay hidden"><div class="panel">
+  <h2>💌 Viết thiệp</h2>
+  <textarea id="cardText" maxlength="280" placeholder="Lời chúc của bạn…"></textarea>
+  <label>Kiểu thiệp <select id="cardStyle"></select></label>
+  <label>Gửi tới <select id="cardTo"></select></label>
+  <div class="row"><button id="cardSend" class="primary">Gửi / Treo</button><button data-close>Đóng</button></div>
+</div></div>
+<div id="dlgInbox" class="overlay hidden"><div class="panel"><h2>📬 Thiệp nhận được</h2><div id="inboxList"></div><button data-close>Đóng</button></div></div>
+<div id="dlgMedia" class="overlay hidden"><div class="panel">
+  <h2>🎵 Xem/nghe cùng nhau</h2>
+  <input id="mediaUrl" placeholder="Dán link YouTube">
+  <div class="row"><button id="mediaPlay" class="primary">▶ Phát</button><button id="mediaPause">⏸ Dừng</button><button id="mediaHide">Ẩn/Hiện</button></div>
+  <button data-close>Đóng</button>
+</div></div>
+<div id="dlgAdmin" class="overlay hidden"><div class="panel">
+  <h2>🛠️ Admin — Build map</h2>
+  <div id="adminLogin"><input id="adminPass" type="password" placeholder="Mật khẩu admin"><button id="adminGo" class="primary">Đăng nhập</button></div>
+  <div id="adminTools" class="hidden">
+    <label>Chủ đề phòng <select id="admTheme"></select></label>
+    <div id="brushes" class="brushes"></div>
+    <p class="hint">Chọn ô rồi <b>kéo chuột trên map</b> để vẽ. Đóng hộp thoại này để vẽ.</p>
+    <div class="row"><label>Rộng <input id="admW" type="number" min="8" max="80" value="28"></label><label>Cao <input id="admH" type="number" min="8" max="80" value="18"></label><button id="admResize">Đổi cỡ (xoá map)</button></div>
+    <label><input type="checkbox" id="admOpenDecor" checked> Cho mọi người trang trí</label>
+    <label><input type="checkbox" id="admOpenMedia" checked> Cho mọi người điều khiển nhạc/video</label>
+    <div class="row"><button id="admExport">⬇ Xuất map</button><button id="admImport">⬆ Nhập map</button><button id="admClearDecor">Xoá decor</button></div>
+  </div>
+  <button data-close>Đóng</button>
+</div></div>
+<div id="toast"></div>
+<script type="module" src="js/game.js"></script>
+</body>
+</html>

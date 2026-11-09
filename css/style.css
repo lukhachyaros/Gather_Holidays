@@ -1,0 +1,33 @@
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui,sans-serif;background:#111;color:#eee}
+canvas#game{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hidden{display:none!important}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50;padding:12px}
+.panel{background:#1e1b2e;border-radius:14px;padding:20px;width:min(440px,100%);max-height:92vh;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.panel h1,.panel h2{margin:0}.sub,.hint{margin:0;opacity:.7;font-size:13px}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px}
+input,select,textarea,button{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid #444;background:#2a2640;color:#eee}
+input[type=checkbox]{width:auto;align-self:flex-start}
+textarea{min-height:90px;resize:vertical}
+button{cursor:pointer}button:hover{background:#3a3560}
+button.primary{background:#e4572e;border-color:#e4572e}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.avatars,.brushes{display:flex;flex-wrap:wrap;gap:4px}
+.avatars button,.brushes button{font-size:20px;padding:4px 8px}
+.avatars button.sel,.brushes button.sel{outline:2px solid #ffd166}
+#topbar{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;z-index:10}
+#roomInfo{background:#000a;padding:6px 10px;border-radius:8px;font-size:13px}
+#topbar button{background:#000a}
+.bar{position:fixed;top:52px;left:8px;right:8px;background:#000c;border-radius:10px;padding:6px;display:flex;gap:4px;flex-wrap:wrap;z-index:10}
+.bar button{font-size:22px;padding:2px 8px;background:transparent;border:1px solid transparent}.bar button.sel{border-color:#ffd166}
+.menu{position:fixed;background:#1e1b2e;border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:4px;z-index:20}
+#chat{position:fixed;left:8px;bottom:8px;width:min(380px,calc(100% - 16px));z-index:10}
+#chatLog{max-height:140px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;font-size:13px;text-shadow:0 1px 2px #000;margin-bottom:4px}
+#chatLog div{background:#0008;padding:2px 8px;border-radius:6px;margin-top:2px;width:fit-content;max-width:100%}
+#chatIn{width:100%;background:#000a}
+#mediaBox{position:fixed;right:8px;bottom:8px;width:min(360px,45vw);aspect-ratio:16/9;z-index:10;background:#000;border-radius:10px;overflow:hidden}
+#mediaBox iframe{width:100%;height:100%}
+.card{border:3px solid;border-radius:10px;padding:10px;white-space:pre-wrap;word-break:break-word}
+#inboxList{display:flex;flex-direction:column;gap:8px}
+#toast{position:fixed;top:56px;left:50%;transform:translateX(-50%);background:#000d;padding:8px 14px;border-radius:8px;z-index:90;opacity:0;transition:opacity .3s;pointer-events:none}
+#toast.show{opacity:1}
