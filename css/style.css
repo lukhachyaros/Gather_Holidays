@@ -31,3 +31,6 @@ button.primary{background:#e4572e;border-color:#e4572e}
 #inboxList{display:flex;flex-direction:column;gap:8px}
 #toast{position:fixed;top:56px;left:50%;transform:translateX(-50%);background:#000d;padding:8px 14px;border-radius:8px;z-index:90;opacity:0;transition:opacity .3s;pointer-events:none}
 #toast.show{opacity:1}
+#crosshair{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font-size:22px;color:#fff;text-shadow:0 0 3px #000;pointer-events:none;z-index:5}
+#hud{position:fixed;right:8px;top:52px;background:#000a;padding:6px 10px;border-radius:8px;font-size:12px;z-index:9;text-align:right;max-width:300px}
+canvas#game{touch-action:none}

@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gather Holidays 🎃🎄🧧</title>
 <link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three/build/three.module.js",
+  "three/addons/": "./vendor/three/examples/jsm/"
+} }
+</script>
 </head>
 <body>
 <!-- Landing -->
@@ -27,15 +33,18 @@
 <div id="topbar">
   <span id="roomInfo"></span>
   <button id="btnCopy">🔗 Link</button>
+  <button id="btnView">📷 Đổi góc nhìn (V)</button>
   <button id="btnCard">💌 Viết thiệp</button>
   <button id="btnInbox">📬 <span id="inboxCount">0</span></button>
   <button id="btnDecor">🎨 Trang trí</button>
   <button id="btnMedia">🎵 Nhạc/Video</button>
   <button id="btnAdmin">🛠️ Admin</button>
 </div>
+<div id="crosshair" class="hidden">+</div>
+<div id="hud"><b id="viewLabel"></b><br>WASD di chuyển · Shift chạy · Space nhảy · V góc nhìn · E tương tác · L khoá chuột · 1-4 emote<br>Kéo chuột để xoay camera <button id="btnStopBrush" class="hidden">Thoát chế độ vẽ</button></div>
 <div id="decorBar" class="bar hidden"></div>
 <div id="peerMenu" class="menu hidden"></div>
-<div id="chat"><div id="chatLog"></div><input id="chatIn" maxlength="140" placeholder="Enter để chat… (WASD/mũi tên để di chuyển, click để đi)"></div>
+<div id="chat"><div id="chatLog"></div><input id="chatIn" maxlength="140" placeholder="Nhấn Enter để chat…"></div>
 <div id="mediaBox" class="hidden"><div id="yt"></div></div>
 
 <!-- Dialogs -->

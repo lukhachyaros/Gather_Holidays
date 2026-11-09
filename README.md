@@ -1,41 +1,84 @@
-# 🎉 Gather Holidays
+# 🎉 Gather Holidays 3D
 
-Một "thế giới" nhỏ chạy hoàn toàn trên trình duyệt để mọi người cùng đón lễ hội: đi dạo, tương tác, viết thiệp, trang trí map theo chủ đề và xem YouTube chung. **Không cần server, không cần build** — chỉ HTML + ES modules.
+Một không gian 3D tương tác nhiều người chơi chạy hoàn toàn trên trình duyệt để mọi người cùng đón lễ hội: đi dạo, ngắm cảnh, tương tác, viết thiệp, trang trí map theo chủ đề và xem YouTube chung. **Không cần server backend, không cần build** — chạy bằng HTML, WebGL (three.js) và P2P WebRTC.
 
 ## Tính năng
-- 🚶 Di chuyển bằng WASD/mũi tên hoặc click; nhìn thấy người khác theo thời gian thực
-- 🤝 Tương tác: click người khác → vẫy tay, ôm, đập tay, tặng quà; phím `1-4` thả emote; chat bong bóng (Enter)
-- 💌 Viết thiệp: gửi riêng cho một người hoặc treo lên map; hộp thư 📬 lưu trong trình duyệt
-- 🎨 Trang trí: đặt/xoá đồ trang trí theo theme (🎃 Halloween, 🎄 Giáng sinh, 🧧 Tết, 🥮 Trung thu, 🎆 Năm mới, 💝 Valentine) + hiệu ứng hạt (tuyết, hoa mai, dơi…)
-- 🛠️ Admin build map: vẽ tile, đổi theme, đổi kích thước, xuất/nhập `map.json`, giới hạn quyền trang trí/điều khiển media
-- 🎵 Nhạc/video YouTube đồng bộ cho cả phòng (dán link, phát/dừng)
+- 🎮 **2 góc nhìn kiểu game 3D (như PUBG):**
+  - **Góc nhìn thứ ba (TPS):** Camera bám sau lưng nhân vật, tự né tường/vật cản.
+  - **Góc nhìn thứ nhất (FPS):** Nhìn qua mắt nhân vật, tâm ngắm giữa màn hình.
+  - Phím **V** để chuyển nhanh giữa 2 góc nhìn. Phím **L** để khoá/mở chuột (Pointer Lock).
+- 🚶 **Di chuyển & Cử động 3D:**
+  - `WASD` / mũi tên để di chuyển, giữ `Shift` để chạy nhanh, `Space` để nhảy.
+  - Model 3D nhân vật đầy đủ bộ khung xương và animation (Idle, Walk, Run, Jump).
+  - Tự đổi màu nhân vật theo avatar bạn chọn để dễ phân biệt.
+- 🤝 **Tương tác trực tiếp:**
+  - Nhắm vào người chơi khác rồi click chuột hoặc bấm phím **E** khi đứng gần để mở menu tương tác: Vẫy tay (Wave), Nhảy múa ăn mừng (Dance), Đập tay (Thumbs up), Tặng quà (Yes/gift), Gửi thiệp riêng.
+  - Phím tắt nhanh `1` - `4` để phát emote chuyển động tức thì.
+  - Chat bong bóng thoại nổi trên đầu nhân vật và thanh chat góc dưới.
+- 💌 **Viết thiệp lễ hội:**
+  - Gửi riêng cho bạn bè trong phòng hoặc **ghim trực tiếp lên map 3D** thành hình phong thư 💌 bay bổng. Người khác có thể lại gần bấm xem và lưu vào hộp thư cá nhân (`localStorage`).
+- 🎨 **Trang trí 3D theo từng mùa lễ:**
+  - 6 chủ đề: 🎃 Halloween, 🎄 Giáng sinh, 🧧 Tết Nguyên Đán, 🥮 Trung thu, 🎆 Năm mới, 💝 Valentine.
+  - Bật thanh trang trí, chọn món đồ và click vào nền map để đặt mô hình 3D (cây thông, bí ngô phát sáng, lồng đèn đỏ, bao lì xì, hoa mai, pháo hoa, người tuyết, quà...).
+  - Hiệu ứng hạt bay 3D đặc trưng: tuyết rơi, hoa mai, cánh hoa hồng, dơi đêm...
+- 🛠️ **Admin Builder & Chế độ vẽ map:**
+  - Chọn ô vẽ trong Admin -> Camera tự động chuyển góc nhìn từ trên cao (Top-down) để admin dễ dàng kéo chuột tạo tường, sàn, hồ nước, thảm, màn hình lớn.
+  - Xuất/nhập bản đồ dưới dạng file `map.json`.
+  - Phân quyền cho phép/khoá tính năng trang trí và điều khiển video của khách.
+- 🎵 **Rạp chiếu YouTube đồng bộ:**
+  - Dán link video/nhạc YouTube, cả phòng sẽ cùng xem và nghe đồng thời theo thời gian thực. Màn hình ảo hiển thị trên map 3D kèm khung video trực quan.
 
-## Chạy
-Mở `index.html` qua một static server bất kỳ (ES modules không chạy từ `file://`):
+## Cách chạy
+Mở thư mục bằng bất kỳ static web server nào (do các ES module và file `.glb` cần HTTP/HTTPS, không chạy trực tiếp bằng protocol `file://`):
 ```bash
-python3 -m http.server 8080   # rồi mở http://localhost:8080
+python3 -m http.server 8080   # rồi mở http://localhost:8080 trên trình duyệt
 ```
-Hoặc bật **GitHub Pages** (Settings → Pages → Source: GitHub Actions); workflow `.github/workflows/pages.yml` sẽ tự deploy. Chia sẻ link dạng `.../#room=ten-phong`.
+Hoặc dùng `npx serve`, extension Live Server trong VS Code.
 
-## Kiến trúc
-| File | Vai trò |
+### Triển khai lên GitHub Pages
+Dự án đã tích hợp sẵn GitHub Actions workflow `.github/workflows/pages.yml`.
+1. Vào repo trên GitHub: **Settings** -> **Pages**.
+2. Tại mục **Build and deployment > Source**, chọn **GitHub Actions**.
+3. Mỗi khi push lên nhánh `main`, website sẽ tự động deploy lên địa chỉ `https://<username>.github.io/Gather_Holidays/`.
+4. Chia sẻ link kèm mã phòng: `https://<username>.github.io/Gather_Holidays/#room=phong-cua-ban`.
+
+## Phím tắt điều khiển
+| Phím | Hành động |
 |---|---|
-| `index.html`, `css/style.css` | UI |
-| `js/game.js` | Vòng lặp game, render canvas, input, đồng bộ trạng thái, UI |
-| `js/net.js` | P2P WebRTC qua [Trystero](https://trystero.dev) (signaling bằng relay Nostr công cộng) |
-| `js/maps.js` | Định dạng map, tile, kiểm tra hợp lệ |
-| `js/themes.js` | Theme/lễ hội — **thêm lễ hội mới chỉ cần thêm 1 mục ở đây** |
-| `js/media.js` | YouTube IFrame player đồng bộ |
+| `W, A, S, D` / `Mũi tên` | Di chuyển |
+| `Shift` (giữ) | Chạy nhanh |
+| `Space` | Nhảy |
+| `Kéo chuột` | Xoay góc nhìn camera |
+| `V` | Đổi góc nhìn: Góc nhìn thứ 3 (TPS) ↔ Góc nhìn thứ nhất (FPS) |
+| `L` | Khoá / mở con trỏ chuột (Pointer Lock kiểu FPS) |
+| `E` | Tương tác nhanh với người đứng gần hoặc phong thư ghim gần đó |
+| `1, 2, 3, 4` | Bật hoạt ảnh emote (Vẫy tay, Thumbs up, Nhảy múa, Đồng ý) |
+| `Enter` | Nhập nội dung chat |
+| `Esc` | Thoát chế độ vẽ map hoặc thoát khoá chuột |
 
-Trạng thái phòng (map, decor, thiệp treo, media) được các peer giữ và gửi cho người mới vào; người đầu tiên vào phòng là người tạo phòng.
+## Cấu trúc mã nguồn
+```
+Gather_Holidays/
+├── index.html               # Trang chính chứa UI overlay và importmap Three.js
+├── css/style.css            # Giao diện HUD, cửa sổ chat, bảng chọn lễ hội, tâm ngắm
+├── js/
+│   ├── game.js              # Logic vòng lặp chính, điều khiển camera FPS/TPS, input, đồng bộ
+│   ├── world.js             # Dựng không gian 3D, instanced mesh (sàn, tường, nước), ánh sáng, hạt rơi
+│   ├── avatar.js            # Nạp model GLB, skeleton clone, animation mixer & state machine
+│   ├── props.js             # Khởi tạo mô hình 3D đồ trang trí procedural & sprite fallback
+│   ├── maps.js              # Cấu trúc dữ liệu map, kiểm tra tính hợp lệ của tile
+│   ├── themes.js            # Định nghĩa các chủ đề lễ hội, màu sắc, danh sách đồ trang trí
+│   ├── media.js             # Tích hợp YouTube IFrame Player API và đồng bộ timeline
+│   └── net.js               # Kết nối mạng P2P WebRTC qua Trystero
+├── assets/
+│   └── models/
+│       └── RobotExpressive.glb # Model nhân vật 3D CC0 kèm 14 hoạt ảnh
+├── vendor/three/            # Bản phân phối Three.js r170 (chạy offline / local không phụ thuộc CDN bên ngoài)
+├── maps/                    # Thư mục chứa các bản đồ JSON mẫu
+├── CREDITS.md               # Thông tin bản quyền các tài nguyên 3D
+└── README.md
+```
 
-## Hạn chế cần biết
-- **Không có server ⇒ không có lưu trữ vĩnh viễn**: khi mọi người rời phòng, trạng thái mất. Hãy dùng *Xuất map* và commit vào `maps/` để lưu.
-- **Admin là mô hình "tin cậy lỏng"**: mật khẩu admin được băm; người biết mật khẩu có quyền admin, nhưng các peer trong phòng có thể thấy khoá admin khi admin thao tác. Không dùng cho nội dung cần bảo mật. Nếu cần chặt chẽ, thêm backend (Cloudflare Workers/Supabase).
-- Một số mạng (NAT đối xứng) cần TURN server; cấu hình `turnConfig` trong `js/net.js` nếu bạn bè không kết nối được.
-- Phụ thuộc CDN jsDelivr (Trystero 0.26.0) và relay Nostr công cộng.
-
-## Hướng phát triển
-Tile/sprite đẹp hơn, nhiều phòng trong một map (portal), voice/video chat (Trystero media streams), lưu map lên Gist/Supabase, di động (joystick ảo).
-
-Giấy phép: xem `LICENSE`.
+## Giấy phép & Tác quyền
+- Mã nguồn dự án: MIT.
+- Tài nguyên 3D và thư viện: xem chi tiết tại [CREDITS.md](CREDITS.md).
