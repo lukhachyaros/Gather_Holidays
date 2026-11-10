@@ -37,6 +37,10 @@ button.danger-btn:hover:not(:disabled){background:#991b1b}
 .inline-label span{white-space:nowrap;color:#94a3b8;font-weight:600}
 .inline-label input{width:155px;padding:6px 9px;background:#1e1b2e}
 
+.invite-banner{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:linear-gradient(135deg,rgba(2,132,199,.25),rgba(20,83,45,.35));border:1.5px solid #38bdf8;border-radius:12px;padding:11px 14px}
+.invite-info{display:flex;flex-direction:column;gap:3px;font-size:13.5px}
+.invite-info b{color:#4ade80}
+
 .lobby-grid{display:grid;grid-template-columns:1.45fr 1fr;gap:16px;align-items:stretch}
 @media (max-width:740px){.lobby-grid{grid-template-columns:1fr}}
 

@@ -235,6 +235,8 @@ $('btnCloseLobby').onclick = () => {
   if (me?.started && !isKicked) $('landing').classList.add('hidden');
 };
 
+let invitedRoomId = '';
+
 function broadcastMyRoomToLobby() {
   if (!lobby || !state || !me?.started || isKicked || !roomName) return;
   const off = OFFICIAL_ROOMS.find(o => o.id === roomName);
@@ -247,24 +249,60 @@ function broadcastMyRoomToLobby() {
     hasPassword: !!state.passHash,
     passHash: state.passHash || '',
   });
+  if (isHost()) {
+    net?.send('state', state);
+  }
 }
 
 // Periodically announce active room to Lobby so new visitors see live player counts
 setInterval(() => {
   if (me?.started && state && !isKicked) broadcastMyRoomToLobby();
-}, 4000);
+}, 3500);
 
 window.addEventListener('beforeunload', () => {
   if (lobby && roomName && peers.size === 0) {
+    net?.clearRetainedState?.();
     lobby.remove(roomName);
   }
 });
+
+function updateInviteBanner(liveMap) {
+  const banner = $('inviteBanner');
+  if (!banner) return;
+  if (!invitedRoomId || (me?.started && roomName === invitedRoomId)) {
+    banner.classList.add('hidden');
+    return;
+  }
+  const live = liveMap?.get(invitedRoomId);
+  const off = OFFICIAL_ROOMS.find(o => o.id === invitedRoomId);
+  const displayTitle = live?.title || off?.title || `#${invitedRoomId}`;
+  $('inviteRoomName').textContent = `${displayTitle} (#${invitedRoomId})`;
+  $('inviteRoomSub').textContent = live
+    ? `🟢 Phòng đang mở · 👥 ${live.count} người đang chơi · 👑 Chủ phòng: ${live.hostName || 'Host'}`
+    : `Nhấn nút bên phải để tham gia vào phòng #${invitedRoomId} cùng bạn bè!`;
+  banner.classList.remove('hidden');
+
+  $('btnJoinInvite').onclick = () => {
+    if (live?.hasPassword) {
+      promptRoomPassword(live);
+    } else {
+      joinRoomConfig({
+        id: invitedRoomId,
+        title: live?.title || off?.title || invitedRoomId,
+        theme: live?.theme || off?.theme || 'christmas',
+        passHash: '',
+      });
+    }
+  };
+}
 
 function renderLobbyRooms() {
   const box = $('lobbyRoomList');
   if (!box) return;
   const liveRooms = lobby ? lobby.getRooms() : [];
   const liveMap = new Map(liveRooms.map(r => [r.id, r]));
+
+  updateInviteBanner(liveMap);
 
   // Merge Official Public Plazas with live active rooms
   const combined = [];
@@ -295,8 +333,24 @@ function renderLobbyRooms() {
     if (r.count > 0) combined.push(r);
   }
 
-  // Sort: rooms with active players first, then official rooms
+  // If the user opened an invite link (#room=...) that isn't in combined yet, pin it at the top
+  if (invitedRoomId && !combined.some(r => r.id === invitedRoomId)) {
+    combined.unshift({
+      id: invitedRoomId,
+      title: invitedRoomId,
+      theme: 'christmas',
+      hostName: 'Link mời',
+      count: 0,
+      hasPassword: false,
+      passHash: '',
+      invited: true,
+    });
+  }
+
+  // Sort: invited room first, then rooms with active players, then official rooms
   combined.sort((a, b) => {
+    if (a.id === invitedRoomId && b.id !== invitedRoomId) return -1;
+    if (b.id === invitedRoomId && a.id !== invitedRoomId) return 1;
     if ((b.count > 0) !== (a.count > 0)) return b.count - a.count;
     if (!!b.official !== !!a.official) return a.official ? -1 : 1;
     return b.count - a.count;
@@ -312,11 +366,14 @@ function renderLobbyRooms() {
 
   filtered.forEach(r => {
     const isCurrent = me?.started && !isKicked && r.id === roomName;
+    const isInvited = r.id === invitedRoomId;
     const card = document.createElement('div');
-    card.className = 'room-card' + (isCurrent ? ' current-room' : '');
+    card.className = 'room-card' + (isCurrent || isInvited ? ' current-room' : '');
 
     const icon = THEME_ICON[r.theme] || '🎄';
-    const tagHtml = r.official
+    const tagHtml = isInvited
+      ? '<span class="room-tag public">🎯 Phòng được mời</span>'
+      : r.official
       ? '<span class="room-tag official">🌟 Sảnh Chung</span>'
       : r.hasPassword
       ? '<span class="room-tag private">🔒 Riêng tư</span>'
@@ -325,7 +382,7 @@ function renderLobbyRooms() {
     const subHtml =
       r.count > 0
         ? `<span class="active-count">👥 ${r.count} đang chơi</span> · <span>👑 ${r.hostName || 'Host'}</span> · <span>#${r.id}</span>`
-        : `<span>👥 0 đang chơi (Vào mở phòng ngay)</span> · <span>#${r.id}</span>`;
+        : `<span>👥 Sẵn sàng vào phòng</span> · <span>#${r.id}</span>`;
 
     const left = document.createElement('div');
     left.className = 'room-card-left';
@@ -427,6 +484,11 @@ function leaveCurrentRoom() {
   if (!net) return;
   const oldRoom = roomName;
   const wasAlone = peers.size === 0;
+  if (wasAlone) {
+    try {
+      net.clearRetainedState?.();
+    } catch {}
+  }
   try {
     net.leave();
   } catch {}
@@ -455,6 +517,7 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
   clearTimeout(joinTimer);
 
   roomName = id;
+  invitedRoomId = '';
   const off = OFFICIAL_ROOMS.find(o => o.id === roomName);
   roomTitle = title || off?.title || roomName;
   const selectedTheme = off?.theme || theme || 'christmas';
@@ -487,11 +550,13 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
 
   initPlayer('yt', onMediaEnded);
 
-  // Wait briefly for existing room state from peers; otherwise initialize fresh room state as Host
+  // Wait briefly for existing room state from peers/MQTT; otherwise initialize fresh room state as Host
   joinTimer = setTimeout(() => {
     if (gotState || isKicked || !net) return;
+    const now = Date.now();
     state = {
-      v: Date.now(),
+      createdAt: now,
+      v: now,
       roomTitle,
       passHash: passHash || '',
       hostId: net.selfId,
@@ -519,24 +584,30 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
     };
     toast(`👑 Bạn đã mở phòng "${roomTitle}"${passHash ? ' (🔒 Có mật khẩu)' : ''}!`);
     start();
-  }, 550);
+  }, 950);
 }
 
 // Initialize Lobby Discovery & Check URL hash for direct room link
 (async function initAppLobby() {
+  const urlRoom = slugifyRoom(new URLSearchParams(location.hash.slice(1)).get('room') || '');
+  if (urlRoom) {
+    invitedRoomId = urlRoom;
+  }
+
   lobby = await connectLobby({
     onUpdate: () => renderLobbyRooms(),
     onDiscoverRequest: () => broadcastMyRoomToLobby(),
   });
   renderLobbyRooms();
-
-  const urlRoom = slugifyRoom(new URLSearchParams(location.hash.slice(1)).get('room') || '');
-  if (urlRoom) {
-    $('inRoom').value = urlRoom;
-    const off = OFFICIAL_ROOMS.find(o => o.id === urlRoom);
-    if (off) $('inRoomTitle').value = off.title;
-  }
 })();
+
+window.addEventListener('hashchange', () => {
+  const urlRoom = slugifyRoom(new URLSearchParams(location.hash.slice(1)).get('room') || '');
+  if (urlRoom && urlRoom !== roomName) {
+    invitedRoomId = urlRoom;
+    openLobbyOverlay();
+  }
+});
 
 async function start() {
   if (!me || me.started || isKicked || !state) return;
@@ -635,6 +706,7 @@ function closeRoomByHost() {
   const closingId = roomName;
   const closingTitle = state?.roomTitle || roomTitle || roomName;
   try {
+    net?.clearRetainedState?.();
     net?.send('op', {
       k: 'closeRoom',
       byHost: net.selfId,
@@ -832,21 +904,36 @@ const handlers = {
     }
   },
   state(s) {
-    if (!validMap(s?.map) || (state && s.v <= state.v)) return;
+    if (!validMap(s?.map)) return;
     if (s.kickedIds?.includes(net.selfId)) {
       handleSelfKicked(s.hostName);
       return;
     }
+
+    // Determine whether incoming state is the older (authoritative) room state or a newer update of the same room
+    if (state) {
+      const sCreated = s.createdAt || s.v || 0;
+      const myCreated = state.createdAt || state.v || 0;
+      const isOlderRoom = sCreated < myCreated && s.hostId !== net.selfId;
+      const isNewerVersion = s.v > state.v;
+      if (!isOlderRoom && !isNewerVersion) return;
+    }
+
     const first = !state;
     state = s;
     if (s.roomTitle) roomTitle = s.roomTitle;
     gotState = true;
-    if (first) start();
-    else {
+    if (first) {
+      start();
+    } else {
+      if (state.passHash && state.hostId !== net.selfId && verifiedPassHash !== state.passHash) {
+        promptRoomPassword({ id: roomName, title: state.roomTitle || roomName, passHash: state.passHash });
+      }
       $('topTheme').value = state.theme;
       applyMedia(state.mediaCurrent);
       updateHostUI();
       updateMediaDialog();
+      net.send('hello', pubInfo());
     }
   },
   op(op, id) {
@@ -1016,6 +1103,9 @@ function applyOp(op, senderId = null) {
     }
   }
   state.v = Math.max(state.v || 0, op.v || 0);
+  if (isHost() && state) {
+    net?.send('state', state);
+  }
 }
 
 function emitOp(op) {

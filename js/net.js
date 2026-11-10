@@ -1,21 +1,249 @@
-// Hybrid Multiplayer: Trystero P2P WebRTC (over internet) + BroadcastChannel (instant multi-tab sync) + Global Lobby Discovery.
-const TRYSTERO_URL = 'https://cdn.jsdelivr.net/npm/trystero@0.26.0/+esm';
-const APP_ID = 'gather-holidays-3d-v2';
-const LOBBY_STORAGE_KEY = 'gh_lobby_rooms_v2';
-const ROOM_TTL_MS = 14000;
+// Hybrid Realtime Multiplayer & Global Lobby Engine:
+// 1. Multi-Broker MQTT over Secure WebSockets (WSS) with Retained Lobby Rooms (instant cross-network discovery & NAT traversal)
+// 2. Fixed Trystero WebRTC P2P mesh ([send, receive] = room.makeAction)
+// 3. BroadcastChannel + localStorage (0ms same-browser multi-tab sync)
 
-let trysteroLibPromise = null;
-function loadTrystero() {
-  if (!trysteroLibPromise) {
-    trysteroLibPromise = Promise.race([
-      import(TRYSTERO_URL),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('Trystero load timeout')), 2800)),
-    ]).catch(e => {
-      console.warn('WebRTC P2P fallback to local channel:', e.message || e);
-      return null;
-    });
+const APP_PREFIX = 'gather-holidays-3d-v3';
+const LOBBY_STORAGE_KEY = 'gh_lobby_rooms_v3';
+const ROOM_TTL_MS = 18000;
+
+const MQTT_BROKERS = [
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://broker.hivemq.com:8884/mqtt',
+];
+
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+function encodeLen(len) {
+  const out = [];
+  do {
+    let b = len % 128;
+    len = Math.floor(len / 128);
+    if (len > 0) b |= 0x80;
+    out.push(b);
+  } while (len > 0);
+  return out;
+}
+
+function encodeStr(str) {
+  const bytes = enc.encode(str);
+  return [(bytes.length >> 8) & 0xff, bytes.length & 0xff, ...bytes];
+}
+
+function buildPacket(typeFlags, bodyBytes) {
+  const lenBytes = encodeLen(bodyBytes.length);
+  const pkt = new Uint8Array(1 + lenBytes.length + bodyBytes.length);
+  pkt[0] = typeFlags;
+  pkt.set(lenBytes, 1);
+  pkt.set(bodyBytes, 1 + lenBytes.length);
+  return pkt;
+}
+
+// Lightweight native WebSocket MQTT v3.1.1 client (0 external dependencies, supports retain)
+function createMqttClient(brokerUrl, { onConnect, onMessage }) {
+  let ws = null;
+  let connected = false;
+  let closed = false;
+  let pingTimer = null;
+  let reconnectTimer = null;
+  let pktId = 1;
+  const subs = new Set();
+  const queue = [];
+  const clientId = 'gh_' + Math.random().toString(36).slice(2, 12);
+
+  function sendRaw(pkt) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(pkt);
+      } catch {}
+    }
   }
-  return trysteroLibPromise;
+
+  function sendSubscribe(topic) {
+    const id = (pktId = (pktId % 65000) + 1);
+    const body = [(id >> 8) & 0xff, id & 0xff, ...encodeStr(topic), 0x00];
+    sendRaw(buildPacket(0x82, body));
+  }
+
+  function sendPublish(topic, payloadBytes, retain = false) {
+    const tBytes = encodeStr(topic);
+    const body = new Uint8Array(tBytes.length + payloadBytes.length);
+    body.set(tBytes, 0);
+    body.set(payloadBytes, tBytes.length);
+    sendRaw(buildPacket(0x30 | (retain ? 0x01 : 0x00), body));
+  }
+
+  function connectWs() {
+    if (closed) return;
+    try {
+      ws = new WebSocket(brokerUrl, 'mqtt');
+      ws.binaryType = 'arraybuffer';
+    } catch {
+      reconnectTimer = setTimeout(connectWs, 3000);
+      return;
+    }
+
+    ws.onopen = () => {
+      const body = [
+        ...encodeStr('MQTT'),
+        0x04, // Protocol level 4 (3.1.1)
+        0x02, // Clean session
+        0x00,
+        0x28, // Keep-alive 40s
+        ...encodeStr(clientId),
+      ];
+      sendRaw(buildPacket(0x10, body));
+    };
+
+    ws.onmessage = ev => {
+      const buf = new Uint8Array(ev.data);
+      let offset = 0;
+      while (offset < buf.length) {
+        const typeFlags = buf[offset];
+        const pktType = typeFlags >> 4;
+        let mult = 1,
+          remLen = 0,
+          idx = offset + 1;
+        while (idx < buf.length) {
+          const b = buf[idx++];
+          remLen += (b & 0x7f) * mult;
+          mult *= 128;
+          if ((b & 0x80) === 0) break;
+        }
+        const pktEnd = idx + remLen;
+        if (pktEnd > buf.length) break;
+
+        if (pktType === 2) {
+          // CONNACK
+          connected = true;
+          subs.forEach(t => sendSubscribe(t));
+          while (queue.length) {
+            const item = queue.shift();
+            sendPublish(item.topic, item.bytes, item.retain);
+          }
+          clearInterval(pingTimer);
+          pingTimer = setInterval(() => sendRaw(new Uint8Array([0xc0, 0x00])), 22000);
+          onConnect?.();
+        } else if (pktType === 3) {
+          // PUBLISH
+          const qos = (typeFlags >> 1) & 0x03;
+          const tLen = (buf[idx] << 8) | buf[idx + 1];
+          const tStart = idx + 2;
+          const topic = dec.decode(buf.subarray(tStart, tStart + tLen));
+          const pStart = tStart + tLen + (qos > 0 ? 2 : 0);
+          const payloadBytes = buf.subarray(pStart, pktEnd);
+          const text = payloadBytes.length ? dec.decode(payloadBytes) : '';
+          onMessage?.(topic, text);
+        }
+        offset = pktEnd;
+      }
+    };
+
+    ws.onclose = () => {
+      connected = false;
+      clearInterval(pingTimer);
+      if (!closed) {
+        reconnectTimer = setTimeout(connectWs, 2500);
+      }
+    };
+
+    ws.onerror = () => {};
+  }
+
+  connectWs();
+
+  return {
+    subscribe(topic) {
+      subs.add(topic);
+      if (connected) sendSubscribe(topic);
+    },
+    publish(topic, dataObjOrNull, retain = false) {
+      const bytes =
+        dataObjOrNull === null || dataObjOrNull === ''
+          ? new Uint8Array(0)
+          : enc.encode(typeof dataObjOrNull === 'string' ? dataObjOrNull : JSON.stringify(dataObjOrNull));
+      if (connected) {
+        sendPublish(topic, bytes, retain);
+      } else {
+        queue.push({ topic, bytes, retain });
+      }
+    },
+    close() {
+      closed = true;
+      clearInterval(pingTimer);
+      clearTimeout(reconnectTimer);
+      try {
+        ws?.close();
+      } catch {}
+    },
+  };
+}
+
+// Shared Multi-Broker Bus so Lobby and Room share fast connections
+class MqttBus {
+  constructor() {
+    this.handlers = new Set();
+    this.seenMids = new Set();
+    this.clients = MQTT_BROKERS.map(url =>
+      createMqttClient(url, {
+        onMessage: (topic, text) => this._handleIncoming(topic, text),
+      })
+    );
+  }
+
+  _handleIncoming(topic, text) {
+    if (!text) {
+      // Empty retained message = room removed
+      for (const fn of this.handlers) fn(topic, null);
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return;
+    }
+    if (parsed && parsed._mid) {
+      if (this.seenMids.has(parsed._mid)) return;
+      this.seenMids.add(parsed._mid);
+      if (this.seenMids.size > 2000) {
+        const first = this.seenMids.values().next().value;
+        this.seenMids.delete(first);
+      }
+    }
+    for (const fn of this.handlers) fn(topic, parsed);
+  }
+
+  subscribe(topic) {
+    this.clients.forEach(c => c.subscribe(topic));
+  }
+
+  publish(topic, payload, retain = false) {
+    if (payload === null) {
+      this.clients.forEach(c => c.publish(topic, null, retain));
+      return;
+    }
+    const msg = {
+      ...payload,
+      _mid: Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
+    };
+    this.seenMids.add(msg._mid);
+    this.clients.forEach(c => c.publish(topic, msg, retain));
+  }
+
+  onMessage(fn) {
+    this.handlers.add(fn);
+    return () => this.handlers.delete(fn);
+  }
+}
+
+let sharedBus = null;
+function getBus() {
+  if (!sharedBus && typeof WebSocket !== 'undefined') {
+    sharedBus = new MqttBus();
+  }
+  return sharedBus;
 }
 
 // Simple deterministic password hash for private room verification
@@ -33,6 +261,8 @@ export function hashPass(str = '') {
 // ---------- Global Room Lobby Discovery ----------
 export async function connectLobby(handlers = {}) {
   const rooms = new Map();
+  const lobbyTopicPrefix = `${APP_PREFIX}/lobby/rooms/`;
+  const lobbyDiscoverTopic = `${APP_PREFIX}/lobby/discover`;
 
   function loadStoredRooms() {
     try {
@@ -80,11 +310,23 @@ export async function connectLobby(handlers = {}) {
 
   function upsertRoom(r) {
     if (!r || !r.id) return;
+    const now = Date.now();
+    // Ignore stale retained MQTT messages older than ROOM_TTL_MS
+    if (r.sentAt && now - r.sentAt > ROOM_TTL_MS * 2) return;
     if (r.count <= 0) {
       rooms.delete(r.id);
       removeStoredRoom(r.id);
     } else {
-      const item = { ...r, ts: Date.now() };
+      const item = {
+        id: r.id,
+        title: r.title || r.id,
+        theme: r.theme || 'christmas',
+        hostName: r.hostName || 'Host',
+        count: r.count,
+        hasPassword: !!r.hasPassword,
+        passHash: r.passHash || '',
+        ts: now,
+      };
       rooms.set(r.id, item);
       saveStoredRoom(item);
     }
@@ -101,10 +343,10 @@ export async function connectLobby(handlers = {}) {
   loadStoredRooms();
   notify();
 
-  // 1. Local BroadcastChannel for instant multi-tab lobby discovery
+  // 1. Local BroadcastChannel
   let bc = null;
   try {
-    bc = new BroadcastChannel('gh-lobby-global-v2');
+    bc = new BroadcastChannel('gh-lobby-global-v3');
     bc.onmessage = ev => {
       const msg = ev.data;
       if (!msg) return;
@@ -121,61 +363,45 @@ export async function connectLobby(handlers = {}) {
     }
   });
 
-  // 2. WebRTC Global Lobby via Trystero
-  let lobbyRoom = null;
-  let sendAnn = null,
-    sendRem = null,
-    sendAsk = null;
+  // 2. Global WSS MQTT Bus (with Retained Room topics!)
+  const bus = getBus();
+  let unsubBus = null;
+  if (bus) {
+    bus.subscribe(`${lobbyTopicPrefix}+`);
+    bus.subscribe(lobbyDiscoverTopic);
+    unsubBus = bus.onMessage((topic, data) => {
+      if (topic === lobbyDiscoverTopic) {
+        handlers.onDiscoverRequest?.();
+      } else if (topic.startsWith(lobbyTopicPrefix)) {
+        const rId = topic.slice(lobbyTopicPrefix.length);
+        if (!data || data.closed || data.count <= 0) {
+          removeRoom(rId);
+        } else {
+          upsertRoom(data);
+        }
+      }
+    });
+    // Ask all online hosts to re-announce immediately
+    setTimeout(() => bus.publish(lobbyDiscoverTopic, { t: Date.now() }, false), 200);
+  }
 
-  loadTrystero().then(lib => {
-    if (!lib) return;
-    try {
-      lobbyRoom = lib.joinRoom({ appId: APP_ID }, '__global_lobby_v2__');
-      const aAnn = lobbyRoom.makeAction('ann');
-      const aRem = lobbyRoom.makeAction('rem');
-      const aAsk = lobbyRoom.makeAction('ask');
-      aAnn.onMessage = data => upsertRoom(data);
-      aRem.onMessage = data => removeRoom(data?.id);
-      aAsk.onMessage = () => handlers.onDiscoverRequest?.();
-      lobbyRoom.onPeerJoin = () => handlers.onDiscoverRequest?.();
-      sendAnn = data => {
-        try {
-          aAnn.send(data);
-        } catch {}
-      };
-      sendRem = data => {
-        try {
-          aRem.send(data);
-        } catch {}
-      };
-      sendAsk = () => {
-        try {
-          aAsk.send({ t: Date.now() });
-        } catch {}
-      };
-      sendAsk();
-    } catch (e) {
-      console.warn('Lobby WebRTC init error:', e);
-    }
-  });
-
-  // Periodic cleanup & refresh
   const cleanupTimer = setInterval(notify, 3500);
   setTimeout(() => {
     try {
       bc?.postMessage({ type: 'ask' });
     } catch {}
-  }, 60);
+  }, 50);
 
   return {
     announce(roomMeta) {
       if (!roomMeta?.id) return;
-      const payload = { ...roomMeta, ts: Date.now() };
+      const payload = { ...roomMeta, sentAt: Date.now(), ts: Date.now() };
       upsertRoom(payload);
       try {
         bc?.postMessage({ type: 'ann', room: payload });
       } catch {}
-      sendAnn?.(payload);
+      // Publish with retain=true so new visitors immediately receive active rooms on connect
+      bus?.publish(`${lobbyTopicPrefix}${roomMeta.id}`, payload, true);
     },
     remove(roomId) {
       if (!roomId) return;
@@ -183,7 +409,9 @@ export async function connectLobby(handlers = {}) {
       try {
         bc?.postMessage({ type: 'rem', id: roomId });
       } catch {}
-      sendRem?.({ id: roomId });
+      // Publish closed marker with retain=true (and clear retained)
+      bus?.publish(`${lobbyTopicPrefix}${roomId}`, { id: roomId, count: 0, closed: true, sentAt: Date.now() }, true);
+      bus?.publish(`${lobbyTopicPrefix}${roomId}`, null, true);
     },
     requestDiscover() {
       loadStoredRooms();
@@ -191,34 +419,32 @@ export async function connectLobby(handlers = {}) {
       try {
         bc?.postMessage({ type: 'ask' });
       } catch {}
-      sendAsk?.();
+      bus?.publish(lobbyDiscoverTopic, { t: Date.now() }, false);
     },
     getRooms() {
       return [...rooms.values()];
     },
     destroy() {
       clearInterval(cleanupTimer);
+      unsubBus?.();
       try {
         bc?.close();
-      } catch {}
-      try {
-        lobbyRoom?.leave();
       } catch {}
     },
   };
 }
 
-// ---------- Per-Room Connection ----------
+// ---------- Per-Room Realtime Connection ----------
 export async function connect(roomId, handlers) {
-  let selfId = 'p-' + Math.random().toString(36).slice(2, 10);
+  const selfId = 'p-' + Math.random().toString(36).slice(2, 10);
   let online = false;
-  const actions = {};
-  const names = ['pos', 'hello', 'state', 'op', 'chat', 'emote', 'card', 'media'];
+  const roomTopic = `${APP_PREFIX}/room/${roomId}/msg`;
+  const stateRetainTopic = `${APP_PREFIX}/room/${roomId}/state`;
 
-  // 1. Instant Local BroadcastChannel (syncs multiple tabs on same browser/PC with 0ms delay)
+  // 1. Instant Local BroadcastChannel
   let bc = null;
   try {
-    bc = new BroadcastChannel('gh-room-' + roomId);
+    bc = new BroadcastChannel('gh-room-v3-' + roomId);
     online = true;
     bc.onmessage = ev => {
       const msg = ev.data;
@@ -228,31 +454,48 @@ export async function connect(roomId, handlers) {
       else if (msg.type === '__leave') handlers.leave?.(msg.from);
       else handlers[msg.type]?.(msg.data, msg.from);
     };
-    setTimeout(() => bc?.postMessage({ type: '__join', from: selfId }), 80);
-    window.addEventListener('beforeunload', () => bc?.postMessage({ type: '__leave', from: selfId }));
-  } catch (e) {
-    console.warn('BroadcastChannel unavailable', e);
+  } catch {}
+
+  // 2. Global WSS MQTT Room Channel
+  const bus = getBus();
+  let unsubBus = null;
+  if (bus) {
+    online = true;
+    bus.subscribe(roomTopic);
+    bus.subscribe(stateRetainTopic);
+    unsubBus = bus.onMessage((topic, msg) => {
+      if (!msg || msg.from === selfId) return;
+      if (topic === stateRetainTopic) {
+        if (msg.state && !msg.closed && (!msg.sentAt || Date.now() - msg.sentAt < 20000)) {
+          handlers.state?.(msg.state, msg.from);
+        }
+        return;
+      }
+      if (topic !== roomTopic) return;
+      if (msg.target && msg.target !== selfId) return;
+      if (msg.type === '__join') handlers.join?.(msg.from);
+      else if (msg.type === '__leave') handlers.leave?.(msg.from);
+      else handlers[msg.type]?.(msg.data, msg.from);
+    });
   }
 
-  // 2. Remote WebRTC via Trystero
-  let room = null;
-  const lib = await loadTrystero();
-  if (lib) {
+  // Broadcast join event so existing room members respond immediately with hello + state
+  const sendJoinPing = () => {
     try {
-      selfId = lib.selfId || selfId;
-      room = lib.joinRoom({ appId: APP_ID }, 'room-' + roomId);
-      online = true;
-      for (const n of names) {
-        const a = room.makeAction(n);
-        a.onMessage = (data, ctx) => handlers[n]?.(data, ctx.peerId);
-        actions[n] = a;
-      }
-      room.onPeerJoin = id => handlers.join?.(id);
-      room.onPeerLeave = id => handlers.leave?.(id);
-    } catch (e) {
-      console.warn('Room WebRTC join error:', e.message || e);
-    }
-  }
+      bc?.postMessage({ type: '__join', from: selfId });
+    } catch {}
+    bus?.publish(roomTopic, { type: '__join', from: selfId }, false);
+  };
+  setTimeout(sendJoinPing, 60);
+  setTimeout(sendJoinPing, 450);
+
+  const onUnload = () => {
+    try {
+      bc?.postMessage({ type: '__leave', from: selfId });
+    } catch {}
+    bus?.publish(roomTopic, { type: '__leave', from: selfId }, false);
+  };
+  window.addEventListener('beforeunload', onUnload);
 
   return {
     selfId,
@@ -261,18 +504,24 @@ export async function connect(roomId, handlers) {
       try {
         bc?.postMessage({ type: n, data, from: selfId, target });
       } catch {}
-      try {
-        actions[n]?.send(data, target ? { target } : undefined);
-      } catch {}
+      bus?.publish(roomTopic, { type: n, data, from: selfId, target }, false);
+      // Also retain latest room state on the broker so newly joining friends receive it in <50ms
+      if (n === 'state' && data) {
+        bus?.publish(stateRetainTopic, { state: data, from: selfId, sentAt: Date.now() }, true);
+      }
+    },
+    clearRetainedState: () => {
+      bus?.publish(stateRetainTopic, { closed: true, from: selfId }, true);
+      bus?.publish(stateRetainTopic, null, true);
     },
     leave: () => {
+      window.removeEventListener('beforeunload', onUnload);
+      unsubBus?.();
       try {
         bc?.postMessage({ type: '__leave', from: selfId });
         bc?.close();
       } catch {}
-      try {
-        room?.leave();
-      } catch {}
+      bus?.publish(roomTopic, { type: '__leave', from: selfId }, false);
     },
   };
 }
