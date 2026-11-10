@@ -1,9 +1,8 @@
 // ============================================================================
-// MULTIPLAYER THEMED MINIGAMES FOR GATHER_HOLIDAYS
-// - Christmas: Snowball Battle (Đại Chiến Ném Tuyết)
-// - Halloween: Spooky Candy Rush (Thu Thập Kẹo Bí Ngô)
-// - Tet: Lucky Money Rain (Cơn Mưa Bao Lì Xì)
-// - Valentine: Cupid's Arrow & Love Matcher (Mũi Tên Thần Tình Yêu)
+// MULTIPLAYER THEMED MINIGAMES FOR GATHER_HOLIDAYS (OPTIMIZED & EXPANDED)
+// - Christmas & Valentine: Realtime PvP Combat with Aim Raycasting, HP, KOs & Safe Zones
+// - Halloween: Creepy Vampire Boss Autonomous Hunting, Red Warning Circle & 3D Jumpscare
+// - Tet: Festival Lion/Dragon Dance & Firecracker Tag (Pháo Thần Tài)
 // ============================================================================
 
 import * as THREE from 'three';
@@ -11,9 +10,15 @@ import { playSfx } from './audio.js';
 
 const TILE = 2;
 
+// Check if a point is within the TV Cinema & Seating Safe Zone
+export function isInSafeZone(x, y) {
+  return x >= 9.2 && x <= 19.8 && y >= 1.5 && y <= 8.2;
+}
+
 export class MinigameManager {
-  constructor(scene, getMe, getPeers, emitOp, toast, floaters) {
+  constructor(scene, camera, getMe, getPeers, emitOp, toast, floaters) {
     this.scene = scene;
+    this.camera = camera;
     this.getMe = getMe;
     this.getPeers = getPeers;
     this.emitOp = emitOp;
@@ -24,47 +29,102 @@ export class MinigameManager {
     this.scene.add(this.group);
 
     this.theme = 'christmas';
-    this.projectiles = []; // active flying objects (snowballs, arrows)
-    this.pickups = []; // ground items (candies, lucky money envelopes)
-    this.scores = new Map(); // id -> { name, score, extra }
+    this.projectiles = []; // active flying objects (snowballs, arrows, firecrackers)
+    this.pickups = []; // ground coins, envelopes
+    this.scores = new Map(); // id -> { name, score, title }
     this.lastActionTime = 0;
 
-    // Materials cache
-    this.materials = {
-      snow: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 }),
+    // PvP Health State for Local Player
+    this.hp = 100;
+    this.maxHp = 100;
+    this.isDead = false;
+
+    // Vampire Hunt State (Halloween)
+    this.vampireHunt = null; // { targetId, targetName, x, z, startTime, circleMesh }
+    this.nextVampireCheck = performance.now() + 12000;
+    this.isBeingJumpscared = false;
+
+    // Tet Festive Lion State
+    this.tetLion = null;
+
+    // Shared raycaster for 3D cursor aiming
+    this.raycaster = new THREE.Raycaster();
+    this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    this.mouseNdc = new THREE.Vector2(0, 0);
+
+    window.addEventListener(
+      'pointermove',
+      e => {
+        this.mouseNdc.x = (e.clientX / window.innerWidth) * 2 - 1;
+        this.mouseNdc.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      },
+      { passive: true }
+    );
+
+    // Optimized Geometries & Materials Cache
+    this.geos = {
+      sphere: new THREE.SphereGeometry(0.2, 10, 10),
+      arrowShaft: new THREE.CylinderGeometry(0.025, 0.025, 0.75, 6),
+      heartHead: new THREE.ConeGeometry(0.14, 0.24, 6),
+      firecracker: new THREE.CylinderGeometry(0.08, 0.08, 0.32, 6),
+      coin: new THREE.CylinderGeometry(0.18, 0.18, 0.04, 8),
+      circleRing: new THREE.RingGeometry(1.9, 2.2, 24),
+    };
+    this.geos.arrowShaft.rotateX(Math.PI / 2);
+    this.geos.heartHead.rotateX(Math.PI / 2);
+    this.geos.circleRing.rotateX(-Math.PI / 2);
+
+    this.mats = {
+      snow: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }),
       gold: new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.6, roughness: 0.3 }),
-      red: new THREE.MeshStandardMaterial({ color: 0xd62828, roughness: 0.4 }),
-      pink: new THREE.MeshStandardMaterial({ color: 0xff4d88, roughness: 0.3, emissive: 0xff1493, emissiveIntensity: 0.2 }),
-      orange: new THREE.MeshStandardMaterial({ color: 0xff7b00, roughness: 0.5 }),
-      purple: new THREE.MeshStandardMaterial({ color: 0x8a2be2, roughness: 0.5 }),
+      pink: new THREE.MeshStandardMaterial({ color: 0xff4d88, emissive: 0xff1493, emissiveIntensity: 0.3 }),
+      redFirecracker: new THREE.MeshStandardMaterial({ color: 0xd62828, roughness: 0.4 }),
+      redRing: new THREE.MeshBasicMaterial({ color: 0xff0033, side: THREE.DoubleSide, transparent: true, opacity: 0.75 }),
+      shieldAura: new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.35, wireframe: true }),
     };
 
-    this.initUI();
+    // Projectile Object Pool to eliminate GC lag
+    this.projectilePool = [];
   }
 
   setTheme(themeKey) {
     if (this.theme === themeKey) return;
     this.theme = themeKey;
     this.clearAll();
+    this.hp = 100;
+    this.isDead = false;
     this.updateHUDButton();
+    this.updateHpUI();
     this.updateScoreboardUI();
+
+    // Halloween specific: schedule vampire hunt
+    if (this.theme === 'halloween') {
+      this.nextVampireCheck = performance.now() + 10000;
+    }
   }
 
   clearAll() {
-    // Remove all 3D meshes from scene
     for (const p of this.projectiles) {
       if (p.mesh) this.group.remove(p.mesh);
     }
     for (const item of this.pickups) {
       if (item.mesh) this.group.remove(item.mesh);
     }
+    if (this.vampireHunt?.circleMesh) {
+      this.group.remove(this.vampireHunt.circleMesh);
+    }
+    if (this.tetLion?.mesh) {
+      this.group.remove(this.tetLion.mesh);
+    }
     this.projectiles = [];
     this.pickups = [];
+    this.vampireHunt = null;
+    this.tetLion = null;
     this.scores.clear();
-  }
 
-  initUI() {
-    this.updateHUDButton();
+    const scareOverlay = document.getElementById('jumpscareOverlay');
+    if (scareOverlay) scareOverlay.classList.add('hidden');
+    this.isBeingJumpscared = false;
   }
 
   updateHUDButton() {
@@ -73,20 +133,20 @@ export class MinigameManager {
 
     switch (this.theme) {
       case 'christmas':
-        btn.textContent = '❄️ Ném Tuyết [G]';
-        btn.title = 'Minigame Giáng Sinh: Đại Chiến Ném Tuyết Đồng Đội (Phím G)';
+        btn.textContent = '❄️ Ném Tuyết PvP [G]';
+        btn.title = 'Minigame Giáng Sinh: Đại Chiến Bắn Tuyết PvP Hạ Gục Đối Thủ (Phím G)';
         break;
       case 'halloween':
-        btn.textContent = '🎃 Săn Kẹo [G]';
-        btn.title = 'Minigame Halloween: Thả & Thu Thập Kẹo Ma Quái (Phím G)';
+        btn.textContent = '🧛 Boss Vampire (Tự Động)';
+        btn.title = 'Halloween: Boss Vampire bay rình mồi & vồ Jumpscare (Trú ẩn trong Vùng Ghế TV)';
         break;
       case 'tet':
-        btn.textContent = '🧧 Mưa Lì Xì [G]';
-        btn.title = 'Minigame Tết: Cơn Mưa Bao Lì Xì Lộc Đầu Năm (Phím G)';
+        btn.textContent = '🧨 Pháo Múa Lân [G]';
+        btn.title = 'Minigame Tết: Ném Pháo Thần Tài & Múa Lân Rước Lộc (Phím G)';
         break;
       case 'valentine':
-        btn.textContent = '💘 Cung Cupid [G]';
-        btn.title = 'Minigame Valentine: Bắn Mũi Tên Thần Cupid & Đo Độ Hợp Nhau (Phím G)';
+        btn.textContent = '💘 Cung Cupid PvP [G]';
+        btn.title = 'Minigame Valentine: Đấu Cung Cupid & Đo Nhân Duyên (Phím G)';
         break;
       default:
         btn.textContent = '🎮 Minigame [G]';
@@ -94,33 +154,56 @@ export class MinigameManager {
     }
   }
 
-  // Find nearest peer to target
-  findNearestPeer(maxDist = 18) {
-    const me = this.getMe();
-    const peers = this.getPeers();
-    if (!me || !peers || peers.size === 0) return null;
+  updateHpUI() {
+    const hpBar = document.getElementById('playerHpBar');
+    const hpVal = document.getElementById('hpValue');
+    const hpFill = document.getElementById('hpFill');
+    if (!hpBar || !hpVal || !hpFill) return;
 
-    let nearest = null;
-    let minDist = maxDist;
-    for (const [id, p] of peers) {
-      const d = Math.hypot(p.x - me.x, p.y - me.y);
-      if (d < minDist) {
-        minDist = d;
-        nearest = { id, ...p, dist: d };
+    const isPvpTheme = this.theme === 'christmas' || this.theme === 'valentine';
+    hpBar.classList.toggle('hidden', !isPvpTheme);
+
+    hpVal.textContent = `${Math.max(0, this.hp)} / ${this.maxHp}`;
+    const pct = Math.max(0, Math.min(100, (this.hp / this.maxHp) * 100));
+    hpFill.style.width = `${pct}%`;
+    hpFill.style.background = pct > 50 ? 'linear-gradient(90deg,#22c55e,#4ade80)' : pct > 25 ? 'linear-gradient(90deg,#eab308,#fde047)' : 'linear-gradient(90deg,#dc2626,#f87171)';
+  }
+
+  // --------------------------------------------------------------------------
+  // ACCURATE 3D RAYCAST AIMING
+  // Projects line of sight from camera crosshair into 3D world
+  // --------------------------------------------------------------------------
+  getAimTarget() {
+    const me = this.getMe();
+    if (!me) return { x: 0, y: 1, z: 0 };
+
+    const ndc = document.pointerLockElement ? new THREE.Vector2(0, 0) : this.mouseNdc;
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const hitPoint = new THREE.Vector3();
+
+    // Intersect horizontal character plane or ground
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(me.h + 0.6));
+    if (this.raycaster.ray.intersectPlane(plane, hitPoint)) {
+      // Check reasonable distance
+      const dist = hitPoint.distanceTo(this.camera.position);
+      if (dist > 1.5 && dist < 45) {
+        return hitPoint;
       }
     }
-    return nearest;
+
+    // Fallback: 20 meters along camera forward vector
+    this.raycaster.ray.at(22, hitPoint);
+    return hitPoint;
   }
 
   // --------------------------------------------------------------------------
   // USER TRIGGER ACTION (CLICK HUD BUTTON OR PRESS PHÍM 'G')
   // --------------------------------------------------------------------------
   triggerAction() {
+    if (this.isDead || this.isBeingJumpscared) return;
+
     const now = performance.now();
-    if (now - this.lastActionTime < 650) {
-      this.toast('⏳ Thao tác quá nhanh, hãy chờ một chút nhé!');
-      return;
-    }
+    if (now - this.lastActionTime < 500) return;
     this.lastActionTime = now;
 
     const me = this.getMe();
@@ -128,77 +211,131 @@ export class MinigameManager {
 
     switch (this.theme) {
       case 'christmas':
-        this.actionSnowball();
+        this.actionPvPSnowball();
         break;
       case 'halloween':
-        this.actionHalloweenCandy();
+        this.toast('🧛 Boss Vampire đang rình mò trên bầu trời! Chạy vào Vùng Ghế TV để an toàn!');
         break;
       case 'tet':
-        this.actionTetLixiRain();
+        this.actionTetFirecracker();
         break;
       case 'valentine':
-        this.actionCupidArrow();
+        this.actionPvPCupid();
         break;
     }
   }
 
   // --------------------------------------------------------------------------
-  // 1. CHRISTMAS: SNOWBALL BATTLE
+  // 1. CHRISTMAS: PVP SNOWBALL BLASTER
   // --------------------------------------------------------------------------
-  actionSnowball() {
+  actionPvPSnowball() {
     const me = this.getMe();
-    const targetPeer = this.findNearestPeer(24);
-
-    let targetX, targetY, targetZ, targetId, targetName;
-    if (targetPeer) {
-      targetId = targetPeer.id;
-      targetName = targetPeer.name;
-      targetX = targetPeer.x * TILE;
-      targetY = (targetPeer.h || 0) + 1.2;
-      targetZ = targetPeer.y * TILE;
-    } else {
-      // Throw straight ahead if alone
-      targetId = null;
-      targetName = null;
-      const dist = 9;
-      targetX = me.x * TILE - Math.sin(me.r) * dist;
-      targetY = me.h + 0.4;
-      targetZ = me.y * TILE - Math.cos(me.r) * dist;
-    }
+    const aim = this.getAimTarget();
 
     me.av?.playEmote('interact');
     playSfx('snow_throw', 'christmas');
+
+    const sx = me.x * TILE;
+    const sy = me.h + 1.35;
+    const sz = me.y * TILE;
 
     this.emitOp({
       k: 'mg_snowball_throw',
       fromId: me.name,
       fromName: me.name,
-      toId: targetId,
-      toName: targetName,
-      sx: me.x * TILE,
-      sy: me.h + 1.4,
-      sz: me.y * TILE,
-      tx: targetX,
-      ty: targetY,
-      tz: targetZ,
+      sx,
+      sy,
+      sz,
+      tx: aim.x,
+      ty: aim.y,
+      tz: aim.z,
     });
   }
 
-  spawnSnowballProjectile(data) {
-    const geo = new THREE.SphereGeometry(0.18, 12, 12);
-    const mesh = new THREE.Mesh(geo, this.materials.snow);
+  // --------------------------------------------------------------------------
+  // 2. VALENTINE: PVP CUPID ARROW DUEL
+  // --------------------------------------------------------------------------
+  actionPvPCupid() {
+    const me = this.getMe();
+    const aim = this.getAimTarget();
+
+    me.av?.playEmote('interact');
+    playSfx('cupid_arrow_shoot', 'valentine');
+
+    const sx = me.x * TILE;
+    const sy = me.h + 1.35;
+    const sz = me.y * TILE;
+
+    this.emitOp({
+      k: 'mg_cupid_shoot',
+      fromId: me.name,
+      fromName: me.name,
+      sx,
+      sy,
+      sz,
+      tx: aim.x,
+      ty: aim.y,
+      tz: aim.z,
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // 3. TET: FESTIVAL LION & FIRECRACKER CANNON
+  // --------------------------------------------------------------------------
+  actionTetFirecracker() {
+    const me = this.getMe();
+    const aim = this.getAimTarget();
+
+    me.av?.playEmote('interact');
+    playSfx('firecracker', 'tet');
+
+    const sx = me.x * TILE;
+    const sy = me.h + 1.35;
+    const sz = me.y * TILE;
+
+    this.emitOp({
+      k: 'mg_tet_cannon',
+      fromName: me.name,
+      sx,
+      sy,
+      sz,
+      tx: aim.x,
+      ty: Math.max(0.2, aim.y),
+      tz: aim.z,
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // SPAWN PROJECTILES
+  // --------------------------------------------------------------------------
+  spawnProjectile(data, type) {
+    let mesh;
+    if (type === 'snowball') {
+      mesh = new THREE.Mesh(this.geos.sphere, this.mats.snow);
+    } else if (type === 'cupid') {
+      mesh = new THREE.Group();
+      const shaft = new THREE.Mesh(this.geos.arrowShaft, this.mats.gold);
+      const head = new THREE.Mesh(this.geos.heartHead, this.mats.pink);
+      head.position.z = -0.38;
+      mesh.add(shaft, head);
+      mesh.lookAt(data.tx, data.ty, data.tz);
+    } else if (type === 'firecracker') {
+      mesh = new THREE.Mesh(this.geos.firecracker, this.mats.redFirecracker);
+      mesh.rotation.x = Math.PI / 4;
+    }
+
     mesh.position.set(data.sx, data.sy, data.sz);
     this.group.add(mesh);
 
     const dx = data.tx - data.sx;
     const dy = data.ty - data.sy;
     const dz = data.tz - data.sz;
-    const dist = Math.hypot(dx, dz);
-    const speed = 14;
-    const duration = Math.max(0.3, dist / speed);
+    const dist = Math.hypot(dx, dy, dz);
+    const speed = type === 'firecracker' ? 14 : 20;
+    const duration = Math.max(0.2, dist / speed);
 
     this.projectiles.push({
-      type: 'snowball',
+      type,
       mesh,
       data,
       startX: data.sx,
@@ -209,310 +346,246 @@ export class MinigameManager {
       targetZ: data.tz,
       progress: 0,
       duration,
-      apexH: Math.max(1.5, dist * 0.28),
+      apexH: type === 'snowball' || type === 'firecracker' ? Math.max(0.6, dist * 0.16) : 0,
     });
   }
 
-  handleSnowballImpact(proj) {
-    const { data } = proj;
-    playSfx('snow_hit', 'christmas');
+  // --------------------------------------------------------------------------
+  // HIT & DAMAGE RESOLUTION (SAFE ZONE SHIELDING & PVP KOS)
+  // --------------------------------------------------------------------------
+  checkProjectileImpact(proj) {
+    const { data, type } = proj;
+    const me = this.getMe();
+    if (!me) return;
 
-    // Floater
-    if (this.floaters) {
-      const me = this.getMe();
-      if (data.toName && (data.toId === me?.name || data.toName === me?.name)) {
-        this.floaters.push({ e: '❄️ Bụp!', who: 'me', t: Date.now() });
-        this.toast(`❄️ Bạn vừa bị trúng bóng tuyết từ ${data.fromName}! Brrr lạnh quá! 🥶`);
+    // Check hit against local player
+    const myX = me.x * TILE;
+    const myY = me.h + 0.9;
+    const myZ = me.y * TILE;
+
+    const hitDist = Math.hypot(proj.mesh.position.x - myX, proj.mesh.position.z - myZ);
+    const hitHeight = Math.abs(proj.mesh.position.y - myY);
+
+    if (data.fromName !== me.name && hitDist < 0.95 && hitHeight < 1.4) {
+      // Local player was hit!
+      const inSafe = isInSafeZone(me.x, me.y) || !!me.seatSlot;
+
+      if (inSafe) {
+        // Safe Zone Shielded!
+        playSfx('xmas_bell', this.theme);
+        this.toast('🛡️ BỤP! VÙNG AN TOÀN ĐÃ CHẶN ĐẠN! Miễn toàn bộ sát thương!');
+        if (this.floaters) this.floaters.push({ e: '🛡️ Miễn Sát Thương', who: 'me', t: Date.now() });
+        return;
+      }
+
+      // Outside Safe Zone: TAKE PVP DAMAGE!
+      const dmg = 34;
+      this.hp = Math.max(0, this.hp - dmg);
+      this.updateHpUI();
+
+      if (type === 'snowball') {
+        playSfx('snow_hit', 'christmas');
         me.av?.playEmote('stumble');
+        if (this.floaters) this.floaters.push({ e: `❄️ -${dmg} HP`, who: 'me', t: Date.now() });
+      } else if (type === 'cupid') {
+        playSfx('cupid_arrow_hit', 'valentine');
+        playSfx('valentine_harp', 'valentine');
+        me.av?.playEmote('stumble');
+        if (this.floaters) this.floaters.push({ e: `💘 -${dmg} HP`, who: 'me', t: Date.now() });
+      }
+
+      if (this.hp <= 0 && !this.isDead) {
+        // KNOCKED OUT!
+        this.isDead = true;
+        this.toast(`💥 BẠN ĐÃ BỊ HẠ GỤC BỞI ${data.fromName}! Đang hồi sinh sau 3s…`);
+        me.av?.playEmote('stumble');
+
+        // Notify room of KO
+        this.emitOp({
+          k: 'mg_pvp_ko',
+          killer: data.fromName,
+          victim: me.name,
+        });
+
+        // Respawn after 3 seconds at safe map center
+        setTimeout(() => {
+          this.hp = 100;
+          this.isDead = false;
+          me.h = 0;
+          me.vy = 0;
+          this.updateHpUI();
+          this.toast('✨ Bạn đã hồi sinh đầy 100% máu tại sảnh an toàn!');
+        }, 3000);
       }
     }
 
-    // Add score
-    const s = this.scores.get(data.fromName) || { name: data.fromName, score: 0 };
-    s.score += 1;
-    this.scores.set(data.fromName, s);
-    this.updateScoreboardUI('❄️ ĐẠI CHIẾN NÉM TUYẾT', 'Bóng trúng đích');
+    // Festive firecracker explosion (Tet)
+    if (type === 'firecracker') {
+      playSfx('firework_rocket', 'tet');
+      this.spawnTetFestiveCoins(proj.mesh.position.x, proj.mesh.position.z, data.fromName);
+    }
   }
 
   // --------------------------------------------------------------------------
-  // 2. HALLOWEEN: SPOOKY CANDY RUSH
+  // TET FESTIVAL LION & GOLD COINS RAIN
   // --------------------------------------------------------------------------
-  actionHalloweenCandy() {
+  spawnTetFestiveCoins(worldX, worldZ, byName) {
     const me = this.getMe();
-    me.av?.playEmote('interact');
+    this.toast(`🧧 Pháo nổ tưng bừng! Thỏi Vàng May Mắn của ${byName} rơi quanh sân!`);
+
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 + Math.random() * 0.3;
+      const d = 1.0 + Math.random() * 3.5;
+      const coinMesh = new THREE.Mesh(this.geos.coin, this.mats.gold);
+      coinMesh.rotation.x = Math.PI / 2;
+
+      const cx = worldX + Math.cos(angle) * d;
+      const cz = worldZ + Math.sin(angle) * d;
+      coinMesh.position.set(cx, 0.22, cz);
+      this.group.add(coinMesh);
+
+      this.pickups.push({
+        id: `coin_${Date.now()}_${i}`,
+        type: 'tet_coin',
+        val: 188,
+        x: cx / TILE,
+        y: cz / TILE,
+        mesh: coinMesh,
+        baseY: 0.22,
+        rotSpeed: 3.0,
+      });
+    }
+
+    this.updateScoreboardUI('🧧 BẢNG TÀI LỘC NĂM MỚI', 'Xu Vàng May Mắn');
+  }
+
+  // --------------------------------------------------------------------------
+  // HALLOWEEN: VAMPIRE AUTONOMOUS HUNTING & JUMPSCARE SWOOP
+  // --------------------------------------------------------------------------
+  updateVampireAI(now, dt) {
+    if (this.theme !== 'halloween') return;
+
+    const me = this.getMe();
+    if (!me) return;
+
+    // Check if ready to initiate a hunting attack
+    if (!this.vampireHunt && now > this.nextVampireCheck) {
+      this.nextVampireCheck = now + 18000 + Math.random() * 7000;
+
+      // Only target player if they are OUTSIDE the Safe Zone!
+      const inSafe = isInSafeZone(me.x, me.y) || !!me.seatSlot;
+      if (!inSafe) {
+        // Start hunting local player!
+        const circleMesh = new THREE.Mesh(this.geos.circleRing, this.mats.redRing);
+        circleMesh.position.set(me.x * TILE, 0.08, me.y * TILE);
+        this.group.add(circleMesh);
+
+        playSfx('ghost_boo', 'halloween');
+        this.toast('⚠️ NGUY HIỂM! BÁ TƯỚC MA CÀ RỒNG ĐANG VỒ BẠN! CHẠY NGAY HOẶC VÀO VÙNG GHẾ TV! ⚠️');
+
+        this.vampireHunt = {
+          targetName: me.name,
+          targetTileX: me.x,
+          targetTileY: me.y,
+          worldX: me.x * TILE,
+          worldZ: me.y * TILE,
+          startTime: now,
+          warnDuration: 3200, // 3.2 seconds warning
+          circleMesh,
+        };
+      }
+    }
+
+    // Active Hunt Warning & Swoop
+    if (this.vampireHunt) {
+      const vh = this.vampireHunt;
+      const elapsed = now - vh.startTime;
+
+      // Pulsate red danger circle
+      if (vh.circleMesh) {
+        const pulse = 1.0 + Math.sin(now * 0.012) * 0.15;
+        vh.circleMesh.scale.set(pulse, pulse, pulse);
+      }
+
+      if (elapsed >= vh.warnDuration) {
+        // THE SWOOP STRIKE!
+        if (vh.circleMesh) this.group.remove(vh.circleMesh);
+
+        const currentDist = Math.hypot(me.x * TILE - vh.worldX, me.y * TILE - vh.worldZ);
+        const inSafe = isInSafeZone(me.x, me.y) || !!me.seatSlot;
+
+        if (currentDist < 2.4 && !inSafe) {
+          // CAUGHT BY VAMPIRE -> JUMPSCARE!
+          this.executeVampireJumpscare();
+        } else {
+          // ESCAPED!
+          this.toast('💨 THOÁT HIỂM NGOẠN MỤC! Bạn đã né được cú vồ của Bá Tước Ma Cà Rồng!');
+        }
+
+        this.vampireHunt = null;
+      }
+    }
+  }
+
+  executeVampireJumpscare() {
+    const me = this.getMe();
+    if (!me || this.isBeingJumpscared) return;
+
+    this.isBeingJumpscared = true;
     playSfx('spooky_laugh', 'halloween');
+    playSfx('ghost_boo', 'halloween');
 
-    // Spawn 10 candies around me/center
-    const candies = [];
-    const count = 10;
-    const baseCX = 14.5;
-    const baseCY = 14.5;
+    // Lift player up into dark sky (5.5m)
+    me.h = 5.2;
+    me.vy = 0;
+    me.av?.playEmote('scared');
 
-    for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2 + Math.random() * 0.4;
-      const dist = 2.5 + Math.random() * 6.5;
-      const x = Math.max(6, Math.min(23, baseCX + Math.cos(angle) * dist));
-      const y = Math.max(7, Math.min(22, baseCY + Math.sin(angle) * dist));
-      const kind = Math.random() < 0.35 ? 'pumpkin' : Math.random() < 0.65 ? 'candy' : 'lollipop';
-      candies.push({ id: `candy_${Date.now()}_${i}`, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, kind });
-    }
+    // Fullscreen Jumpscare Overlay
+    const scareOverlay = document.getElementById('jumpscareOverlay');
+    if (scareOverlay) scareOverlay.classList.remove('hidden');
 
-    this.toast('🎃 Kẹo Halloween đã xuất hiện quanh quảng trường! Hãy chạy lại nhặt kẹo nào!');
-    this.emitOp({ k: 'mg_candy_spawn', candies, byName: me.name });
-  }
+    setTimeout(() => {
+      if (scareOverlay) scareOverlay.classList.add('hidden');
+      this.isBeingJumpscared = false;
 
-  spawnCandies(candies) {
-    for (const c of candies) {
-      if (this.pickups.some(p => p.id === c.id)) continue;
-
-      const group = new THREE.Group();
-      if (c.kind === 'pumpkin') {
-        const pGeo = new THREE.SphereGeometry(0.24, 10, 10);
-        pGeo.scale(1, 0.75, 1);
-        const pMesh = new THREE.Mesh(pGeo, this.materials.orange);
-        const stemGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.12, 6);
-        const stemMesh = new THREE.Mesh(stemGeo, new THREE.MeshStandardMaterial({ color: 0x2e7d32 }));
-        stemMesh.position.y = 0.22;
-        group.add(pMesh, stemMesh);
-      } else {
-        const cGeo = new THREE.BoxGeometry(0.3, 0.18, 0.18);
-        const cMesh = new THREE.Mesh(cGeo, Math.random() < 0.5 ? this.materials.purple : this.materials.pink);
-        group.add(cMesh);
-      }
-
-      group.position.set(c.x * TILE, 0.35, c.y * TILE);
-      this.group.add(group);
-
-      this.pickups.push({
-        id: c.id,
-        type: 'candy',
-        x: c.x,
-        y: c.y,
-        mesh: group,
-        baseY: 0.35,
-        rotSpeed: 1.5 + Math.random() * 1.5,
-      });
-    }
-    this.updateScoreboardUI('🍬 SĂN KẸO HALLOWEEN', 'Kẹo đã nhặt');
-  }
-
-  // --------------------------------------------------------------------------
-  // 3. TET: LUCKY MONEY RAIN (CƠN MƯA BAO LÌ XÌ)
-  // --------------------------------------------------------------------------
-  actionTetLixiRain() {
-    const me = this.getMe();
-    me.av?.playEmote('interact');
-    playSfx('firework_rocket', 'tet');
-    playSfx('firecracker', 'tet');
-
-    const envelopes = [];
-    const count = 12;
-    const baseCX = 14.5;
-    const baseCY = 14.5;
-
-    const wishes = [
-      'Vạn Sự Như Ý',
-      'Tấn Tài Tấn Lộc',
-      'Phát Tài Phát Lộc',
-      'An Khang Thịnh Vượng',
-      'Cung Hỷ Phát Tài',
-      'Sức Khỏe Dồi Dào',
-      'Mã Đáo Thành Công',
-    ];
-    const amounts = [68, 88, 168, 288, 388, 688, 888, 999];
-
-    for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2 + Math.random() * 0.3;
-      const dist = 2.0 + Math.random() * 7.0;
-      const x = Math.max(6, Math.min(23, baseCX + Math.cos(angle) * dist));
-      const y = Math.max(7, Math.min(22, baseCY + Math.sin(angle) * dist));
-      const val = amounts[Math.floor(Math.random() * amounts.length)];
-      const wish = wishes[Math.floor(Math.random() * wishes.length)];
-      envelopes.push({
-        id: `lixi_${Date.now()}_${i}`,
-        x: Math.round(x * 10) / 10,
-        y: Math.round(y * 10) / 10,
-        val,
-        wish,
-      });
-    }
-
-    this.toast(`🧧 Pháo hoa nổ vang trời! Cơn Mưa Bao Lì Xì của ${me.name} đã rơi xuống sân! Mau nhặt nào! 🧨`);
-    this.emitOp({ k: 'mg_tet_rain', envelopes, byName: me.name });
-  }
-
-  spawnEnvelopes(envelopes) {
-    for (const env of envelopes) {
-      if (this.pickups.some(p => p.id === env.id)) continue;
-
-      const group = new THREE.Group();
-      // Red envelope body
-      const bodyGeo = new THREE.BoxGeometry(0.32, 0.44, 0.04);
-      const bodyMesh = new THREE.Mesh(bodyGeo, this.materials.red);
-      // Gold seal
-      const sealGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.05, 8);
-      sealGeo.rotateX(Math.PI / 2);
-      const sealMesh = new THREE.Mesh(sealGeo, this.materials.gold);
-      sealMesh.position.z = 0.02;
-      group.add(bodyMesh, sealMesh);
-
-      group.position.set(env.x * TILE, 0.25, env.y * TILE);
-      group.rotation.x = -Math.PI / 2 + 0.1;
-      group.rotation.z = Math.random() * Math.PI;
-      this.group.add(group);
-
-      this.pickups.push({
-        id: env.id,
-        type: 'lixi',
-        x: env.x,
-        y: env.y,
-        val: env.val,
-        wish: env.wish,
-        mesh: group,
-        baseY: 0.25,
-        rotSpeed: 0.8,
-      });
-    }
-    this.updateScoreboardUI('🧧 LỘC ĐẦU NĂM', 'Xu Vàng May Mắn');
-  }
-
-  // --------------------------------------------------------------------------
-  // 4. VALENTINE: CUPID'S ARROW & LOVE MATCHER
-  // --------------------------------------------------------------------------
-  actionCupidArrow() {
-    const me = this.getMe();
-    const targetPeer = this.findNearestPeer(26);
-
-    let targetX, targetY, targetZ, targetId, targetName;
-    if (targetPeer) {
-      targetId = targetPeer.id;
-      targetName = targetPeer.name;
-      targetX = targetPeer.x * TILE;
-      targetY = (targetPeer.h || 0) + 1.25;
-      targetZ = targetPeer.y * TILE;
-    } else {
-      targetId = null;
-      targetName = null;
-      const dist = 10;
-      targetX = me.x * TILE - Math.sin(me.r) * dist;
-      targetY = me.h + 0.8;
-      targetZ = me.y * TILE - Math.cos(me.r) * dist;
-    }
-
-    me.av?.playEmote('interact');
-    playSfx('cupid_arrow_shoot', 'valentine');
-
-    const loveScore = Math.floor(88 + Math.random() * 13); // 88% - 100%
-    const titles = [
-      'Duyên Trời Tác Hợp 💕',
-      'Tâm Đầu Ý Hợp 💖',
-      'Cặp Đôi Hoàn Hảo 🦢',
-      'Tình Nồng Như Rượu 🍷',
-      'Định Mệnh Gắn Kết 💍',
-    ];
-    const title = titles[Math.floor(Math.random() * titles.length)];
-
-    this.emitOp({
-      k: 'mg_cupid_shoot',
-      fromName: me.name,
-      toId: targetId,
-      toName: targetName,
-      loveScore,
-      title,
-      sx: me.x * TILE,
-      sy: me.h + 1.3,
-      sz: me.y * TILE,
-      tx: targetX,
-      ty: targetY,
-      tz: targetZ,
-    });
-  }
-
-  spawnCupidArrowProjectile(data) {
-    const group = new THREE.Group();
-
-    // Shaft
-    const shaftGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.7, 8);
-    shaftGeo.rotateX(Math.PI / 2);
-    const shaftMesh = new THREE.Mesh(shaftGeo, this.materials.gold);
-
-    // Glowing Heart Head
-    const heartGeo = new THREE.ConeGeometry(0.12, 0.22, 8);
-    heartGeo.rotateX(Math.PI / 2);
-    const heartMesh = new THREE.Mesh(heartGeo, this.materials.pink);
-    heartMesh.position.z = -0.38;
-
-    group.add(shaftMesh, heartMesh);
-    group.position.set(data.sx, data.sy, data.sz);
-    this.group.add(group);
-
-    const dx = data.tx - data.sx;
-    const dy = data.ty - data.sy;
-    const dz = data.tz - data.sz;
-    const dist = Math.hypot(dx, dz);
-    const speed = 16;
-    const duration = Math.max(0.25, dist / speed);
-
-    group.lookAt(data.tx, data.ty, data.tz);
-
-    this.projectiles.push({
-      type: 'cupid',
-      mesh: group,
-      data,
-      startX: data.sx,
-      startY: data.sy,
-      startZ: data.sz,
-      targetX: data.tx,
-      targetY: data.ty,
-      targetZ: data.tz,
-      progress: 0,
-      duration,
-      apexH: Math.max(0.6, dist * 0.12),
-    });
-  }
-
-  handleCupidImpact(proj) {
-    const { data } = proj;
-    playSfx('valentine_harp', 'valentine');
-    playSfx('cupid_arrow_hit', 'valentine');
-
-    const me = this.getMe();
-    if (data.toName) {
-      this.toast(`💘 Mũi tên Cupid đã kết nối ${data.fromName} & ${data.toName}! Độ hòa hợp: ${data.loveScore}% (${data.title})`);
-      if (this.floaters) {
-        this.floaters.push({ e: '💖', who: 'me', t: Date.now() });
-        this.floaters.push({ e: '💕', who: 'me', t: Date.now() + 200 });
-      }
-    } else {
-      this.toast(`💘 Mũi tên Thần Tình Yêu đã ghim xuống đất, gieo rắc ngàn bông hồng tình yêu! 🌹`);
-    }
-
-    // Score
-    const key = `${data.fromName} & ${data.toName || 'Ẩn danh'}`;
-    this.scores.set(key, { name: key, score: data.loveScore, title: data.title });
-    this.updateScoreboardUI('💘 ĐỘ HÒA HỢP TÌNH YÊU', 'Điểm Duyên Phận (%)');
+      // Drop player safely to ground clamped inside map bounds
+      me.h = 0;
+      me.vy = 0;
+      me.x = Math.max(2.0, Math.min(26.0, me.x));
+      me.y = Math.max(2.0, Math.min(26.0, me.y));
+      this.toast('😱 Bạn vừa được thả xuống đất an toàn sau cơn ác mộng!');
+    }, 1900);
   }
 
   // --------------------------------------------------------------------------
   // FRAME UPDATE LOOP
   // --------------------------------------------------------------------------
   update(dt) {
+    const now = performance.now();
     const me = this.getMe();
 
-    // 1. Update Projectiles
+    // 1. Safe Zone Detection
+    if (me) {
+      const inSafe = isInSafeZone(me.x, me.y) || !!me.seatSlot;
+      const badge = document.getElementById('safeZoneBadge');
+      if (badge) badge.classList.toggle('hidden', !inSafe);
+    }
+
+    // 2. Halloween Vampire AI
+    this.updateVampireAI(now, dt);
+
+    // 3. Update Flying Projectiles
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
       p.progress += dt / p.duration;
 
       if (p.progress >= 1.0) {
         if (p.mesh) this.group.remove(p.mesh);
+        this.checkProjectileImpact(p);
         this.projectiles.splice(i, 1);
-        if (p.type === 'snowball') this.handleSnowballImpact(p);
-        else if (p.type === 'cupid') this.handleCupidImpact(p);
         continue;
       }
 
-      // Parabolic flight interpolation
       const t = p.progress;
       const curX = p.startX + (p.targetX - p.startX) * t;
       const curZ = p.startZ + (p.targetZ - p.startZ) * t;
@@ -522,42 +595,49 @@ export class MinigameManager {
       if (p.mesh) {
         p.mesh.position.set(curX, curY, curZ);
         if (p.type === 'snowball') {
-          p.mesh.rotation.x += dt * 6;
-          p.mesh.rotation.y += dt * 8;
+          p.mesh.rotation.x += dt * 8;
         } else if (p.type === 'cupid') {
           p.mesh.lookAt(p.targetX, p.targetY, p.targetZ);
+        } else if (p.type === 'firecracker') {
+          p.mesh.rotation.x += dt * 10;
+          p.mesh.rotation.z += dt * 10;
+        }
+      }
+
+      // Check early hit against local player
+      if (me && p.data.fromName !== me.name) {
+        const hitDist = Math.hypot(curX - me.x * TILE, curZ - me.y * TILE);
+        if (hitDist < 0.75 && Math.abs(curY - (me.h + 0.9)) < 0.95) {
+          if (p.mesh) this.group.remove(p.mesh);
+          this.checkProjectileImpact(p);
+          this.projectiles.splice(i, 1);
         }
       }
     }
 
-    // 2. Update Ground Pickups (Candies, Lucky Money Envelopes)
-    const now = performance.now() / 1000;
+    // 4. Update Ground Coins / Items
+    const nowSec = now / 1000;
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const item = this.pickups[i];
       if (item.mesh) {
         item.mesh.rotation.y += dt * item.rotSpeed;
-        item.mesh.position.y = item.baseY + Math.sin(now * 3 + item.x) * 0.08;
+        item.mesh.position.y = item.baseY + Math.sin(nowSec * 3 + item.x) * 0.05;
       }
 
-      // Check collision with Local Player
       if (me) {
         const d = Math.hypot(item.x - me.x, item.y - me.y);
         if (d < 0.65) {
-          // Player collected item!
           if (item.mesh) this.group.remove(item.mesh);
           this.pickups.splice(i, 1);
 
-          if (item.type === 'candy') {
-            playSfx('candy_crunch', 'halloween');
-            if (this.floaters) this.floaters.push({ e: '🍬', who: 'me', t: Date.now() });
-            this.toast('🍬 Bụp! Bạn đã nhặt được 1 kẹo ma quái!');
-            this.emitOp({ k: 'mg_candy_collect', id: item.id, byName: me.name });
-          } else if (item.type === 'lixi') {
-            playSfx('tet_lixi', 'tet');
-            if (this.floaters) this.floaters.push({ e: '🧧', who: 'me', t: Date.now() });
-            this.toast(`🧧 +${item.val} Xu Vàng! Lời chúc năm mới: "${item.wish}" ✨`);
-            this.emitOp({ k: 'mg_lixi_collect', id: item.id, byName: me.name, val: item.val, wish: item.wish });
-          }
+          playSfx('tet_lixi', 'tet');
+          if (this.floaters) this.floaters.push({ e: `🪙 +${item.val} Xu`, who: 'me', t: Date.now() });
+          this.toast(`🧧 +${item.val} Xu Vàng May Mắn! Phát Tài Phát Lộc! ✨`);
+
+          const s = this.scores.get(me.name) || { name: me.name, score: 0 };
+          s.score += item.val;
+          this.scores.set(me.name, s);
+          this.updateScoreboardUI('🧧 BẢNG TÀI LỘC NĂM MỚI', 'Xu Vàng May Mắn');
         }
       }
     }
@@ -569,46 +649,30 @@ export class MinigameManager {
   handleNetworkOp(op) {
     switch (op.k) {
       case 'mg_snowball_throw':
-        this.spawnSnowballProjectile(op);
+        this.spawnProjectile(op, 'snowball');
         break;
-      case 'mg_candy_spawn':
-        this.spawnCandies(op.candies || []);
-        break;
-      case 'mg_candy_collect': {
-        const idx = this.pickups.findIndex(p => p.id === op.id);
-        if (idx !== -1) {
-          if (this.pickups[idx].mesh) this.group.remove(this.pickups[idx].mesh);
-          this.pickups.splice(idx, 1);
-        }
-        const s = this.scores.get(op.byName) || { name: op.byName, score: 0 };
-        s.score += 1;
-        this.scores.set(op.byName, s);
-        this.updateScoreboardUI('🍬 SĂN KẸO HALLOWEEN', 'Kẹo đã nhặt');
-        break;
-      }
-      case 'mg_tet_rain':
-        this.spawnEnvelopes(op.envelopes || []);
-        break;
-      case 'mg_lixi_collect': {
-        const idx = this.pickups.findIndex(p => p.id === op.id);
-        if (idx !== -1) {
-          if (this.pickups[idx].mesh) this.group.remove(this.pickups[idx].mesh);
-          this.pickups.splice(idx, 1);
-        }
-        const s = this.scores.get(op.byName) || { name: op.byName, score: 0 };
-        s.score += op.val || 100;
-        this.scores.set(op.byName, s);
-        this.updateScoreboardUI('🧧 LỘC ĐẦU NĂM', 'Xu Vàng May Mắn');
-        break;
-      }
       case 'mg_cupid_shoot':
-        this.spawnCupidArrowProjectile(op);
+        this.spawnProjectile(op, 'cupid');
         break;
+      case 'mg_tet_cannon':
+        this.spawnProjectile(op, 'firecracker');
+        break;
+      case 'mg_pvp_ko': {
+        const killer = op.killer;
+        const victim = op.victim;
+        this.toast(`💥 ${killer} đã hạ gục ${victim}! (+1 Điểm Chiến Công 🏆)`);
+
+        const s = this.scores.get(killer) || { name: killer, score: 0 };
+        s.score += 1;
+        this.scores.set(killer, s);
+        this.updateScoreboardUI('🏆 BẢNG PHONG THẦN PVP', 'Hạ gục (Kills)');
+        break;
+      }
     }
   }
 
   // --------------------------------------------------------------------------
-  // LEADERBOARD UI
+  // SCOREBOARD UI
   // --------------------------------------------------------------------------
   updateScoreboardUI(title = null, metric = 'Điểm') {
     let board = document.getElementById('minigameBoard');
@@ -627,10 +691,10 @@ export class MinigameManager {
     board.classList.remove('hidden');
     const sorted = [...this.scores.values()].sort((a, b) => b.score - a.score);
 
-    let html = `<h4>🏆 ${title || 'BẢNG XẾP HẠNG'}</h4><div class="mg-list">`;
+    let html = `<h4>🏆 ${title || 'BẢNG CHIẾN ĐẤU'}</h4><div class="mg-list">`;
     sorted.slice(0, 5).forEach((entry, idx) => {
       const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '•';
-      html += `<div class="mg-row"><span>${medal} ${entry.name}</span><b>${entry.score} ${entry.title ? `<small style="font-weight:400;opacity:0.8">(${entry.title})</small>` : ''}</b></div>`;
+      html += `<div class="mg-row"><span>${medal} ${entry.name}</span><b>${entry.score}</b></div>`;
     });
     html += `</div>`;
     board.innerHTML = html;

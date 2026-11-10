@@ -330,7 +330,7 @@ try {
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, 1, 0.1, 300);
   world = new World(scene);
-  minigames = new MinigameManager(scene, () => me, () => peers, emitOp, toast, floaters);
+  minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
   initAudio();
 } catch (e) {
   console.error(e);
@@ -1461,11 +1461,9 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'mg_snowball_throw':
-    case 'mg_candy_spawn':
-    case 'mg_candy_collect':
-    case 'mg_tet_rain':
-    case 'mg_lixi_collect':
-    case 'mg_cupid_shoot': {
+    case 'mg_cupid_shoot':
+    case 'mg_tet_cannon':
+    case 'mg_pvp_ko': {
       minigames?.handleNetworkOp(op);
       break;
     }
@@ -2756,7 +2754,10 @@ addEventListener('keydown', e => {
   if (e.key?.startsWith('Arrow') || code.startsWith('Arrow') || e.key === ' ' || code === 'Space') e.preventDefault();
   if ((e.key === ' ' || code === 'Space') && me) {
     if (me.seatSlot) leaveSeat();
-    else if (me.h === 0) me.vy = JUMP_V;
+    else if (me.h <= getStandHeight(me.x, me.y) + 0.15) {
+      me.vy = JUMP_V;
+      me.loco = 'jump';
+    }
   }
   if (k) keys.add(k);
   if (code) keys.add(code);
@@ -3023,26 +3024,96 @@ function openPeerMenu(id, x, y) {
   m.classList.remove('hidden');
 }
 
-// ---------- Collision & Main Simulation Loop ----------
-const free = (x, y) => {
+// ---------- Parkour Collision & Main Simulation Loop ----------
+function getStandHeight(x, y) {
+  if (!state?.map) return 0;
+  const tx = Math.floor(x + 0.5);
+  const ty = Math.floor(y + 0.5);
+
+  // Outer perimeter boundary walls cannot be stood on (prevent glitching out of map)
+  if (tx <= 0 || ty <= 0 || tx >= state.map.w - 1 || ty >= state.map.h - 1) {
+    return Infinity;
+  }
+
+  let maxH = 0;
+
+  // Check tile type for inner decorative obstacles (trees, pots, low walls)
+  const ch = tileAt(tx, ty);
+  if (ch === 'T') {
+    maxH = Math.max(maxH, 1.05); // Stand on top of decorative trees/pots
+  } else if (ch === '#') {
+    maxH = Math.max(maxH, 1.25); // Stand on inner partition walls
+  }
+
+  // Check colliders (tables, tree planter base, fountain rim, TV stage)
+  if (world?.features?.colliders) {
+    for (const c of world.features.colliders) {
+      const d = Math.hypot(x - c.x, y - c.y);
+      if (d < c.r + RADIUS * 0.55) {
+        const colH = c.r > 0.6 ? 1.05 : 0.85;
+        maxH = Math.max(maxH, colH);
+      }
+    }
+  }
+
+  // Check seats (chairs, couple sofas, campfire logs)
+  if (world?.features?.seats) {
+    for (const s of world.features.seats) {
+      if (s.kind === 'couple') {
+        const dx = Math.abs(x - s.x);
+        const dy = Math.abs(y - s.y);
+        if (dx < 0.55 && dy < 0.4) {
+          maxH = Math.max(maxH, 0.48);
+        }
+      } else {
+        if (Math.hypot(x - s.x, y - s.y) < 0.38) {
+          maxH = Math.max(maxH, 0.44);
+        }
+      }
+    }
+  }
+
+  return maxH;
+}
+
+const free = (x, y, currentH = 0) => {
+  // Hard map perimeter boundary clamp
+  if (x < 1.25 || x > state.map.w - 1.25 || y < 1.25 || y > state.map.h - 1.25) return false;
+
   for (const [ox, oy] of [
     [-1, -1],
     [1, -1],
     [-1, 1],
     [1, 1],
   ]) {
-    if (isSolid(tileAt(Math.floor(x + ox * RADIUS + 0.5), Math.floor(y + oy * RADIUS + 0.5)))) return false;
-  }
-  if (world?.features?.colliders) {
-    for (const c of world.features.colliders) {
-      if (Math.hypot(x - c.x, y - c.y) < c.r + RADIUS) return false;
+    const tx = Math.floor(x + ox * RADIUS + 0.5);
+    const ty = Math.floor(y + oy * RADIUS + 0.5);
+    if (tx <= 0 || ty <= 0 || tx >= state.map.w - 1 || ty >= state.map.h - 1) return false;
+
+    const t = tileAt(tx, ty);
+    if (isSolid(t)) {
+      const standH = t === 'T' ? 1.05 : 1.25;
+      if (currentH < standH - 0.22) return false;
     }
   }
+
+  if (world?.features?.colliders) {
+    for (const c of world.features.colliders) {
+      if (Math.hypot(x - c.x, y - c.y) < c.r + RADIUS) {
+        const colH = c.r > 0.6 ? 1.05 : 0.85;
+        if (currentH < colH - 0.22) return false;
+      }
+    }
+  }
+
   if (world?.features?.seats) {
     const now = performance.now();
     for (const s of world.features.seats) {
       if (me?.seatSlot && (me.seatSlot.id === s.id || me.seatSlot.sofaId === s.id || me.seatSlot.id.startsWith(s.id))) continue;
       if (justLeftSeat && now < justLeftSeat.until && (justLeftSeat.id === s.id || justLeftSeat.sofaId === s.id || justLeftSeat.id.startsWith(s.id))) continue;
+
+      const seatH = s.kind === 'couple' ? 0.48 : 0.44;
+      if (currentH >= seatH - 0.15) continue; // Can jump over or walk on top of seat
 
       if (s.kind === 'couple') {
         const dx = Math.abs(x - s.x);
@@ -3108,17 +3179,33 @@ function loop(now) {
       sp = (running ? RUN : WALK) * dt;
     dx = (dx / l) * sp;
     dz = (dz / l) * sp;
-    if (free(me.x + dx, me.y)) me.x += dx;
-    if (free(me.x, me.y + dz)) me.y += dz;
+    if (free(me.x + dx, me.y, me.h)) me.x += dx;
+    if (free(me.x, me.y + dz, me.h)) me.y += dz;
+    // Hard coordinate clamp against any glitching
+    me.x = Math.max(1.25, Math.min(state.map.w - 1.25, me.x));
+    me.y = Math.max(1.25, Math.min(state.map.h - 1.25, me.y));
   }
 
   if (mode === 'fps') me.r = yaw + Math.PI;
   else if (moving && !me.seatSlot) me.r = lerpAngle(me.r, Math.atan2(dx, dz), Math.min(1, dt * 14));
 
-  if (me.h > 0 || me.vy > 0) {
+  // Parkour & Vertical physics with stand-on-obstacle landing
+  const floorH = getStandHeight(me.x, me.y);
+  if (floorH === Infinity) {
+    me.x = Math.max(2, Math.min(state.map.w - 2, me.x));
+    me.y = Math.max(2, Math.min(state.map.h - 2, me.y));
+    me.h = 0;
+    me.vy = 0;
+  } else if (me.h > floorH || me.vy > 0) {
     me.vy -= GRAVITY * dt;
-    me.h = Math.max(0, me.h + me.vy * dt);
-    if (me.h === 0) me.vy = 0;
+    me.h += me.vy * dt;
+    if (me.h <= floorH) {
+      me.h = floorH;
+      me.vy = 0;
+    }
+  } else if (me.h < floorH) {
+    me.h = floorH;
+    me.vy = 0;
   }
 
   // Check Couple Sofa Pairing & Campfire Proximity
@@ -3134,7 +3221,8 @@ function loop(now) {
     }
     me.loco = partner ? 'couple_sit' : 'sit';
   } else {
-    me.loco = me.h > 0 ? 'jump' : moving ? (running ? 'run' : 'walk') : 'idle';
+    const isAirborne = me.h > floorH + 0.08 || me.vy > 0.5;
+    me.loco = isAirborne ? 'jump' : moving ? (running ? 'run' : 'walk') : 'idle';
   }
 
   // Show/hide campfire action bar when sitting on campfire log or standing near campfire
@@ -3159,13 +3247,6 @@ function loop(now) {
     promptEl.classList.remove('hidden');
   } else {
     promptEl.classList.add('hidden');
-  }
-
-  // 5. Periodic Vampire NPC Scare on Halloween Map
-  if (state.theme === 'halloween' && now > nextVampireScareAt) {
-    nextVampireScareAt = now + 15000 + Math.random() * 8000;
-    // Trigger swoop scare on self (and broadcast to room)
-    emitOp({ k: 'vampireScare', who: net.selfId, x: me.x, y: me.y });
   }
 
   // 6. Network Position Sync

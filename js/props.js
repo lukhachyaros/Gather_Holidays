@@ -339,29 +339,44 @@ export function buildCostumeBooth(costumeKey) {
 
 export function buildVampireNPC() {
   const g = new THREE.Group();
-  // Torso & cloak
-  part(g, G.box(), mat('#14141f'), [0, 0.9, 0], [0.48, 0.65, 0.26]);
-  part(g, G.box(), mat('#b31217'), [0, 0.85, -0.16], [0.68, 0.85, 0.05], [0.15, 0, 0]);
+  // Torso & ragged cloak with shadowy gradient
+  part(g, G.box(), mat('#0a0a14'), [0, 0.9, 0], [0.48, 0.7, 0.28]);
+  part(g, G.box(), mat('#880808'), [0, 0.85, -0.16], [0.72, 0.95, 0.05], [0.15, 0, 0]);
   // High vampire collar
-  part(g, G.cone(), mat('#b31217'), [0, 1.32, -0.08], [0.52, 0.32, 0.28], [Math.PI, 0, 0]);
-  // Head & glowing red eyes
-  part(g, G.sph(), mat('#f1f2f6'), [0, 1.42, 0], [0.42, 0.44, 0.42]);
-  part(g, G.sph(), mat('#ff0033', { emissive: '#ff0033', emissiveIntensity: 2 }), [-0.09, 1.45, 0.19], [0.07, 0.05, 0.05]);
-  part(g, G.sph(), mat('#ff0033', { emissive: '#ff0033', emissiveIntensity: 2 }), [0.09, 1.45, 0.19], [0.07, 0.05, 0.05]);
+  part(g, G.cone(), mat('#4a0404'), [0, 1.35, -0.08], [0.55, 0.38, 0.3], [Math.PI, 0, 0]);
+  // Pale Head & glowing blood-red eyes with PointLight
+  part(g, G.sph(), mat('#e2e8f0', { roughness: 0.8 }), [0, 1.44, 0], [0.42, 0.44, 0.42]);
 
-  // Articulated Bat Wings
+  // Blood red glowing eyes
+  const eyeMat = mat('#ff0033', { emissive: '#ff0033', emissiveIntensity: 3.5 });
+  part(g, G.sph(), eyeMat, [-0.09, 1.46, 0.19], [0.07, 0.05, 0.05]);
+  part(g, G.sph(), eyeMat, [0.09, 1.46, 0.19], [0.07, 0.05, 0.05]);
+
+  // Sharp fangs
+  const fangMat = mat('#ffffff', { roughness: 0.2 });
+  part(g, G.cone(), fangMat, [-0.05, 1.35, 0.18], [0.03, 0.08, 0.03], [Math.PI, 0, 0]);
+  part(g, G.cone(), fangMat, [0.05, 1.35, 0.18], [0.03, 0.08, 0.03], [Math.PI, 0, 0]);
+
+  // Eye pointlight for creepy red glow
+  const eyeLight = new THREE.PointLight(0xff0033, 1.4, 4.5);
+  eyeLight.position.set(0, 1.46, 0.25);
+  g.add(eyeLight);
+
+  // Large ragged bat wings with multiple claw joints
   const leftWing = new THREE.Group();
-  leftWing.position.set(-0.24, 1.1, -0.1);
-  part(leftWing, G.box(), mat('#1e1b2e'), [-0.45, 0, 0], [0.9, 0.42, 0.04], [0, 0, 0.15]);
+  leftWing.position.set(-0.25, 1.15, -0.1);
+  part(leftWing, G.box(), mat('#14101e'), [-0.55, 0, 0], [1.1, 0.52, 0.04], [0, 0, 0.18]);
+  part(leftWing, G.cone(), mat('#2a0845'), [-1.1, 0.2, 0], [0.06, 0.2, 0.06], [0, 0, -0.6]);
   g.add(leftWing);
 
   const rightWing = new THREE.Group();
-  rightWing.position.set(0.24, 1.1, -0.1);
-  part(rightWing, G.box(), mat('#1e1b2e'), [0.45, 0, 0], [0.9, 0.42, 0.04], [0, 0, -0.15]);
+  rightWing.position.set(0.25, 1.15, -0.1);
+  part(rightWing, G.box(), mat('#14101e'), [0.55, 0, 0], [1.1, 0.52, 0.04], [0, 0, -0.18]);
+  part(rightWing, G.cone(), mat('#2a0845'), [1.1, 0.2, 0], [0.06, 0.2, 0.06], [0, 0, 0.6]);
   g.add(rightWing);
 
-  const lbl = labelSprite('🧛 Bá Tước Ma Cà Rồng', 'rgba(127,29,29,0.9)', '#fecaca', 0.36);
-  lbl.position.set(0, 2.05, 0);
+  const lbl = labelSprite('🧛 BÁ TƯỚC MA CÀ RỒNG (BOSS)', 'rgba(74,4,4,0.95)', '#fecaca', 0.38);
+  lbl.position.set(0, 2.12, 0);
   g.add(lbl);
 
   g.userData.leftWing = leftWing;
