@@ -92,6 +92,8 @@
   <span class="dock-sep"></span>
   <button id="btnMic" class="dock-btn" title="Bật/Tắt Microphone để nói chuyện (Phím M)">🔇 Mic: Tắt</button>
   <button id="btnShareScreen" class="dock-btn" title="Chia sẻ màn hình máy tính lên TV lớn (Phím P)">🖥️ Chiếu TV</button>
+  <button id="btnBgm" class="dock-btn bgm-active" title="Bật/Tắt Nhạc nền lễ hội (BGM)">🎵 Nhạc: Bật</button>
+  <button id="btnMinigame" class="dock-btn minigame-btn" title="Chơi Minigame theo chủ đề phòng (Phím G)">🎮 Minigame [G]</button>
   <span class="dock-sep"></span>
   <button id="btnCopy" class="dock-btn" title="Sao chép link mời bạn bè vào phòng này">🔗</button>
   <button id="btnView" class="dock-btn" title="Đổi góc nhìn Thứ nhất / Thứ ba (Phím V)">🎥 TPS</button>
@@ -133,6 +135,7 @@
     <div><kbd>2</kbd> 🤝 Bắt tay</div>
     <div><kbd>3</kbd> 🤗 Ôm ấm áp</div>
     <div><kbd>4</kbd> 🍬/🧧 Tương tác lễ hội</div>
+    <div><kbd>G</kbd> 🎮 Chơi Minigame lễ hội</div>
     <div><kbd>K</kbd> / <kbd>I</kbd> Cuộn TV xuống/lên</div>
     <div><kbd>B</kbd> ⚡ Bỏ qua QC TV</div>
   </div>
@@ -360,6 +363,16 @@
     <div class="row" style="margin-top:2px;align-items:center">
       <button id="btnToggleMicSettings" class="info">🎙️ Bật/Tắt Micro (Phím M)</button>
       <span id="micMeterHint" class="hint" style="color:#94a3b8">Trạng thái: Chưa bật Mic</span>
+    </div>
+
+    <h3>🎵 Nhạc Nền Lễ Hội (BGM)</h3>
+    <label>
+      <span>Âm lượng nhạc nền: <b id="bgmVolVal" style="color:#c084fc">35%</b></span>
+      <input id="bgmVolSlider" type="range" min="0" max="100" step="5" value="35">
+    </label>
+    <div class="row" style="margin-top:2px;align-items:center">
+      <button id="btnToggleBgmSettings" class="info">🎵 Bật/Tắt Nhạc Nền</button>
+      <span id="bgmStatusHint" class="hint" style="color:#94a3b8">Trạng thái: Đang phát</span>
     </div>
 
     <h3>🖱️ Điều khiển Chuột & Camera</h3>
