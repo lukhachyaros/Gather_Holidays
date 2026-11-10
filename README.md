@@ -26,7 +26,8 @@ Một không gian 3D tương tác nhiều người chơi chạy hoàn toàn trê
   - Gửi riêng cho bạn bè trong phòng hoặc **ghim trực tiếp lên map 3D** thành hình phong thư 💌 bay bổng. Người khác có thể lại gần bấm xem và lưu vào hộp thư cá nhân (`localStorage`).
 - 🎨 **Trang trí 3D theo từng mùa lễ:**
   - 6 chủ đề: 🎃 Halloween, 🎄 Giáng sinh, 🧧 Tết Nguyên Đán, 🥮 Trung thu, 🎆 Năm mới, 💝 Valentine.
-  - Hiệu ứng hạt bay 3D đặc trưng: tuyết rơi, hoa mai, cánh hoa hồng, dơi đêm...
+  - Map Valentine có Cây Trái Tim, đài phun nước ước nguyện, cổng hoa hồng, ghế đôi và điểm viết thiệp tình yêu.
+  - Hiệu ứng hạt bay 3D đặc trưng: tuyết rơi, hoa mai, cánh hoa hồng, trái tim và dơi đêm...
 - 🎙️ **Voice Chat P2P & Âm thanh không gian 3D (Spatial Audio):**
   - Đàm thoại trực tiếp thời gian thực P2P WebRTC không cần server trung gian.
   - Tự động điều chỉnh âm lượng theo khoảng cách 3D (đứng gần nghe to rõ, đi xa âm lượng giảm dần tự nhiên).

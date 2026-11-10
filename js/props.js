@@ -465,6 +465,140 @@ export function buildFirecrackerTable() {
 }
 
 // ============================================================================
+ // VALENTINE CENTERPIECES: HEART TREE, WISHING FOUNTAIN & ROSE ARCH
+ // ============================================================================
+function valentineHeartGeometry() {
+  return geo('valentine-heart', () => {
+    const shape = new THREE.Shape();
+    shape.moveTo(0, -1.12);
+    shape.bezierCurveTo(-0.28, -0.72, -1.34, -0.02, -1.34, 0.62);
+    shape.bezierCurveTo(-1.34, 1.38, -0.34, 1.52, 0, 0.82);
+    shape.bezierCurveTo(0.34, 1.52, 1.34, 1.38, 1.34, 0.62);
+    shape.bezierCurveTo(1.34, -0.02, 0.28, -0.72, 0, -1.12);
+    return new THREE.ExtrudeGeometry(shape, {
+      depth: 0.18,
+      bevelEnabled: true,
+      bevelSegments: 3,
+      steps: 1,
+      bevelSize: 0.055,
+      bevelThickness: 0.055,
+    });
+  });
+}
+
+export function buildValentineHeartTree() {
+  const g = new THREE.Group();
+  // Tiered rose-gold pedestal and sculpted trunk.
+  part(g, G.cyl(), mat('#7f1d4e'), [0, 0.2, 0], [2.45, 0.4, 2.45]);
+  part(g, G.cyl(), mat('#f9a8d4', { metalness: 0.38 }), [0, 0.43, 0], [2.55, 0.09, 2.55]);
+  part(g, G.cyl(), mat('#8b5e68'), [0, 1.48, 0], [0.34, 2.1, 0.34]);
+  part(g, G.cyl(), mat('#b77986'), [0, 2.2, 0], [0.22, 1.15, 0.22], [0, 0, -0.34]);
+
+  const heartGeo = valentineHeartGeometry();
+  const rose = mat('#e11d48', { emissive: '#9f1239', emissiveIntensity: 0.48, roughness: 0.48 });
+  const blush = mat('#f9a8d4', { emissive: '#be185d', emissiveIntensity: 0.32, roughness: 0.42 });
+  const gold = mat('#fbbf24', { metalness: 0.42, emissive: '#f59e0b', emissiveIntensity: 0.55 });
+  part(g, heartGeo, rose, [0, 3.55, 0], [1.28, 1.18, 1]);
+  const centerHeart = part(g, heartGeo, blush, [0, 3.58, 0.22], [0.72, 0.68, 0.75]);
+  centerHeart.userData.spin = true;
+
+  // Smaller floating hearts and rose clusters around the crown.
+  const floaters = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const heart = part(
+      g,
+      heartGeo,
+      i % 2 ? blush : gold,
+      [Math.cos(a) * 1.55, 3.35 + (i % 3) * 0.48, Math.sin(a) * 0.72],
+      [0.22, 0.22, 0.32]
+    );
+    heart.userData.spin = true;
+    floaters.push(heart);
+  }
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const x = Math.cos(a) * 1.05;
+    const z = Math.sin(a) * 1.05;
+    part(g, G.sph(), rose, [x, 0.78 + (i % 2) * 0.18, z], [0.22, 0.16, 0.22]);
+    part(g, G.sph(), mat('#4d7c50'), [x * 1.12, 0.68, z * 1.12], [0.2, 0.07, 0.11]);
+  }
+
+  const light = new THREE.PointLight('#fb7185', 4.2, 18);
+  light.position.set(0, 4.0, 0);
+  g.add(light);
+  const lbl = labelSprite('💗 Cây Trái Tim · [E] Viết thiệp yêu thương', 'rgba(131,24,67,0.92)', '#fff1f2', 0.46);
+  lbl.position.set(0, 6.0, 0);
+  g.add(lbl);
+  g.userData.floaters = floaters;
+  return g;
+}
+
+export function buildLoveFountain() {
+  const g = new THREE.Group();
+  part(g, G.cyl(), mat('#9d4770'), [0, 0.18, 0], [1.65, 0.36, 1.65]);
+  part(g, G.cyl(), mat('#fbcfe8', { metalness: 0.28, roughness: 0.32 }), [0, 0.48, 0], [1.42, 0.22, 1.42]);
+  part(g, G.cyl(), mat('#db2777', { emissive: '#be185d', emissiveIntensity: 0.24 }), [0, 0.66, 0], [0.82, 0.18, 0.82]);
+  part(g, G.cyl(), mat('#f9a8d4'), [0, 1.12, 0], [0.2, 0.92, 0.2]);
+  const heart = part(
+    g,
+    valentineHeartGeometry(),
+    mat('#fb7185', { emissive: '#e11d48', emissiveIntensity: 1.0, metalness: 0.18 }),
+    [0, 1.8, 0],
+    [0.48, 0.46, 0.65]
+  );
+  heart.userData.spin = true;
+
+  // Softly glowing water jets around the central heart.
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const jet = part(
+      g,
+      G.cyl(),
+      mat('#fce7f3', { emissive: '#f9a8d4', emissiveIntensity: 0.65 }),
+      [Math.cos(a) * 0.54, 0.95, Math.sin(a) * 0.54],
+      [0.035, 0.68, 0.035],
+      [0, 0, (i % 2 ? -1 : 1) * 0.25]
+    );
+    jet.userData.bob = true;
+  }
+  const light = new THREE.PointLight('#f472b6', 2.4, 8);
+  light.position.set(0, 1.6, 0);
+  g.add(light);
+  const lbl = labelSprite('⛲ Suối Ước Nguyện · [E] Gửi thiệp', 'rgba(157,23,77,0.9)', '#fff1f2', 0.32);
+  lbl.position.set(0, 2.55, 0);
+  g.add(lbl);
+  return g;
+}
+
+export function buildRoseArch() {
+  const g = new THREE.Group();
+  const stone = mat('#9d4770');
+  const trim = mat('#fbcfe8', { metalness: 0.3 });
+  // Two columns and a rose-covered oval crown.
+  part(g, G.cyl(), stone, [-1.55, 1.18, 0], [0.24, 2.36, 0.24]);
+  part(g, G.cyl(), stone, [1.55, 1.18, 0], [0.24, 2.36, 0.24]);
+  part(g, G.cyl(), trim, [-1.55, 0.12, 0], [0.54, 0.16, 0.54]);
+  part(g, G.cyl(), trim, [1.55, 0.12, 0], [0.54, 0.16, 0.54]);
+  part(g, G.torus(), trim, [0, 2.25, 0], [5.1, 1.25, 0.9]);
+
+  const petals = [mat('#e11d48'), mat('#fb7185'), mat('#f9a8d4')];
+  for (let i = 0; i < 13; i++) {
+    const t = i / 12;
+    const x = -1.85 + t * 3.7;
+    const y = 2.3 + Math.sin(t * Math.PI) * 0.92;
+    const rose = part(g, G.sph(), petals[i % petals.length], [x, y, 0.12], [0.22, 0.18, 0.2]);
+    rose.userData.spin = i % 4 === 0;
+    part(g, G.sph(), mat('#4d7c50'), [x + 0.12, y - 0.15, 0.04], [0.16, 0.045, 0.08]);
+  }
+  part(g, valentineHeartGeometry(), mat('#fbbf24', { emissive: '#f59e0b', emissiveIntensity: 0.5 }), [0, 2.34, 0.22], [0.25, 0.25, 0.5]);
+  const lbl = labelSprite('🌹 Cổng Hoa Hồng', 'rgba(131,24,67,0.88)', '#fff1f2', 0.3);
+  lbl.position.set(0, 3.65, 0);
+  g.add(lbl);
+  return g;
+}
+
+// ============================================================================
 // CINEMA SCREEN, SINGLE CHAIRS & COUPLE SOFAS
 // ============================================================================
 export function buildSingleChair() {

@@ -42,6 +42,19 @@ export const THEMES = {
     particles: { emoji: ['🌸', '🧧', '✨'], count: 32, vy: [0.3, 0.8], vx: [-0.4, 0.4] },
     music: 'tUOJxCJxw1Q',
   },
+  valentine: {
+    name: '💝 Valentine',
+    bg: '#210d24',
+    floor: ['#fce7f3', '#fbcfe8'],
+    path: '#f9a8d4',
+    wall: '#7f1d4e',
+    water: '#f472b6',
+    rug: '#be185d',
+    tree: '🌹',
+    prop: '💗',
+    decor: ['🌹', '🌷', '💝', '💌', '💘', '🕯️', '✨', '💗', '🦢', '💐'],
+    particles: { emoji: ['🌸', '💗', '✨'], count: 34, vy: [0.25, 0.75], vx: [-0.35, 0.35] },
+  },
 };
 
 export const COSTUMES = {
