@@ -2613,10 +2613,10 @@ function findNearestInteractable() {
         bestSeatD = d;
         const label =
           s.kind === 'couple'
-            ? '💑 Ghế Couple · [E] Ngồi bắt cặp xem TV'
+            ? '💑 Ghế Couple · [E] Ngồi'
             : s.kind === 'log'
-            ? '🪵 Khúc Gỗ Lửa Trại · [E] Ngồi sưởi ấm & nướng Marshmallow'
-            : '🪑 Ghế Xem TV · [E] Ngồi xuống';
+            ? '🪵 Khúc Gỗ Lửa Trại · [E] Ngồi'
+            : '🪑 Ghế Xem TV · [E] Ngồi';
         bestSeat = { kind: 'seat', seat: s, d, prompt: label };
       }
     }
