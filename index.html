@@ -279,6 +279,12 @@
       <button id="btnOpenScreenShareFromMedia" class="warn" title="Chia sẻ màn hình máy tính của bạn lên TV">🖥️ Chiếu màn hình</button>
     </div>
     <div id="nowPlayingBox" class="queue-now"></div>
+    <div id="mediaPlaybackBar" class="media-playback-bar hidden">
+      <button id="mediaPlayPause" class="primary" title="Tạm dừng hoặc tiếp tục phát">⏸ Tạm dừng</button>
+      <button id="mediaStop" class="warn" title="Dừng và tắt màn hình TV">⏹ Dừng TV</button>
+      <input type="range" id="mediaSeek" min="0" max="100" value="0" step="1" title="Tua thời gian video">
+      <span id="mediaTime" class="media-time">00:00 / 00:00</span>
+    </div>
     <div class="row">
       <button id="btnCinemaMode" class="primary" title="Xem màn hình TV phóng to sắc nét như trong rạp chiếu">🖥️ Xem phóng to TV</button>
       <button id="mediaScrollDown" class="info hidden" title="Cuộn trang web xuống để đưa video ra giữa màn hình TV">🔽 Cuộn xuống Video (K)</button>

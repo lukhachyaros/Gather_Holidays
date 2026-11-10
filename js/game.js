@@ -21,6 +21,13 @@ import {
   stopMedia,
   classifyMediaInput,
   normalizeWebUrl,
+  getCurrentTime,
+  getDuration,
+  isPlayerPlaying,
+  playVideo,
+  pauseVideo,
+  seekPlayer,
+  syncPlayback,
 } from './media.js';
 import { World, TILE } from './world.js';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor } from './avatar.js';
@@ -762,7 +769,7 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
   $('roomInfo').textContent = `📍 ${roomTitle}`;
   updateLiveStats();
 
-  initPlayer('yt', onMediaEnded);
+  initPlayer('yt', onMediaEnded, onPlayerStateChanged);
 
   // Wait briefly for existing room state from peers/MQTT; otherwise initialize fresh room state as Host
   joinTimer = setTimeout(() => {
@@ -1083,6 +1090,14 @@ const handlers = {
         return;
       }
       net.send('hello', pubInfo(), id);
+      if (state?.mediaCurrent?.vid && canControlTV(net.selfId)) {
+        const curT = getCurrentTime();
+        if (curT != null && curT > 0) {
+          state.mediaCurrent.t = curT;
+          state.mediaCurrent.at = Date.now();
+          state.mediaCurrent.playing = isPlayerPlaying();
+        }
+      }
       net.send('state', state, id);
     }
   },
@@ -1354,6 +1369,54 @@ function applyOp(op, senderId = null) {
       else toast('⏹ Đã dừng chiếu trên TV');
       break;
     }
+    case 'mediaPlayPause': {
+      if (senderId && !canControlTV(senderId)) return;
+      if (!state.mediaCurrent || state.mediaCurrent.id !== op.id) return;
+      state.mediaCurrent.playing = op.playing;
+      state.mediaCurrent.t = op.t;
+      state.mediaCurrent.at = op.at || Date.now();
+      if (senderId !== net?.selfId) {
+        if (op.playing) playVideo();
+        else pauseVideo();
+        syncPlayback(state.mediaCurrent);
+      }
+      updateMediaDialog();
+      toast(op.playing ? `▶ ${op.byName || 'Người điều khiển'} đã tiếp tục phát video` : `⏸ ${op.byName || 'Người điều khiển'} đã tạm dừng video`);
+      break;
+    }
+    case 'mediaSeek': {
+      if (senderId && !canControlTV(senderId)) return;
+      if (!state.mediaCurrent || state.mediaCurrent.id !== op.id) return;
+      state.mediaCurrent.t = op.t;
+      state.mediaCurrent.playing = op.playing;
+      state.mediaCurrent.at = op.at || Date.now();
+      if (senderId !== net?.selfId) {
+        seekPlayer(op.t);
+        syncPlayback(state.mediaCurrent);
+      }
+      updateMediaProgressUI();
+      break;
+    }
+    case 'mediaSync': {
+      if (senderId && !canControlTV(senderId)) return;
+      if (!state.mediaCurrent || state.mediaCurrent.id !== op.id) return;
+      state.mediaCurrent.t = op.t;
+      state.mediaCurrent.playing = op.playing;
+      state.mediaCurrent.at = op.at || Date.now();
+      if (senderId !== net?.selfId) {
+        syncPlayback(state.mediaCurrent);
+      }
+      updateMediaProgressUI();
+      break;
+    }
+    case 'mediaStop': {
+      if (senderId && !canControlTV(senderId)) return;
+      state.mediaCurrent = null;
+      stopMedia();
+      updateMediaDialog();
+      toast(`⏹ ${op.byName || 'Người điều khiển'} đã tắt màn hình TV`);
+      break;
+    }
     case 'tvScroll': {
       if (senderId && !canControlTV(senderId)) return;
       if (state?.mediaCurrent?.kind === 'web') {
@@ -1516,21 +1579,110 @@ const mediaLabel = item => {
   return 'Video YouTube ' + item.vid;
 };
 
-// Who may change / skip what is on the TV: the Host, whoever added the current item, anyone when TV is idle,
-// or anyone when the person who added it already left the room.
+// Controller callback when YouTube player state changes on the local machine
+function onPlayerStateChanged(newState, time) {
+  if (!state?.mediaCurrent?.vid || state.mediaCurrent.kind === 'web') return;
+  if (!canControlTV(net?.selfId)) return;
+  const isPlaying = newState === 'PLAYING';
+  if (state.mediaCurrent.playing !== isPlaying) {
+    state.mediaCurrent.playing = isPlaying;
+    state.mediaCurrent.t = time;
+    state.mediaCurrent.at = Date.now();
+    emitOp({
+      k: 'mediaPlayPause',
+      id: state.mediaCurrent.id,
+      playing: isPlaying,
+      t: time,
+      byName: me.name,
+    });
+  }
+}
+
+// Strictly verify who has permission to control the TV:
+// ONLY the person who uploaded / added the current video is allowed to control it!
+// Fallback: If the owner left the room, allow the Host or remaining players so TV is not locked.
 function canControlTV(userId = net?.selfId) {
   if (!state) return false;
   const cur = state.mediaCurrent;
-  if (!cur || (!cur.vid && !cur.url && cur.kind !== 'screen')) return true;
-  if (userId && userId === state.hostId) return true;
+  if (!cur || (!cur.vid && !cur.url && cur.kind !== 'screen')) return true; // TV is idle: anyone can play
   const ownerId = cur.addedBy;
-  return ownerId === userId || (!!ownerId && ownerId !== net?.selfId && !peers.has(ownerId));
+  if (!ownerId) return true;
+
+  // If the person who added this video is still present in the room:
+  // ONLY they are allowed to control it!
+  const isOwnerPresent = ownerId === net?.selfId || peers.has(ownerId);
+  if (isOwnerPresent) {
+    return ownerId === userId;
+  }
+
+  // If the original owner has left the room:
+  if (userId && userId === state.hostId) return true;
+  return true;
 }
 
 function canSkipCurrentMedia() {
   if (!state?.mediaCurrent || (!state.mediaCurrent.vid && !state.mediaCurrent.url && state.mediaCurrent.kind !== 'screen')) return false;
   return canControlTV(net?.selfId);
 }
+
+function formatMediaTime(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+let isUserDraggingSeek = false;
+
+function updateMediaProgressUI() {
+  const cur = state?.mediaCurrent;
+  const bar = $('mediaPlaybackBar');
+  if (!bar) return;
+  if (!cur || !cur.vid || cur.kind === 'web') {
+    bar.classList.add('hidden');
+    return;
+  }
+  bar.classList.remove('hidden');
+
+  const canCtrl = canControlTV(net?.selfId);
+  $('mediaPlayPause').disabled = !canCtrl;
+  $('mediaStop').disabled = !canCtrl;
+  $('mediaSeek').disabled = !canCtrl;
+  $('mediaPlayPause').textContent = isPlayerPlaying() ? '⏸ Tạm dừng' : '▶ Tiếp tục';
+
+  if (!isUserDraggingSeek) {
+    const curTime = getCurrentTime();
+    const duration = getDuration() || 100;
+    $('mediaSeek').max = Math.floor(duration);
+    $('mediaSeek').value = Math.floor(curTime);
+    $('mediaTime').textContent = `${formatMediaTime(curTime)} / ${formatMediaTime(duration)}`;
+  }
+}
+
+setInterval(() => {
+  if (state?.mediaCurrent?.vid && !$('dlgMedia').classList.contains('hidden')) {
+    updateMediaProgressUI();
+  }
+}, 500);
+
+// Heartbeat sync loop: controller broadcasts video position & play status to all peers
+setInterval(() => {
+  if (!net?.selfId || !state?.mediaCurrent?.vid || state.mediaCurrent.kind === 'web') return;
+  if (!canControlTV(net.selfId)) return;
+  const curTime = getCurrentTime();
+  const isPl = isPlayerPlaying();
+  state.mediaCurrent.t = curTime;
+  state.mediaCurrent.playing = isPl;
+  state.mediaCurrent.at = Date.now();
+  net.send('op', {
+    k: 'mediaSync',
+    id: state.mediaCurrent.id,
+    vid: state.mediaCurrent.vid,
+    t: curTime,
+    playing: isPl,
+    at: Date.now(),
+  });
+}, 1500);
 
 function updateMediaDialog() {
   if (!state) return;
@@ -1542,9 +1694,10 @@ function updateMediaDialog() {
   const nowBox = $('nowPlayingBox');
   if (hasMedia) {
     const isMine = cur.addedBy === net?.selfId;
-    const perm = canSkipCurrentMedia()
-      ? '<span style="color:#4ade80">(Bạn có quyền Skip / thay đổi TV)</span>'
-      : '<span style="color:#fbbf24">(Chỉ người chiếu hoặc Chủ phòng được Skip)</span>';
+    const canCtrl = canControlTV(net?.selfId);
+    const perm = canCtrl
+      ? '<br><span style="color:#4ade80">👑 <b>Bạn đang điều khiển màn hình này</b> (Tạm dừng, tua, skip, tắt)</span>'
+      : `<br><span style="color:#fbbf24">🔒 <b>Đang xem đồng bộ với ${escHtml(cur.addedByName)}</b> (Chỉ người thêm video mới được điều khiển)</span>`;
     nowBox.innerHTML =
       '<b>▶ Đang chiếu trên màn hình lớn:</b> ' +
       escHtml(mediaLabel(cur)) +
@@ -1560,8 +1713,11 @@ function updateMediaDialog() {
 
   const isSharing = !!rtc?.isSharingScreen;
   $('screenShareDialogBox')?.classList.toggle('hidden', !isSharing);
+  const canCtrl = canControlTV(net?.selfId);
   $('mediaSkip').disabled = !canSkipCurrentMedia();
+  $('mediaBypassAd').disabled = !canCtrl;
   $('mediaBypassAd').classList.toggle('hidden', !!cur && (cur.kind === 'web' || cur.kind === 'screen'));
+  updateMediaProgressUI();
   updateStatusBadges();
 
   const qBox = $('queueList');
@@ -1580,7 +1736,7 @@ function updateMediaDialog() {
 }
 
 function onMediaEnded(finishedMedia) {
-  // Only someone allowed to control the TV triggers the auto-advance op
+  // Only the person allowed to control the TV triggers the auto-advance op
   if (!state?.mediaCurrent || state.mediaCurrent.id !== finishedMedia?.id) return;
   if (state.mediaCurrent.kind === 'web') return;
   if (canSkipCurrentMedia()) {
@@ -1589,6 +1745,9 @@ function onMediaEnded(finishedMedia) {
 }
 
 function triggerBypassAd() {
+  if (!canControlTV(net?.selfId)) {
+    return toast(`⚠️ Chỉ ${state.mediaCurrent?.addedByName || 'người thêm video'} mới có quyền điều khiển TV.`);
+  }
   if (bypassAdNow()) {
     toast('⚡ Đã bỏ qua quảng cáo YouTube & đồng bộ lại thời gian phát!');
   } else {
@@ -1613,12 +1772,12 @@ function castToTV(rawInput, { forceQueue = false } = {}) {
   if (!item) return false;
   if (!checkCooldown()) return false;
   const cur = state?.mediaCurrent;
-  if (!forceQueue && cur?.vid) {
+  if (!forceQueue && (cur?.vid || cur?.url)) {
     if (canControlTV(net.selfId)) {
       emitOp({ k: 'mediaPlayNow', item });
     } else {
       emitOp({ k: 'mediaQueue+', item });
-      toast('📋 TV đang được người khác điều khiển — đã xếp nội dung của bạn vào hàng chờ.');
+      toast(`📋 TV đang do ${cur.addedByName || 'người khác'} điều khiển — đã xếp video của bạn vào hàng chờ.`);
     }
   } else {
     emitOp({ k: 'mediaQueue+', item });
@@ -1641,6 +1800,60 @@ $('tileYoutube').onclick = () => {
   $('mediaUrl').placeholder = 'Dán link YouTube rồi bấm “Phát ngay”…';
   $('mediaUrl').focus();
 };
+
+// Controls for media playback bar (Play/Pause, Stop, Seek)
+$('mediaPlayPause').onclick = () => {
+  if (!canControlTV(net?.selfId)) {
+    return toast(`⚠️ Chỉ ${state.mediaCurrent?.addedByName || 'người thêm video'} mới có quyền điều khiển màn hình!`);
+  }
+  if (!state.mediaCurrent?.vid) return;
+  const nextPlaying = !isPlayerPlaying();
+  const curT = getCurrentTime();
+  if (nextPlaying) playVideo();
+  else pauseVideo();
+  state.mediaCurrent.playing = nextPlaying;
+  state.mediaCurrent.t = curT;
+  state.mediaCurrent.at = Date.now();
+  emitOp({
+    k: 'mediaPlayPause',
+    id: state.mediaCurrent.id,
+    playing: nextPlaying,
+    t: curT,
+    byName: me.name,
+  });
+};
+
+$('mediaStop').onclick = () => {
+  if (!canControlTV(net?.selfId)) {
+    return toast(`⚠️ Chỉ ${state.mediaCurrent?.addedByName || 'người thêm video'} mới có quyền tắt màn hình!`);
+  }
+  emitOp({ k: 'mediaStop', byName: me.name });
+};
+
+$('mediaSeek').addEventListener('mousedown', () => { isUserDraggingSeek = true; });
+$('mediaSeek').addEventListener('touchstart', () => { isUserDraggingSeek = true; }, { passive: true });
+$('mediaSeek').addEventListener('input', e => {
+  const target = parseFloat(e.target.value);
+  const duration = getDuration() || 100;
+  $('mediaTime').textContent = `${formatMediaTime(target)} / ${formatMediaTime(duration)}`;
+});
+$('mediaSeek').addEventListener('change', e => {
+  isUserDraggingSeek = false;
+  if (!canControlTV(net?.selfId)) return;
+  const target = parseFloat(e.target.value);
+  seekPlayer(target);
+  if (state?.mediaCurrent) {
+    state.mediaCurrent.t = target;
+    state.mediaCurrent.at = Date.now();
+    emitOp({
+      k: 'mediaSeek',
+      id: state.mediaCurrent.id,
+      t: target,
+      playing: isPlayerPlaying(),
+      byName: me.name,
+    });
+  }
+});
 
 // ---- Fullscreen TV Browser (remote): browse privately, then cast the page to the shared TV ----
 function openTvBrowser(startUrl = '') {
@@ -1688,7 +1901,7 @@ $('btnQuickBypassAd').onclick = () => triggerBypassAd();
 
 $('mediaSkip').onclick = () => {
   if (!canSkipCurrentMedia()) {
-    return toast('⚠️ Chỉ người thêm nội dung đang chiếu hoặc Chủ phòng mới có quyền Skip!');
+    return toast(`⚠️ Chỉ ${state.mediaCurrent?.addedByName || 'người thêm nội dung'} mới có quyền Skip!`);
   }
   if (!checkCooldown()) return;
   emitOp({ k: 'mediaNext' });
@@ -1696,7 +1909,7 @@ $('mediaSkip').onclick = () => {
 
 $('mediaMute').onclick = () => {
   const m = toggleMute();
-  toast(m ? '🔇 Đã tắt tiếng TV' : '🔊 Đã bật tiếng TV');
+  toast(m ? '🔇 Đã tắt tiếng TV (chỉ trên máy bạn)' : '🔊 Đã bật tiếng TV (chỉ trên máy bạn)');
 };
 $('mediaReload').onclick = () => {
   forceReloadVideo();
@@ -1704,12 +1917,15 @@ $('mediaReload').onclick = () => {
 };
 $('mediaHide').onclick = () => {
   const h = toggleVideoHidden();
-  toast(h ? '📺 Đã ẩn video trên màn hình lớn' : '📺 Đã hiện video trên màn hình lớn');
+  toast(h ? '📺 Đã ẩn video trên màn hình lớn (chỉ trên máy bạn)' : '📺 Đã hiện video trên màn hình lớn (chỉ trên máy bạn)');
 };
 
 let lastTvScrollSync = 0;
 let lastScrollWarnAt = 0;
 function scrollTv(deltaY) {
+  if (!canControlTV(net?.selfId)) {
+    return toast(`⚠️ Chỉ ${state.mediaCurrent?.addedByName || 'người thêm'} mới có quyền cuộn màn hình TV.`);
+  }
   const box = $('mediaBox');
   if (!box || state?.mediaCurrent?.kind !== 'web') return;
   if (!canControlTV(net?.selfId)) {
@@ -1729,6 +1945,7 @@ function scrollTv(deltaY) {
   }
 }
 function scrollTvToTop() {
+  if (!canControlTV(net?.selfId)) return;
   const box = $('mediaBox');
   if (!box) return;
   box.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1740,6 +1957,7 @@ $('mediaBox')?.addEventListener(
   'wheel',
   e => {
     if (state?.mediaCurrent?.kind === 'web') {
+      if (!canControlTV(net?.selfId)) return;
       e.preventDefault();
       scrollTv(e.deltaY * 1.5);
     }
@@ -2718,7 +2936,8 @@ function updateScreen3D() {
 
   box.style.display = showHole ? 'block' : 'none';
   const isLocked = !!document.pointerLockElement;
-  box.style.pointerEvents = showHole && !isLocked ? 'auto' : 'none';
+  const canCtrl = canControlTV(net?.selfId);
+  box.style.pointerEvents = showHole && !isLocked && canCtrl ? 'auto' : 'none';
 
   if (!showHole) return;
 
