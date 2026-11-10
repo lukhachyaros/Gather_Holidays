@@ -33,8 +33,19 @@ import { World, TILE } from './world.js';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor } from './avatar.js';
 import { emojiSprite } from './props.js';
 import { RtcManager } from './rtc.js';
+import {
+  initAudio,
+  playBgm,
+  toggleBgm,
+  setBgmVolume,
+  playSfx,
+  isBgmMuted,
+  getBgmVolume,
+} from './audio.js';
+import { MinigameManager } from './minigames.js';
 
 let rtc = null;
+let minigames = null;
 
 function initRtc(selfId) {
   if (rtc) {
@@ -319,6 +330,8 @@ try {
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, 1, 0.1, 300);
   world = new World(scene);
+  minigames = new MinigameManager(scene, () => me, () => peers, emitOp, toast, floaters);
+  initAudio();
 } catch (e) {
   console.error(e);
   document.addEventListener('DOMContentLoaded', () => toast('Trình duyệt không hỗ trợ WebGL'));
@@ -865,6 +878,8 @@ async function start() {
   scene.add(me.av.root);
 
   $('topTheme').value = state.theme;
+  playBgm(state.theme);
+  minigames?.setTheme(state.theme);
   net.send('hello', pubInfo());
   applyMedia(state.mediaCurrent);
   updateHud();
@@ -1197,6 +1212,8 @@ const handlers = {
         promptRoomPassword({ id: roomName, title: state.roomTitle || roomName, passHash: state.passHash });
       }
       $('topTheme').value = state.theme;
+      playBgm(state.theme);
+      minigames?.setTheme(state.theme);
       applyMedia(state.mediaCurrent);
       updateScreenShareOnTv();
       updateHostUI();
@@ -1269,6 +1286,8 @@ function applyOp(op, senderId = null) {
         state.decor = [];
         $('topTheme').value = op.theme;
         leaveSeat();
+        playBgm(op.theme);
+        minigames?.setTheme(op.theme);
         broadcastMyRoomToLobby();
         toast(`🗺️ Chủ phòng đã chuyển chủ đề sang: ${THEMES[op.theme].name}`);
       }
@@ -1439,6 +1458,15 @@ function applyOp(op, senderId = null) {
           box.scrollTo({ top: Math.max(0, op.y || 0), behavior: 'smooth' });
         }
       }
+      break;
+    }
+    case 'mg_snowball_throw':
+    case 'mg_candy_spawn':
+    case 'mg_candy_collect':
+    case 'mg_tet_rain':
+    case 'mg_lixi_collect':
+    case 'mg_cupid_shoot': {
+      minigames?.handleNetworkOp(op);
       break;
     }
   }
@@ -2268,6 +2296,11 @@ $('btnView').onclick = () => toggleView();
 // Voice Chat & Screen Share Event Bindings
 $('btnMic').onclick = () => toggleMic();
 $('btnShareScreen').onclick = () => toggleScreenShare();
+$('btnBgm').onclick = () => {
+  const on = toggleBgm();
+  toast(on ? '🎵 Đã bật nhạc nền lễ hội' : '🔇 Đã tắt nhạc nền');
+};
+$('btnMinigame').onclick = () => minigames?.triggerAction();
 $('btnStopScreenBadge').onclick = () => stopScreenShare();
 $('tileScreenShare').onclick = () => {
   $('dlgMedia').classList.add('hidden');
@@ -2295,6 +2328,26 @@ $('cbProximityAudio').onchange = e => {
   toast(en ? '🔊 Đã bật âm thanh theo khoảng cách 3D (Proximity)' : '🌐 Đã chuyển sang âm thanh toàn phòng (Global)');
 };
 $('btnToggleMicSettings').onclick = () => toggleMic();
+
+// BGM settings in dlgSettings
+if ($('bgmVolSlider')) {
+  $('bgmVolSlider').value = Math.round(getBgmVolume() * 100);
+  $('bgmVolVal').textContent = `${$('bgmVolSlider').value}%`;
+  $('bgmVolSlider').oninput = e => {
+    const v = parseInt(e.target.value, 10);
+    $('bgmVolVal').textContent = `${v}%`;
+    setBgmVolume(v / 100);
+  };
+}
+if ($('btnToggleBgmSettings')) {
+  $('btnToggleBgmSettings').onclick = () => {
+    const on = toggleBgm();
+    if ($('bgmStatusHint')) {
+      $('bgmStatusHint').textContent = on ? 'Trạng thái: Đang phát' : 'Trạng thái: Đang tắt';
+    }
+    toast(on ? '🎵 Đã bật nhạc nền lễ hội' : '🔇 Đã tắt nhạc nền');
+  };
+}
 
 // Remove Pumpkin Hat button
 $('btnRemovePumpkin').onclick = () => {
@@ -2384,6 +2437,7 @@ function hangHeldOrnamentOnTree() {
   me.heldItem = null;
   me.av?.setHeldItem(null);
   me.av?.playEmote('interact');
+  playSfx('xmas_bell', 'christmas');
   floaters.push({ e: '🎄', who: net.selfId, t: Date.now() });
   updateStatusBadges();
   syncMyAppearance();
@@ -2397,6 +2451,7 @@ function pickAndOpenLixi() {
   $('lixiDetail').textContent = reward.detail;
   openDialog('dlgLixi');
   me.av?.playEmote('interact');
+  playSfx('tet_lixi', 'tet');
   floaters.push({ e: '🧧', who: net.selfId, t: Date.now() });
   net.send('emote', { e: '🧧', clip: 'interact' });
   const msg = `🧧 Hái lộc Cây Mai Đại Thụ và ${reward.short}`;
@@ -2623,20 +2678,24 @@ function triggerInteract(target = activeTarget) {
         }
         break;
       case 'campfire':
+        playSfx('marshmallow', 'christmas');
         $('btnRoast').click();
         break;
       case 'small_pumpkin':
         wearPumpkinHat(h.styleKey);
         break;
       case 'giant_pumpkin':
+        playSfx('spooky_laugh', 'halloween');
         toast('🎃 Hãy lại gần 1 trong 6 quả bí ngô nhỏ xung quanh chân Đại Bí Ngô để đội lên đầu nhé!');
         break;
       case 'costume_booth':
+        playSfx('spooky_laugh', 'halloween');
         equipCostume(h.costumeKey);
         openDialog('dlgCostume');
         break;
       case 'heart_tree':
       case 'love_fountain':
+        playSfx('wishing_fountain', 'valentine');
         refreshRecipients();
         $('cardStyle').value = 'love';
         openDialog('dlgCard');
@@ -2646,11 +2705,13 @@ function triggerInteract(target = activeTarget) {
         break;
       case 'firework_launcher':
         if (!checkCooldown()) return;
+        playSfx('firework_rocket', 'tet');
         me.av?.playEmote('interact');
         emitOp({ k: 'firework', x: h.x, y: h.y, kind: 'launcher', by: me.name });
         break;
       case 'firecracker_table':
         if (!checkCooldown()) return;
+        playSfx('firecracker', 'tet');
         me.av?.playEmote('interact');
         emitOp({ k: 'firework', x: h.x, y: h.y, kind: 'cracker', by: me.name });
         toast('🧨 Pháo nổ lách tách rộn ràng góc sân!');
@@ -2682,6 +2743,7 @@ addEventListener('keydown', e => {
   else if ((k === 'b' || code === 'KeyB') && state?.mediaCurrent?.vid && state.mediaCurrent.kind !== 'web') triggerBypassAd();
   else if ((k === 'alt' || code.startsWith('Alt')) && document.pointerLockElement) document.exitPointerLock?.();
   else if (k === 'e' || code === 'KeyE') triggerInteract(activeTarget);
+  else if (k === 'g' || code === 'KeyG') minigames?.triggerAction();
   else if ((e.key === '1' || code === 'Digit1') && me?.av) doSocialAction('👋', 'wave');
   else if ((e.key === '2' || code === 'Digit2') && me?.av) doSocialAction('🤝', 'handshake');
   else if ((e.key === '3' || code === 'Digit3') && me?.av) doSocialAction('🤗', 'hug');
@@ -3152,6 +3214,7 @@ function loop(now) {
   }
   world.sync(state, roomName);
   world.update(dt, { x: me.x * TILE, z: me.y * TILE });
+  minigames?.update(dt);
   updateCamera(dt);
   if (world.bgColor) renderer.setClearColor(world.bgColor, 1);
   renderer.render(scene, camera);
