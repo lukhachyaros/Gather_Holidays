@@ -557,7 +557,7 @@ export function buildCinemaScreen() {
     if (mediaCurrent && mediaCurrent.vid) {
       tctx.fillStyle = '#4ade80';
       tctx.fillText(
-        `▶ Đang phát: ${mediaCurrent.vid}  ·  Người thêm: ${mediaCurrent.addedByName || 'Ẩn danh'}  ·  📋 Hàng chờ: ${queue.length} video`,
+        `▶ Đang phát: ${mediaCurrent.kind === 'web' ? '🌐 ' + (mediaCurrent.title || 'Trang web') : mediaCurrent.vid}  ·  Người thêm: ${mediaCurrent.addedByName || 'Ẩn danh'}  ·  📋 Hàng chờ: ${queue.length}`,
         512,
         48
       );
@@ -587,14 +587,14 @@ export function buildCinemaScreen() {
     if (mediaCurrent && mediaCurrent.vid) {
       ctx.fillStyle = '#4ade80';
       ctx.font = 'bold 34px system-ui, sans-serif';
-      ctx.fillText(`▶ Đang phát trực tiếp trên màn hình lớn: ${mediaCurrent.title || mediaCurrent.vid}`, 512, 175);
+      ctx.fillText(`▶ Đang chiếu: ${mediaCurrent.title || mediaCurrent.vid}`, 512, 175);
       ctx.fillStyle = '#e2e8f0';
       ctx.font = '28px system-ui, sans-serif';
       ctx.fillText(`Người thêm: ${mediaCurrent.addedByName || 'Ẩn danh'} (Có quyền Skip ⏭)`, 512, 230);
     } else {
       ctx.fillStyle = '#94a3b8';
       ctx.font = '32px system-ui, sans-serif';
-      ctx.fillText('Chưa có video nào đang phát', 512, 190);
+      ctx.fillText('TV đang trống', 512, 190);
       ctx.font = '26px system-ui, sans-serif';
       ctx.fillText('Nhấn [E] gần màn hình hoặc nút "🎬 Rạp TV" để thêm link YouTube!', 512, 240);
     }

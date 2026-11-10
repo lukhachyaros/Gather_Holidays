@@ -125,7 +125,7 @@ export class World {
     if (this.screenObj?.userData?.updateBanner) {
       const q = state.mediaQueue || [];
       const cur = state.mediaCurrent;
-      const bk = JSON.stringify({ v: cur?.vid, by: cur?.addedByName, q: q.map(i => i.vid) });
+      const bk = JSON.stringify({ v: cur?.id, t: cur?.title, by: cur?.addedByName, q: q.map(i => i.id) });
       if (bk !== this.mediaBannerKey) {
         this.mediaBannerKey = bk;
         this.screenObj.userData.updateBanner(cur, q);

@@ -126,6 +126,7 @@
     <div><kbd>2</kbd> 🤝 Bắt tay</div>
     <div><kbd>3</kbd> 🤗 Ôm ấm áp</div>
     <div><kbd>4</kbd> 🍬/🧧 Tương tác lễ hội</div>
+    <div><kbd>B</kbd> ⚡ Bỏ qua QC TV</div>
   </div>
 </div>
 
@@ -134,6 +135,7 @@
   <button id="btnRemovePumpkin" class="badge-btn warn hidden">🎃 Tháo bí ngô khỏi đầu</button>
   <button id="btnResetCostume" class="badge-btn hidden">🧑 Về trang phục thường</button>
   <button id="btnLeaveSeat" class="badge-btn info hidden">🪑 Đứng dậy (Space)</button>
+  <button id="btnQuickBypassAd" class="badge-btn warn hidden" title="Bấm hoặc nhấn phím B để bỏ qua quảng cáo trên màn hình TV">⚡ Bỏ qua Quảng cáo TV (Phím B)</button>
   <div id="heldBadge" class="badge-pill hidden"></div>
   <div id="campfireBar" class="badge-group hidden">
     <span>🔥 Lửa trại:</span>
@@ -160,6 +162,7 @@
   <div id="css3d-camera">
     <div id="mediaBox">
       <div id="yt"></div>
+      <iframe id="webTv" title="TV Browser" style="display:none" referrerpolicy="no-referrer" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"></iframe>
     </div>
   </div>
 </div>
@@ -242,20 +245,47 @@
   <div class="panel">
     <h2>🎬 Rạp Chiếu TV Lớn & Hàng Chờ Video</h2>
     <p class="sub">Ngồi xuống các hàng ghế đơn hoặc ghế Couple trước màn hình lớn để thưởng thức cùng nhau!</p>
+    <div class="tv-launcher">
+      <button class="tv-tile" id="tileYoutube" title="Dán link YouTube vào ô bên dưới">▶<span>YouTube</span></button>
+      <button class="tv-tile" id="tileBrowser" title="Mở trình duyệt web trên TV">🌐<span>Trình duyệt</span></button>
+      <button class="tv-tile" data-site="https://vi.wikipedia.org/">📚<span>Wikipedia</span></button>
+      <button class="tv-tile" data-site="https://www.openstreetmap.org/export/embed.html?bbox=102.0,8.0,110.0,23.5&amp;layer=mapnik">🗺️<span>Bản đồ</span></button>
+      <button class="tv-tile" data-site="https://archive.org/">🎞️<span>Archive</span></button>
+    </div>
     <div class="row">
-      <input id="mediaUrl" style="flex:1" placeholder="Dán link hoặc ID video YouTube…">
-      <button id="mediaAdd" class="primary">➕ Thêm vào phát</button>
+      <input id="mediaUrl" style="flex:1;min-width:180px" placeholder="Dán link YouTube / Vimeo / Twitch / Spotify / website bất kỳ…">
+    </div>
+    <div class="row">
+      <button id="mediaPlayNow" class="primary">▶ Phát ngay lên TV</button>
+      <button id="mediaAdd" class="info">➕ Thêm vào hàng chờ</button>
     </div>
     <div id="nowPlayingBox" class="queue-now"></div>
     <div class="row">
-      <button id="mediaSkip" class="warn" disabled>⏭ Skip qua video tiếp theo</button>
+      <button id="mediaBypassAd" class="info" title="Tự động bỏ qua quảng cáo đang chạy trên TV">⚡ Bỏ qua Quảng cáo (B)</button>
+      <button id="mediaSkip" class="warn" disabled>⏭ Skip qua bài tiếp</button>
       <button id="mediaMute">🔊 Bật/Tắt tiếng</button>
       <button id="mediaReload">🔄 Tải lại</button>
-      <button id="mediaHide">📺 Ẩn/Hiện màn hình</button>
+      <button id="mediaHide">📺 Ẩn/Hiện TV</button>
     </div>
     <h3>📋 Hàng chờ tiếp theo</h3>
     <div id="queueList" class="queue-list"></div>
     <button data-close>Đóng</button>
+  </div>
+</div>
+
+<!-- DIALOG 7b: Fullscreen TV Browser Remote (Android-TV style) -->
+<div id="dlgTvBrowser" class="overlay hidden" style="padding:0;background:#05070f">
+  <div class="tvb-wrap">
+    <div class="tvb-bar">
+      <button id="tvbClose" title="Đóng trình duyệt">✕</button>
+      <button id="tvbReload" title="Tải lại trang">⟳</button>
+      <input id="tvbUrl" placeholder="Nhập địa chỉ website hoặc link video… rồi Enter" spellcheck="false">
+      <button id="tvbGo" class="info" title="Chỉ mở thử trên máy bạn">👁 Mở thử</button>
+      <button id="tvbCast" class="primary" title="Chiếu trang này lên TV cho cả phòng xem">📺 Chiếu lên TV</button>
+      <button id="tvbExternal" title="Mở trong tab mới (dùng khi trang chặn nhúng)">↗</button>
+    </div>
+    <div id="tvbHint" class="tvb-hint">Bạn có thể lướt web thoải mái ở đây (chỉ mình bạn thấy). Bấm <b>📺 Chiếu lên TV</b> để cả phòng cùng xem trang này trên màn hình lớn. Lưu ý: một số trang (Google, Facebook, Netflix…) chặn hiển thị trong khung nhúng — hãy thử YouTube, Wikipedia, Vimeo, Twitch, Spotify, Dailymotion…</div>
+    <iframe id="tvbFrame" title="TV Browser Preview" referrerpolicy="no-referrer" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"></iframe>
   </div>
 </div>
 

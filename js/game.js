@@ -17,6 +17,10 @@ import {
   toggleVideoHidden,
   toggleMute,
   forceReloadVideo,
+  bypassAdNow,
+  stopMedia,
+  classifyMediaInput,
+  normalizeWebUrl,
 } from './media.js';
 import { World, TILE } from './world.js';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor } from './avatar.js';
@@ -504,6 +508,8 @@ function leaveCurrentRoom() {
   if (me) me.started = false;
   state = null;
   gotState = false;
+  // Stop the shared TV (YouTube / web) so nothing keeps playing after leaving, closing or being kicked from a room
+  stopMedia();
   if (wasAlone && oldRoom) lobby?.remove(oldRoom);
 }
 
@@ -1091,7 +1097,17 @@ function applyOp(op, senderId = null) {
       updateMediaDialog();
       break;
     }
+    case 'mediaPlayNow': {
+      // Replace what is on the TV right now (only host / current owner / anyone when TV is idle)
+      if (senderId && !canControlTV(senderId)) return;
+      state.mediaCurrent = { ...op.item, playing: true, t: 0, at: Date.now() };
+      applyMedia(state.mediaCurrent);
+      updateMediaDialog();
+      toast(`📺 ${op.item.addedByName} vừa chiếu ${op.item.kind === 'web' ? 'trang web' : 'video'} lên TV`);
+      break;
+    }
     case 'mediaNext': {
+      if (senderId && !canControlTV(senderId)) return;
       state.mediaQueue = state.mediaQueue || [];
       const next = state.mediaQueue.shift() || null;
       state.mediaCurrent = next ? { ...next, playing: true, t: 0, at: Date.now() } : null;
@@ -1244,12 +1260,25 @@ function renderStockingList() {
   });
 }
 
-// ---------- Media Queue & Skip System ----------
+// ---------- Media Queue, Android-TV style Browser & Skip System ----------
+const escHtml = t =>
+  String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const mediaLabel = item => (item.kind === 'web' ? '🌐 ' + (item.title || item.url) : 'Video YouTube ' + item.vid);
+
+// Who may change / skip what is on the TV: the Host, whoever added the current item, anyone when TV is idle,
+// or anyone when the person who added it already left the room.
+function canControlTV(userId = net?.selfId) {
+  if (!state) return false;
+  const cur = state.mediaCurrent;
+  if (!cur || !cur.vid) return true;
+  if (userId && userId === state.hostId) return true;
+  const ownerId = cur.addedBy;
+  return ownerId === userId || (!!ownerId && ownerId !== net?.selfId && !peers.has(ownerId));
+}
+
 function canSkipCurrentMedia() {
   if (!state?.mediaCurrent?.vid) return false;
-  const ownerId = state.mediaCurrent.addedBy;
-  // Allowed if you added the current video, OR if the owner is no longer in the room
-  return ownerId === net?.selfId || (ownerId && !peers.has(ownerId));
+  return canControlTV(net?.selfId);
 }
 
 function updateMediaDialog() {
@@ -1261,14 +1290,25 @@ function updateMediaDialog() {
   const nowBox = $('nowPlayingBox');
   if (cur && cur.vid) {
     const isMine = cur.addedBy === net?.selfId;
-    nowBox.innerHTML = `<b>▶ Đang phát trên màn hình lớn:</b> Video <code>${cur.vid}</code><br>Người thêm: <b>${cur.addedByName}</b> ${
-      isMine ? '<span style="color:#4ade80">(Bạn là người thêm — có quyền Skip)</span>' : ''
-    }`;
+    const perm = canSkipCurrentMedia()
+      ? '<span style="color:#4ade80">(Bạn có quyền Skip / thay đổi TV)</span>'
+      : '<span style="color:#fbbf24">(Chỉ người thêm hoặc Chủ phòng được Skip)</span>';
+    nowBox.innerHTML =
+      '<b>▶ Đang chiếu trên màn hình lớn:</b> ' +
+      escHtml(mediaLabel(cur)) +
+      '<br>Người thêm: <b>' +
+      escHtml(cur.addedByName) +
+      '</b>' +
+      (isMine ? ' (bạn)' : '') +
+      ' ' +
+      perm;
   } else {
-    nowBox.innerHTML = '<i>Chưa có video nào đang phát. Hãy thêm link YouTube đầu tiên!</i>';
+    nowBox.innerHTML = '<i>TV đang trống. Dán link YouTube hoặc một trang web rồi bấm “Phát ngay”!</i>';
   }
 
   $('mediaSkip').disabled = !canSkipCurrentMedia();
+  $('mediaBypassAd').classList.toggle('hidden', !!cur && cur.kind === 'web');
+  updateStatusBadges();
 
   const qBox = $('queueList');
   qBox.innerHTML = '';
@@ -1278,38 +1318,123 @@ function updateMediaDialog() {
     q.forEach((item, idx) => {
       const row = document.createElement('div');
       row.className = 'queue-item';
-      row.innerHTML = `<span><b>#${idx + 1}</b> · Video <code>${item.vid}</code></span><span>👤 ${item.addedByName}</span>`;
+      row.innerHTML =
+        '<span><b>#' + (idx + 1) + '</b> · ' + escHtml(mediaLabel(item)) + '</span><span>👤 ' + escHtml(item.addedByName) + '</span>';
       qBox.appendChild(row);
     });
   }
 }
 
 function onMediaEnded(finishedMedia) {
-  // Only the owner of the video (or fallback if owner left) triggers the auto-advance op
+  // Only someone allowed to control the TV triggers the auto-advance op
   if (!state?.mediaCurrent || state.mediaCurrent.id !== finishedMedia?.id) return;
+  if (state.mediaCurrent.kind === 'web') return;
   if (canSkipCurrentMedia()) {
     emitOp({ k: 'mediaNext' });
   }
 }
 
+function triggerBypassAd() {
+  if (bypassAdNow()) {
+    toast('⚡ Đã bỏ qua quảng cáo YouTube & đồng bộ lại thời gian phát!');
+  } else {
+    toast('ℹ️ Hiện chưa có video YouTube nào đang phát trên màn hình TV.');
+  }
+}
+
+function buildMediaItem(rawInput) {
+  const info = classifyMediaInput(rawInput);
+  if (!info) {
+    toast('⚠️ Link không hợp lệ! Hãy dán link YouTube hoặc địa chỉ website (https://…).');
+    return null;
+  }
+  if (info.kind === 'yt') {
+    return { id: uid(), kind: 'yt', vid: info.vid, title: `YouTube (${info.vid})`, addedBy: net.selfId, addedByName: me.name };
+  }
+  return { id: uid(), kind: 'web', vid: 'web', url: info.url, title: info.title, addedBy: net.selfId, addedByName: me.name };
+}
+
+function castToTV(rawInput, { forceQueue = false } = {}) {
+  const item = buildMediaItem(rawInput);
+  if (!item) return false;
+  if (!checkCooldown()) return false;
+  const cur = state?.mediaCurrent;
+  if (!forceQueue && cur?.vid) {
+    if (canControlTV(net.selfId)) {
+      emitOp({ k: 'mediaPlayNow', item });
+    } else {
+      emitOp({ k: 'mediaQueue+', item });
+      toast('📋 TV đang được người khác điều khiển — đã xếp nội dung của bạn vào hàng chờ.');
+    }
+  } else {
+    emitOp({ k: 'mediaQueue+', item });
+  }
+  return true;
+}
+
 $('mediaAdd').onclick = () => {
-  const vid = parseYouTube($('mediaUrl').value);
-  if (!vid) return toast('⚠️ Đường link hoặc ID YouTube không hợp lệ!');
-  if (!checkCooldown()) return;
-  const item = {
-    id: uid(),
-    vid,
-    title: `YouTube (${vid})`,
-    addedBy: net.selfId,
-    addedByName: me.name,
-  };
-  emitOp({ k: 'mediaQueue+', item });
-  $('mediaUrl').value = '';
+  if (castToTV($('mediaUrl').value, { forceQueue: true })) $('mediaUrl').value = '';
 };
+$('mediaPlayNow').onclick = () => {
+  if (castToTV($('mediaUrl').value)) $('mediaUrl').value = '';
+};
+$('mediaUrl').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Enter') $('mediaPlayNow').click();
+});
+
+$('tileYoutube').onclick = () => {
+  $('mediaUrl').placeholder = 'Dán link YouTube rồi bấm “Phát ngay”…';
+  $('mediaUrl').focus();
+};
+
+// ---- Fullscreen TV Browser (remote): browse privately, then cast the page to the shared TV ----
+function openTvBrowser(startUrl = '') {
+  const cur = state?.mediaCurrent;
+  const initial = startUrl || (cur?.kind === 'web' ? cur.url : '');
+  $('tvbUrl').value = initial;
+  $('tvbFrame').src = initial || 'about:blank';
+  openDialog('dlgTvBrowser');
+  setTimeout(() => $('tvbUrl').focus(), 60);
+}
+function tvbPreview() {
+  const u = normalizeWebUrl($('tvbUrl').value);
+  if (!u) return toast('⚠️ Địa chỉ không hợp lệ! Ví dụ: wikipedia.org hoặc https://vimeo.com/…');
+  $('tvbUrl').value = u;
+  $('tvbFrame').src = u;
+}
+$('tileBrowser').onclick = () => openTvBrowser();
+document.querySelectorAll('.tv-tile[data-site]').forEach(b => (b.onclick = () => openTvBrowser(b.dataset.site)));
+$('tvbClose').onclick = () => {
+  $('dlgTvBrowser').classList.add('hidden');
+  $('tvbFrame').src = 'about:blank';
+};
+$('tvbReload').onclick = () => {
+  const src = $('tvbFrame').src;
+  if (src && src !== 'about:blank') $('tvbFrame').src = src;
+};
+$('tvbGo').onclick = tvbPreview;
+$('tvbUrl').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Enter') tvbPreview();
+});
+$('tvbCast').onclick = () => {
+  if (castToTV($('tvbUrl').value)) {
+    $('dlgTvBrowser').classList.add('hidden');
+    $('tvbFrame').src = 'about:blank';
+  }
+};
+$('tvbExternal').onclick = () => {
+  const u = normalizeWebUrl($('tvbUrl').value);
+  if (u) window.open(u, '_blank', 'noopener');
+};
+
+$('mediaBypassAd').onclick = () => triggerBypassAd();
+$('btnQuickBypassAd').onclick = () => triggerBypassAd();
 
 $('mediaSkip').onclick = () => {
   if (!canSkipCurrentMedia()) {
-    return toast('⚠️ Chỉ người thêm video đang phát mới có quyền Skip!');
+    return toast('⚠️ Chỉ người thêm nội dung đang chiếu hoặc Chủ phòng mới có quyền Skip!');
   }
   if (!checkCooldown()) return;
   emitOp({ k: 'mediaNext' });
@@ -1554,6 +1679,7 @@ function updateStatusBadges() {
   $('btnRemovePumpkin').classList.toggle('hidden', !me.pumpkinHat);
   $('btnResetCostume').classList.toggle('hidden', !me.costume || me.costume === 'default');
   $('btnLeaveSeat').classList.toggle('hidden', !me.seatSlot);
+  $('btnQuickBypassAd')?.classList.toggle('hidden', !state?.mediaCurrent?.vid || state.mediaCurrent.kind === 'web');
 
   const hb = $('heldBadge');
   if (me.heldItem) {
@@ -1779,6 +1905,7 @@ addEventListener('keydown', e => {
   if (k === 'v') toggleView();
   else if (k === 'l') togglePointerLock();
   else if (k === 'h') $('hud').classList.toggle('hidden');
+  else if (k === 'b' && state?.mediaCurrent?.vid && state.mediaCurrent.kind !== 'web') triggerBypassAd();
   else if (k === 'alt' && document.pointerLockElement) document.exitPointerLock?.();
   else if (k === 'e') triggerInteract(activeTarget);
   else if (e.key === '1' && me?.av) doSocialAction('👋', 'wave');
