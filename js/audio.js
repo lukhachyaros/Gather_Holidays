@@ -143,7 +143,7 @@ export function getBgmVolume() {
 function updateBgmButtonUI() {
   const btn = document.getElementById('btnBgm');
   if (btn) {
-    btn.textContent = bgmMuted ? '🔇 Nhạc: Tắt' : '🎵 Nhạc: Bật';
+    btn.textContent = bgmMuted ? '🔇 Nhạc' : '🎵 Nhạc';
     btn.classList.toggle('bgm-active', !bgmMuted);
     btn.classList.toggle('bgm-muted', bgmMuted);
     btn.title = bgmMuted ? 'Nhạc nền đang TẮT · Nhấn để Bật' : 'Nhạc nền đang BẬT · Nhấn để Tắt';

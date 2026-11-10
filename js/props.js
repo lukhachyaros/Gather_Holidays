@@ -641,6 +641,7 @@ export function buildCoupleSofa() {
   const lbl = labelSprite('💑 Ghế Couple · [E] Ngồi bắt cặp', 'rgba(190,18,60,0.88)', '#ffe4e6', 0.3);
   lbl.position.set(0, 1.35, 0);
   g.add(lbl);
+  g.userData.label = lbl;
   return g;
 }
 

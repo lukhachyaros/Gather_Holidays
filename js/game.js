@@ -92,7 +92,7 @@ function updateMicUI(isEnabled) {
   const btn = $('btnMic');
   if (btn) {
     btn.classList.toggle('mic-active', isEnabled);
-    btn.textContent = isEnabled ? '🎙️ Mic: Bật' : '🔇 Mic: Tắt';
+    btn.textContent = isEnabled ? '🎙️ Mic' : '🔇 Mic';
     btn.title = isEnabled
       ? 'Microphone: Đang bật (Bấm hoặc nhấn phím M để tắt)'
       : 'Microphone: Đã tắt (Bấm hoặc nhấn phím M để nói)';

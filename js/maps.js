@@ -153,7 +153,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       x: c.x,
       y: c.y,
       rot: Math.PI, // face north toward TV
-      slots: [{ id: `${c.id}_0`, x: c.x, y: c.y, rot: Math.PI, lean: 0 }],
+      slots: [{ id: `${c.id}_0`, x: c.x, y: c.y + 0.08, rot: Math.PI, lean: 0 }],
     });
   });
 
@@ -172,8 +172,8 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       y: cs.y,
       rot: Math.PI,
       slots: [
-        { id: `${cs.id}_L`, sofaId: cs.id, x: cs.x - 0.24, y: cs.y, rot: Math.PI, lean: -1 },
-        { id: `${cs.id}_R`, sofaId: cs.id, x: cs.x + 0.24, y: cs.y, rot: Math.PI, lean: 1 },
+        { id: `${cs.id}_L`, sofaId: cs.id, x: cs.x - 0.24, y: cs.y + 0.08, rot: Math.PI, lean: -1 },
+        { id: `${cs.id}_R`, sofaId: cs.id, x: cs.x + 0.24, y: cs.y + 0.08, rot: Math.PI, lean: 1 },
       ],
     });
   });

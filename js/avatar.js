@@ -456,11 +456,11 @@ export class Avatar {
       this.headGroup.rotation.x = -0.12;
     } else if (this.base === 'Sitting') {
       // Sitting on Chair / Couple Sofa / Campfire Log
-      this.hips.position.set(0, 0.48, 0.06);
-      this.leftLeg.rotation.x = -Math.PI / 2 + 0.15;
-      this.rightLeg.rotation.x = -Math.PI / 2 + 0.15;
-      this.leftArm.rotation.x = -0.35;
-      this.rightArm.rotation.x = -0.35;
+      this.hips.position.set(0, 0.40, 0.04);
+      this.leftLeg.rotation.x = -Math.PI / 2 + 0.05;
+      this.rightLeg.rotation.x = -Math.PI / 2 + 0.05;
+      this.leftArm.rotation.x = -0.32;
+      this.rightArm.rotation.x = -0.32;
       // Couple Seat Lean!
       if (this.sitting?.lean) {
         this.torso.rotation.z = this.sitting.lean * 0.14;

@@ -133,23 +133,23 @@ export class MinigameManager {
 
     switch (this.theme) {
       case 'christmas':
-        btn.textContent = '❄️ Ném Tuyết PvP [G]';
+        btn.textContent = '❄️ Tuyết [G]';
         btn.title = 'Minigame Giáng Sinh: Đại Chiến Bắn Tuyết PvP Hạ Gục Đối Thủ (Phím G)';
         break;
       case 'halloween':
-        btn.textContent = '🧛 Boss Vampire (Tự Động)';
+        btn.textContent = '🧛 Boss';
         btn.title = 'Halloween: Boss Vampire bay rình mồi & vồ Jumpscare (Trú ẩn trong Vùng Ghế TV)';
         break;
       case 'tet':
-        btn.textContent = '🧨 Pháo Múa Lân [G]';
+        btn.textContent = '🧨 Pháo [G]';
         btn.title = 'Minigame Tết: Ném Pháo Thần Tài & Múa Lân Rước Lộc (Phím G)';
         break;
       case 'valentine':
-        btn.textContent = '💘 Cung Cupid PvP [G]';
+        btn.textContent = '💘 Cung [G]';
         btn.title = 'Minigame Valentine: Đấu Cung Cupid & Đo Nhân Duyên (Phím G)';
         break;
       default:
-        btn.textContent = '🎮 Minigame [G]';
+        btn.textContent = '🎮 Minigame';
         break;
     }
   }
