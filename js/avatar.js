@@ -314,6 +314,36 @@ export class Avatar {
     this.root.add(this.label);
   }
 
+  setSpeaking(speaking) {
+    if (this.isSpeaking === speaking && this.speakingBadge) return;
+    this.isSpeaking = speaking;
+    if (!this.speakingBadge) {
+      this.speakingBadge = textSprite(
+        (x, w, h) => {
+          // Circular green badge with white border and animated soundwave / mic
+          x.fillStyle = 'rgba(16, 185, 129, 0.95)';
+          x.beginPath();
+          x.arc(w / 2, h / 2, h * 0.44, 0, Math.PI * 2);
+          x.fill();
+          x.strokeStyle = '#ffffff';
+          x.lineWidth = 5;
+          x.stroke();
+          x.font = '36px system-ui, sans-serif';
+          x.textAlign = 'center';
+          x.textBaseline = 'middle';
+          x.fillStyle = '#ffffff';
+          x.fillText('🎙️', w / 2, h / 2);
+        },
+        96,
+        96,
+        0.32
+      );
+      this.speakingBadge.position.y = HEIGHT + 0.74;
+      this.root.add(this.speakingBadge);
+    }
+    this.speakingBadge.visible = !!speaking;
+  }
+
   say(text) {
     if (this.bubble) this.root.remove(this.bubble);
     const t = text.length > 60 ? text.slice(0, 57) + '…' : text;
@@ -364,6 +394,11 @@ export class Avatar {
 
     if (this.splatGroup.visible && now > this.splatUntil) {
       this.splatGroup.visible = false;
+    }
+
+    if (this.speakingBadge && this.speakingBadge.visible) {
+      const s = 0.32 + Math.sin(now * 0.012) * 0.04;
+      this.speakingBadge.scale.set(s, s, 1);
     }
 
     // Cancel emote if expired or started walking/running/jumping

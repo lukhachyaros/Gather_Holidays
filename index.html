@@ -89,13 +89,16 @@
   <span id="roomInfo" title="Phòng hiện tại & Quyền chủ phòng"></span>
   <select id="topTheme" title="Chủ đề phòng (Chỉ chủ phòng mới đổi được)"></select>
   <span class="dock-sep"></span>
+  <button id="btnMic" class="dock-btn" title="Bật/Tắt Microphone để nói chuyện (Phím M)">🔇 Mic: Tắt</button>
+  <button id="btnShareScreen" class="dock-btn" title="Chia sẻ màn hình máy tính lên TV lớn (Phím P)">🖥️ Chiếu TV</button>
+  <span class="dock-sep"></span>
   <button id="btnCopy" class="dock-btn" title="Sao chép link mời bạn bè vào phòng này">🔗</button>
   <button id="btnView" class="dock-btn" title="Đổi góc nhìn Thứ nhất / Thứ ba (Phím V)">🎥 TPS</button>
   <button id="btnLock" class="dock-btn" title="Khóa/Mở con trỏ chuột (Phím L hoặc Chuột phải)">🔓</button>
   <button id="btnCard" class="dock-btn" title="Viết thiệp chúc mừng">💌</button>
   <button id="btnInbox" class="dock-btn" title="Hộp thư thiệp đã lưu">📬<span id="inboxCount" class="mini-badge">0</span></button>
   <button id="btnMedia" class="dock-btn" title="Rạp chiếu TV & Hàng chờ video YouTube">🎬<span id="queueCount" class="mini-badge">0</span></button>
-  <button id="btnSettings" class="dock-btn" title="Cài đặt chuột, Mật khẩu & Quản lý thành viên">⚙️</button>
+  <button id="btnSettings" class="dock-btn" title="Cài đặt chuột, Voice Chat, Mật khẩu & Quản lý thành viên">⚙️</button>
   <button id="btnCloseRoomTop" class="dock-btn danger-btn hidden" title="Đóng phòng hiện tại (Chỉ Chủ phòng)">🛑 Đóng phòng</button>
 </div>
 
@@ -119,6 +122,8 @@
     <div><kbd>WASD</kbd> Di chuyển</div>
     <div><kbd>Shift</kbd> Chạy nhanh</div>
     <div><kbd>Space</kbd> Nhảy / Đứng dậy</div>
+    <div><kbd>M</kbd> 🎙️ Bật/Tắt Micro nói</div>
+    <div><kbd>P</kbd> 🖥️ Chiếu màn hình lên TV</div>
     <div><kbd>E</kbd> Tương tác</div>
     <div><kbd>V</kbd> Đổi góc nhìn</div>
     <div><kbd>L</kbd> / <kbd>Chuột phải</kbd> Khóa chuột</div>
@@ -136,6 +141,8 @@
   <button id="btnRemovePumpkin" class="badge-btn warn hidden">🎃 Tháo bí ngô khỏi đầu</button>
   <button id="btnResetCostume" class="badge-btn hidden">🧑 Về trang phục thường</button>
   <button id="btnLeaveSeat" class="badge-btn info hidden">🪑 Đứng dậy (Space)</button>
+  <button id="btnStopScreenBadge" class="badge-btn warn hidden" title="Nhấn để dừng chia sẻ màn hình máy tính lên TV (Phím P)">🛑 Đang chiếu màn hình lên TV (Dừng)</button>
+  <div id="voiceStatusBadge" class="badge-pill voice-speaking hidden">🎙️ Mic đang nói…</div>
   <button id="btnTvScrollHint" class="badge-btn info hidden" title="Bấm hoặc nhấn phím L để mở chuột tự do, sau đó di chuột vào màn hình TV để cuộn & bấm">🖱️ Phím [L]: Mở chuột cuộn TV</button>
   <div id="tvWebControls" class="badge-group hidden">
     <span>📺 Web TV:</span>
@@ -171,6 +178,7 @@
     <div id="mediaBox">
       <div id="yt"></div>
       <iframe id="webTv" title="TV Browser" style="display:none" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"></iframe>
+      <video id="screenTv" autoplay playsinline style="display:none" title="Screen Share"></video>
     </div>
   </div>
 </div>
@@ -254,8 +262,13 @@
     <h2>🎬 Rạp Chiếu TV Lớn & Hàng Chờ Video</h2>
     <p class="sub">Ngồi xuống các hàng ghế đơn hoặc ghế Couple trước màn hình lớn để thưởng thức cùng nhau!</p>
     <div class="tv-launcher">
+      <button class="tv-tile" id="tileScreenShare" title="Chia sẻ toàn bộ màn hình, cửa sổ ứng dụng hoặc tab trình duyệt lên TV cho cả phòng xem (Phím P)">🖥️<span>Share màn hình</span></button>
       <button class="tv-tile" id="tileYoutube" title="Dán link YouTube vào ô bên dưới">▶<span>YouTube</span></button>
       <button class="tv-tile" id="tileBrowser" title="Mở trình duyệt web trên TV">🌐<span>Trình duyệt</span></button>
+    </div>
+    <div id="screenShareDialogBox" class="row hidden" style="background:rgba(2,132,199,.25);border:1px solid #38bdf8;padding:9px 12px;border-radius:11px;justify-content:space-between;align-items:center">
+      <span id="screenShareStatusText" style="font-size:13px;font-weight:600;color:#7dd3fc">🖥️ Bạn đang chia sẻ màn hình lên TV</span>
+      <button id="btnStopShareInDialog" class="warn">🛑 Dừng chia sẻ</button>
     </div>
     <div class="row">
       <input id="mediaUrl" style="flex:1;min-width:180px" placeholder="Dán link YouTube / Vimeo / Twitch / Spotify / website bất kỳ…">
@@ -263,9 +276,11 @@
     <div class="row">
       <button id="mediaPlayNow" class="primary">▶ Phát ngay lên TV</button>
       <button id="mediaAdd" class="info">➕ Thêm vào hàng chờ</button>
+      <button id="btnOpenScreenShareFromMedia" class="warn" title="Chia sẻ màn hình máy tính của bạn lên TV">🖥️ Chiếu màn hình</button>
     </div>
     <div id="nowPlayingBox" class="queue-now"></div>
     <div class="row">
+      <button id="btnCinemaMode" class="primary" title="Xem màn hình TV phóng to sắc nét như trong rạp chiếu">🖥️ Xem phóng to TV</button>
       <button id="mediaScrollDown" class="info hidden" title="Cuộn trang web xuống để đưa video ra giữa màn hình TV">🔽 Cuộn xuống Video (K)</button>
       <button id="mediaFullscreen" class="primary hidden" title="Mở trang web toàn màn hình để dễ xem và bấm">🖥️ Mở to toàn màn hình</button>
       <button id="mediaBypassAd" class="info" title="Tự động bỏ qua quảng cáo đang chạy trên TV">⚡ Bỏ qua Quảng cáo (B)</button>
@@ -296,10 +311,45 @@
   </div>
 </div>
 
-<!-- DIALOG 8: Mouse Settings, Password & Host Room Management -->
+<!-- DIALOG 7c: Fullscreen Theater View for TV (Screen Share & Video Cinema Mode) -->
+<div id="dlgCinema" class="overlay hidden" style="padding:0;background:#05070f;z-index:75">
+  <div class="cinema-wrap">
+    <div class="cinema-bar">
+      <div class="cinema-bar-left">
+        <span id="cinemaTitle" class="cinema-title">🖥️ Màn hình TV — Xem Chung Trực Tuyến</span>
+        <span id="cinemaSub" class="cinema-sub">Đang đồng bộ từ TV 3D</span>
+      </div>
+      <div class="row">
+        <button id="cinemaToggleSound" class="dock-btn">🔊 Bật/Tắt tiếng</button>
+        <button id="cinemaStopShare" class="dock-btn danger-btn hidden">🛑 Dừng chiếu</button>
+        <button id="cinemaClose" class="primary">✕ Thu nhỏ về 3D</button>
+      </div>
+    </div>
+    <div id="cinemaBody" class="cinema-body">
+      <video id="cinemaVideo" autoplay playsinline></video>
+      <div id="cinemaEmpty" class="cinema-empty hidden">Màn hình TV hiện chưa có nội dung nào đang phát.</div>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG 8: Mouse Settings, Voice Chat, Password & Host Room Management -->
 <div id="dlgSettings" class="overlay hidden">
   <div class="panel">
     <h2>⚙️ Cài Đặt & Quản Lý Phòng</h2>
+
+    <h3>🎙️ Voice Chat & Âm Thanh Không Gian 3D</h3>
+    <label>
+      <span>Âm lượng thoại (Voice Volume): <b id="voiceVolVal" style="color:#4ade80">100%</b></span>
+      <input id="voiceVolSlider" type="range" min="0" max="100" step="5" value="100">
+    </label>
+    <label class="row" style="cursor:pointer;flex-direction:row;align-items:center;gap:9px;margin-top:2px">
+      <input id="cbProximityAudio" type="checkbox" checked style="width:18px;height:18px;cursor:pointer">
+      <span style="font-size:12.5px;color:#cbd5e1">🔊 <b>Âm thanh khoảng cách 3D (Spatial Proximity):</b> Đứng gần nghe to, đứng xa âm lượng giảm dần tự nhiên.</span>
+    </label>
+    <div class="row" style="margin-top:2px;align-items:center">
+      <button id="btnToggleMicSettings" class="info">🎙️ Bật/Tắt Micro (Phím M)</button>
+      <span id="micMeterHint" class="hint" style="color:#94a3b8">Trạng thái: Chưa bật Mic</span>
+    </div>
 
     <h3>🖱️ Điều khiển Chuột & Camera</h3>
     <label>

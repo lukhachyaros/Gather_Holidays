@@ -554,16 +554,22 @@ export function buildCinemaScreen() {
     tctx.font = 'bold 30px system-ui, sans-serif';
     tctx.textAlign = 'center';
     tctx.textBaseline = 'middle';
-    if (mediaCurrent && mediaCurrent.vid) {
+    if (mediaCurrent && (mediaCurrent.vid || mediaCurrent.url || mediaCurrent.kind === 'screen')) {
       tctx.fillStyle = '#4ade80';
+      const label =
+        mediaCurrent.kind === 'screen'
+          ? `🖥️ Đang chiếu Màn hình máy tính: ${mediaCurrent.title || 'Screen Share'}`
+          : mediaCurrent.kind === 'web'
+          ? '🌐 ' + (mediaCurrent.title || 'Trang web')
+          : mediaCurrent.vid;
       tctx.fillText(
-        `▶ Đang phát: ${mediaCurrent.kind === 'web' ? '🌐 ' + (mediaCurrent.title || 'Trang web') : mediaCurrent.vid}  ·  Người thêm: ${mediaCurrent.addedByName || 'Ẩn danh'}  ·  📋 Hàng chờ: ${queue.length}`,
+        `▶ Đang phát: ${label}  ·  Người chiếu: ${mediaCurrent.addedByName || 'Ẩn danh'}  ·  📋 Hàng chờ: ${queue.length}`,
         512,
         48
       );
     } else {
       tctx.fillStyle = '#38bdf8';
-      tctx.fillText('🎬 RẠP CHIẾU YOUTUBE CHUNG  ·  Nhấn [E] hoặc nút "🎬 Rạp TV" để phát video lên màn hình lớn!', 512, 48);
+      tctx.fillText('🎬 RẠP CHIẾU YOUTUBE & MÀN HÌNH CHUNG  ·  Nhấn [E] hoặc [P] để chiếu màn hình/video lên TV!', 512, 48);
     }
     topTex.needsUpdate = true;
 
@@ -582,21 +588,29 @@ export function buildCinemaScreen() {
     ctx.fillStyle = '#38bdf8';
     ctx.font = 'bold 42px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🎬 RẠP CHIẾU YOUTUBE CHUNG', 512, 85);
+    ctx.fillText('🎬 RẠP CHIẾU YOUTUBE & MÀN HÌNH CHUNG', 512, 85);
 
-    if (mediaCurrent && mediaCurrent.vid) {
+    if (mediaCurrent && (mediaCurrent.vid || mediaCurrent.url || mediaCurrent.kind === 'screen')) {
       ctx.fillStyle = '#4ade80';
       ctx.font = 'bold 34px system-ui, sans-serif';
-      ctx.fillText(`▶ Đang chiếu: ${mediaCurrent.title || mediaCurrent.vid}`, 512, 175);
+      const title =
+        mediaCurrent.kind === 'screen'
+          ? `🖥️ Màn hình đang chiếu: ${mediaCurrent.title || 'Screen Share'}`
+          : mediaCurrent.title || mediaCurrent.vid;
+      ctx.fillText(`▶ Đang chiếu: ${title}`, 512, 175);
       ctx.fillStyle = '#e2e8f0';
       ctx.font = '28px system-ui, sans-serif';
-      ctx.fillText(`Người thêm: ${mediaCurrent.addedByName || 'Ẩn danh'} (Có quyền Skip ⏭)`, 512, 230);
+      const roleText =
+        mediaCurrent.kind === 'screen'
+          ? `Người chia sẻ: ${mediaCurrent.addedByName || 'Ẩn danh'} (Nhấn [P] để dừng)`
+          : `Người thêm: ${mediaCurrent.addedByName || 'Ẩn danh'} (Có quyền Skip ⏭)`;
+      ctx.fillText(roleText, 512, 230);
     } else {
       ctx.fillStyle = '#94a3b8';
       ctx.font = '32px system-ui, sans-serif';
       ctx.fillText('TV đang trống', 512, 190);
       ctx.font = '26px system-ui, sans-serif';
-      ctx.fillText('Nhấn [E] gần màn hình hoặc nút "🎬 Rạp TV" để thêm link YouTube!', 512, 240);
+      ctx.fillText('Nhấn [P] để chia sẻ màn hình máy tính hoặc [E] để thêm YouTube/Website!', 512, 240);
     }
 
     // Queue list

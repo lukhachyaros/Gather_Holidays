@@ -20,19 +20,22 @@ export function parseYouTube(input) {
 }
 
 export function isVideoVisible() {
-  return !!(current && (current.vid || current.url) && !userHidden);
+  return !!(current && (current.vid || current.url || current.kind === 'screen') && !userHidden);
 }
 
 const ytEl = () => document.getElementById('yt');
 const webEl = () => document.getElementById('webTv');
+const screenEl = () => document.getElementById('screenTv');
 
-function setSurface(kind) {
+export function setSurface(kind) {
   const w = webEl(),
     y = ytEl(),
+    s = screenEl(),
     box = document.getElementById('mediaBox');
   if (w) w.style.display = kind === 'web' ? 'block' : 'none';
-  if (y) y.style.display = kind === 'web' ? 'none' : 'block';
-  if (box && kind === 'yt') box.scrollTop = 0;
+  if (y) y.style.display = kind === 'yt' ? 'block' : 'none';
+  if (s) s.style.display = kind === 'screen' ? 'block' : 'none';
+  if (box && (kind === 'yt' || kind === 'screen')) box.scrollTop = 0;
 }
 
 // Completely stop & clear the shared TV (used when leaving / closing / being kicked out of a room)
@@ -46,6 +49,13 @@ export function stopMedia() {
   } catch {}
   const w = webEl();
   if (w) w.src = 'about:blank';
+  const s = screenEl();
+  if (s) {
+    try {
+      s.pause();
+      s.srcObject = null;
+    } catch {}
+  }
   setSurface('yt');
 }
 
@@ -220,6 +230,27 @@ setInterval(checkAndBypassInjectedAd, 700);
 // Apply shared media state without interrupting active buffering/playback of the same track.
 export function apply(media, force = false) {
   current = media;
+
+  // ---- Screen Share mode (WebRTC P2P): show live shared screen on the big TV ----
+  if (media && media.kind === 'screen') {
+    pending = null;
+    loadedKey = '';
+    try {
+      player?.stopVideo?.();
+    } catch {}
+    const w = webEl();
+    if (w) w.src = 'about:blank';
+    setSurface('screen');
+    return;
+  }
+
+  // Clear screen share element if switching to another media kind
+  const s = screenEl();
+  if (s && s.style.display !== 'none' && (!media || media.kind !== 'screen')) {
+    try {
+      s.pause();
+    } catch {}
+  }
 
   // ---- Web / Browser mode (Android-TV style): show any embeddable website on the big screen ----
   if (media && media.kind === 'web' && media.url) {

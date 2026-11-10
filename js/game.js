@@ -25,6 +25,206 @@ import {
 import { World, TILE } from './world.js';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor } from './avatar.js';
 import { emojiSprite } from './props.js';
+import { RtcManager } from './rtc.js';
+
+let rtc = null;
+
+function initRtc(selfId) {
+  if (rtc) {
+    try {
+      rtc.destroy();
+    } catch {}
+  }
+  rtc = new RtcManager({
+    selfId,
+    sendSignal: (targetId, signal) => {
+      net?.send('rtc_signal', signal, targetId);
+    },
+    onRemoteScreenTrack: (peerId, stream) => {
+      updateScreenShareOnTv();
+    },
+    onPeerSpeakingChange: (peerId, isSpeaking) => {
+      const p = peers.get(peerId);
+      if (p?.av) p.av.setSpeaking(isSpeaking);
+      updateLiveStats();
+      renderSettingsModal();
+    },
+    onLocalSpeakingChange: isSpeaking => {
+      if (me?.av) me.av.setSpeaking(isSpeaking);
+      $('btnMic')?.classList.toggle('speaking', isSpeaking);
+      $('voiceStatusBadge')?.classList.toggle('hidden', !isSpeaking);
+      net?.send('voice_speaking', { speaking: isSpeaking });
+      renderSettingsModal();
+    },
+    onMicStateChange: isEnabled => {
+      updateMicUI(isEnabled);
+    },
+    onScreenShareChange: (isSharing, stream) => {
+      updateScreenShareUI(isSharing, stream);
+    },
+    toast,
+  });
+}
+
+function updateMicUI(isEnabled) {
+  const btn = $('btnMic');
+  if (btn) {
+    btn.classList.toggle('mic-active', isEnabled);
+    btn.textContent = isEnabled ? '🎙️ Mic: Bật' : '🔇 Mic: Tắt';
+    btn.title = isEnabled
+      ? 'Microphone: Đang bật (Bấm hoặc nhấn phím M để tắt)'
+      : 'Microphone: Đã tắt (Bấm hoặc nhấn phím M để nói)';
+  }
+  const hint = $('micMeterHint');
+  if (hint) {
+    hint.textContent = isEnabled ? 'Trạng thái: 🎙️ Micro đang hoạt động' : 'Trạng thái: 🔇 Đã tắt Micro';
+    hint.style.color = isEnabled ? '#4ade80' : '#94a3b8';
+  }
+  const btnSettings = $('btnToggleMicSettings');
+  if (btnSettings) {
+    btnSettings.textContent = isEnabled ? '🔇 Tắt Micro' : '🎙️ Bật Micro';
+  }
+  if (!isEnabled) {
+    $('voiceStatusBadge')?.classList.add('hidden');
+    if (me?.av) me.av.setSpeaking(false);
+  }
+}
+
+async function toggleMic() {
+  if (!rtc) return;
+  await rtc.toggleMic();
+}
+
+async function startScreenShare() {
+  if (!rtc) return;
+  if (rtc.isSharingScreen) {
+    toast('ℹ️ Bạn đang chia sẻ màn hình rồi.');
+    return;
+  }
+  if (state?.mediaCurrent?.kind === 'screen' && state.mediaCurrent.addedBy !== net?.selfId && !canControlTV(net?.selfId)) {
+    toast('⚠️ TV đang được người khác dùng để chiếu màn hình!');
+    return;
+  }
+
+  const stream = await rtc.startScreenShare();
+  if (!stream) return;
+
+  // Broadcast screen play operation to room
+  emitOp({
+    k: 'mediaPlayNow',
+    item: {
+      id: 'screen-' + net.selfId,
+      kind: 'screen',
+      title: 'Màn hình của ' + me.name,
+      addedBy: net.selfId,
+      addedByName: me.name,
+      playing: true,
+      at: Date.now(),
+    },
+  });
+}
+
+function stopScreenShare() {
+  if (!rtc) return;
+  rtc.stopScreenShare();
+  if (state?.mediaCurrent?.kind === 'screen' && state.mediaCurrent.addedBy === net?.selfId) {
+    emitOp({ k: 'mediaNext' });
+  }
+}
+
+async function toggleScreenShare() {
+  if (rtc?.isSharingScreen) {
+    stopScreenShare();
+  } else {
+    await startScreenShare();
+  }
+}
+
+function updateScreenShareUI(isSharing, stream) {
+  const btnTop = $('btnShareScreen');
+  if (btnTop) {
+    btnTop.classList.toggle('screen-active', isSharing);
+    btnTop.textContent = isSharing ? '🛑 Dừng chiếu TV' : '🖥️ Chiếu TV';
+    btnTop.title = isSharing ? 'Đang chiếu màn hình (Bấm hoặc nhấn P để dừng)' : 'Chia sẻ màn hình máy tính lên TV lớn (Phím P)';
+  }
+  $('btnStopScreenBadge')?.classList.toggle('hidden', !isSharing);
+  $('screenShareDialogBox')?.classList.toggle('hidden', !isSharing);
+  $('cinemaStopShare')?.classList.toggle('hidden', !isSharing);
+  updateScreenShareOnTv();
+  updateMediaDialog();
+}
+
+function updateScreenShareOnTv() {
+  const cur = state?.mediaCurrent;
+  const screenVideo = $('screenTv');
+  const cinemaVideo = $('cinemaVideo');
+  if (!screenVideo) return;
+
+  if (cur && cur.kind === 'screen') {
+    const isMine = cur.addedBy === net?.selfId;
+    let stream = null;
+    if (isMine) {
+      stream = rtc?.localScreenStream;
+    } else {
+      stream = rtc?.getRemoteScreenStream(cur.addedBy);
+    }
+
+    if (stream) {
+      if (screenVideo.srcObject !== stream) {
+        screenVideo.srcObject = stream;
+        screenVideo.muted = isMine;
+        screenVideo.play().catch(() => {});
+      }
+      if (cinemaVideo && cinemaVideo.srcObject !== stream) {
+        cinemaVideo.srcObject = stream;
+        cinemaVideo.muted = isMine;
+        cinemaVideo.play().catch(() => {});
+      }
+      $('cinemaEmpty')?.classList.add('hidden');
+    }
+  } else {
+    if (screenVideo.srcObject) {
+      try {
+        screenVideo.pause();
+        screenVideo.srcObject = null;
+      } catch {}
+    }
+    if (cinemaVideo && cinemaVideo.srcObject) {
+      try {
+        cinemaVideo.pause();
+        cinemaVideo.srcObject = null;
+      } catch {}
+    }
+    $('cinemaEmpty')?.classList.remove('hidden');
+  }
+}
+
+function openCinemaMode() {
+  openDialog('dlgCinema');
+  const cur = state?.mediaCurrent;
+  const isMine = cur?.addedBy === net?.selfId;
+  const titleEl = $('cinemaTitle');
+  const subEl = $('cinemaSub');
+  if (titleEl) {
+    titleEl.textContent = cur
+      ? cur.kind === 'screen'
+        ? `🖥️ Màn hình: ${cur.title || 'Screen Share'}`
+        : `🎬 TV: ${cur.title || cur.vid}`
+      : '🖥️ Rạp Chiếu TV — Xem Chung Màn Hình';
+  }
+  if (subEl) {
+    subEl.textContent = cur ? `Người chiếu: ${cur.addedByName || 'Ẩn danh'}` : 'TV hiện chưa chiếu nội dung nào';
+  }
+  $('cinemaStopShare')?.classList.toggle('hidden', !(cur?.kind === 'screen' && isMine));
+  updateScreenShareOnTv();
+}
+
+function toggleCinemaSound() {
+  const vid = $('cinemaVideo');
+  if (!vid) return;
+  vid.muted = !vid.muted;
+  toast(vid.muted ? '🔇 Đã tắt tiếng TV Theater' : '🔊 Đã bật tiếng TV Theater');
+}
 
 const $ = id => document.getElementById(id);
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -508,6 +708,13 @@ function leaveCurrentRoom() {
   if (me) me.started = false;
   state = null;
   gotState = false;
+  // Stop WebRTC Voice Chat & Screen Share
+  try {
+    rtc?.destroy();
+  } catch {}
+  rtc = null;
+  updateMicUI(false);
+  updateScreenShareUI(false, null);
   // Stop the shared TV (YouTube / web) so nothing keeps playing after leaving, closing or being kicked from a room
   stopMedia();
   if (wasAlone && oldRoom) lobby?.remove(oldRoom);
@@ -551,6 +758,7 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
   };
 
   net = await connect(roomName, handlers);
+  initRtc(net.selfId);
   $('roomInfo').textContent = `📍 ${roomTitle}`;
   updateLiveStats();
 
@@ -778,7 +986,13 @@ function renderSettingsModal() {
   // Self row
   const selfRow = document.createElement('div');
   selfRow.className = 'queue-item';
-  selfRow.innerHTML = `<span><b>👤 ${me.name} (Bạn)</b> ${state.hostId === net.selfId ? '👑' : ''}</span><span style="color:#4ade80">Đang online</span>`;
+  const selfSpeaking = me?.av?.isSpeaking;
+  const selfMicLabel = selfSpeaking
+    ? '<span style="color:#4ade80;font-weight:700">🎙️ Đang nói…</span>'
+    : rtc?.isMicMuted
+    ? '<span style="color:#94a3b8">🔇 Mic tắt</span>'
+    : '<span style="color:#38bdf8">🎙️ Mic bật</span>';
+  selfRow.innerHTML = `<span><b>👤 ${me.name} (Bạn)</b> ${state.hostId === net.selfId ? '👑' : ''} ${selfMicLabel}</span><span style="color:#4ade80">Đang online</span>`;
   pList.appendChild(selfRow);
 
   // Peer rows
@@ -786,7 +1000,9 @@ function renderSettingsModal() {
     const row = document.createElement('div');
     row.className = 'queue-item';
     const left = document.createElement('span');
-    left.innerHTML = `👤 <b>${p.name}</b> ${state.hostId === id ? '👑 <small>(Chủ phòng)</small>' : ''}`;
+    const peerSpeaking = p.av?.isSpeaking;
+    const peerVoiceTag = peerSpeaking ? '<span style="color:#4ade80;font-weight:700"> 🎙️ Đang nói…</span>' : '';
+    left.innerHTML = `👤 <b>${p.name}</b> ${state.hostId === id ? '👑 <small>(Chủ phòng)</small>' : ''}${peerVoiceTag}`;
     row.appendChild(left);
 
     if (isHost() && id !== net.selfId) {
@@ -860,6 +1076,7 @@ async function addOrUpdatePeer(id, d) {
 
 const handlers = {
   join(id) {
+    rtc?.getOrCreatePeer(id);
     if (me?.started && !isKicked) {
       if (state?.kickedIds?.includes(id)) {
         net.send('op', { k: 'kick', targetId: id, byHost: state.hostId, v: Date.now() }, id);
@@ -870,6 +1087,14 @@ const handlers = {
     }
   },
   leave(id) {
+    rtc?.removePeer(id);
+    if (state?.mediaCurrent?.kind === 'screen' && state.mediaCurrent.addedBy === id) {
+      state.mediaCurrent = null;
+      applyMedia(null);
+      updateScreenShareOnTv();
+      updateMediaDialog();
+      toast('📺 Người chia sẻ màn hình đã rời phòng.');
+    }
     const p = peers.get(id);
     if (p) {
       toast(`${p.name} đã rời phòng`);
@@ -895,6 +1120,13 @@ const handlers = {
   },
   hello(d, id) {
     addOrUpdatePeer(id, d);
+  },
+  rtc_signal(d, id) {
+    rtc?.handleSignal(id, d);
+  },
+  voice_speaking(d, id) {
+    const p = peers.get(id);
+    if (p?.av) p.av.setSpeaking(!!d?.speaking);
   },
   pos(d, id) {
     if (state?.kickedIds?.includes(id)) return;
@@ -937,6 +1169,7 @@ const handlers = {
       }
       $('topTheme').value = state.theme;
       applyMedia(state.mediaCurrent);
+      updateScreenShareOnTv();
       updateHostUI();
       updateMediaDialog();
       net.send('hello', pubInfo());
@@ -1086,13 +1319,14 @@ function applyOp(op, senderId = null) {
     }
     case 'mediaQueue+': {
       state.mediaQueue = state.mediaQueue || [];
-      if (!state.mediaCurrent || !state.mediaCurrent.vid) {
+      if (!state.mediaCurrent || (!state.mediaCurrent.vid && !state.mediaCurrent.url && state.mediaCurrent.kind !== 'screen')) {
         state.mediaCurrent = { ...op.item, playing: true, t: 0, at: Date.now() };
         applyMedia(state.mediaCurrent);
-        toast(`🎬 Đang phát video của ${op.item.addedByName}`);
+        updateScreenShareOnTv();
+        toast(`🎬 Đang phát ${op.item.kind === 'screen' ? 'màn hình' : 'video'} của ${op.item.addedByName}`);
       } else {
         state.mediaQueue.push(op.item);
-        toast(`📋 Đã thêm video của ${op.item.addedByName} vào hàng chờ (#${state.mediaQueue.length})`);
+        toast(`📋 Đã thêm vào hàng chờ (#${state.mediaQueue.length})`);
       }
       updateMediaDialog();
       break;
@@ -1102,8 +1336,10 @@ function applyOp(op, senderId = null) {
       if (senderId && !canControlTV(senderId)) return;
       state.mediaCurrent = { ...op.item, playing: true, t: 0, at: Date.now() };
       applyMedia(state.mediaCurrent);
+      updateScreenShareOnTv();
       updateMediaDialog();
-      toast(`📺 ${op.item.addedByName} vừa chiếu ${op.item.kind === 'web' ? 'trang web' : 'video'} lên TV`);
+      const kindLabel = op.item.kind === 'screen' ? 'màn hình máy tính' : op.item.kind === 'web' ? 'trang web' : 'video';
+      toast(`📺 ${op.item.addedByName} vừa chiếu ${kindLabel} lên TV`);
       break;
     }
     case 'mediaNext': {
@@ -1112,9 +1348,10 @@ function applyOp(op, senderId = null) {
       const next = state.mediaQueue.shift() || null;
       state.mediaCurrent = next ? { ...next, playing: true, t: 0, at: Date.now() } : null;
       applyMedia(state.mediaCurrent);
+      updateScreenShareOnTv();
       updateMediaDialog();
-      if (next) toast(`⏭ Chuyển sang video tiếp theo của ${next.addedByName}`);
-      else toast('⏹ Đã phát hết danh sách chờ video');
+      if (next) toast(`⏭ Chuyển sang nội dung tiếp theo của ${next.addedByName}`);
+      else toast('⏹ Đã dừng chiếu trên TV');
       break;
     }
     case 'tvScroll': {
@@ -1273,21 +1510,25 @@ function renderStockingList() {
 // ---------- Media Queue, Android-TV style Browser & Skip System ----------
 const escHtml = t =>
   String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const mediaLabel = item => (item.kind === 'web' ? '🌐 ' + (item.title || item.url) : 'Video YouTube ' + item.vid);
+const mediaLabel = item => {
+  if (item.kind === 'screen') return '🖥️ Màn hình máy tính: ' + (item.title || 'Screen Share');
+  if (item.kind === 'web') return '🌐 ' + (item.title || item.url);
+  return 'Video YouTube ' + item.vid;
+};
 
 // Who may change / skip what is on the TV: the Host, whoever added the current item, anyone when TV is idle,
 // or anyone when the person who added it already left the room.
 function canControlTV(userId = net?.selfId) {
   if (!state) return false;
   const cur = state.mediaCurrent;
-  if (!cur || !cur.vid) return true;
+  if (!cur || (!cur.vid && !cur.url && cur.kind !== 'screen')) return true;
   if (userId && userId === state.hostId) return true;
   const ownerId = cur.addedBy;
   return ownerId === userId || (!!ownerId && ownerId !== net?.selfId && !peers.has(ownerId));
 }
 
 function canSkipCurrentMedia() {
-  if (!state?.mediaCurrent?.vid) return false;
+  if (!state?.mediaCurrent || (!state.mediaCurrent.vid && !state.mediaCurrent.url && state.mediaCurrent.kind !== 'screen')) return false;
   return canControlTV(net?.selfId);
 }
 
@@ -1295,29 +1536,32 @@ function updateMediaDialog() {
   if (!state) return;
   const q = state.mediaQueue || [];
   const cur = state.mediaCurrent;
-  $('queueCount').textContent = (cur?.vid ? 1 : 0) + q.length;
+  const hasMedia = !!(cur && (cur.vid || cur.url || cur.kind === 'screen'));
+  $('queueCount').textContent = (hasMedia ? 1 : 0) + q.length;
 
   const nowBox = $('nowPlayingBox');
-  if (cur && cur.vid) {
+  if (hasMedia) {
     const isMine = cur.addedBy === net?.selfId;
     const perm = canSkipCurrentMedia()
       ? '<span style="color:#4ade80">(Bạn có quyền Skip / thay đổi TV)</span>'
-      : '<span style="color:#fbbf24">(Chỉ người thêm hoặc Chủ phòng được Skip)</span>';
+      : '<span style="color:#fbbf24">(Chỉ người chiếu hoặc Chủ phòng được Skip)</span>';
     nowBox.innerHTML =
       '<b>▶ Đang chiếu trên màn hình lớn:</b> ' +
       escHtml(mediaLabel(cur)) +
-      '<br>Người thêm: <b>' +
+      '<br>Người chiếu: <b>' +
       escHtml(cur.addedByName) +
       '</b>' +
       (isMine ? ' (bạn)' : '') +
       ' ' +
       perm;
   } else {
-    nowBox.innerHTML = '<i>TV đang trống. Dán link YouTube hoặc một trang web rồi bấm “Phát ngay”!</i>';
+    nowBox.innerHTML = '<i>TV đang trống. Bấm “Share màn hình” hoặc dán link YouTube/Website rồi bấm “Phát ngay”!</i>';
   }
 
+  const isSharing = !!rtc?.isSharingScreen;
+  $('screenShareDialogBox')?.classList.toggle('hidden', !isSharing);
   $('mediaSkip').disabled = !canSkipCurrentMedia();
-  $('mediaBypassAd').classList.toggle('hidden', !!cur && cur.kind === 'web');
+  $('mediaBypassAd').classList.toggle('hidden', !!cur && (cur.kind === 'web' || cur.kind === 'screen'));
   updateStatusBadges();
 
   const qBox = $('queueList');
@@ -1639,6 +1883,37 @@ $('btnMedia').onclick = () => {
 };
 $('btnView').onclick = () => toggleView();
 
+// Voice Chat & Screen Share Event Bindings
+$('btnMic').onclick = () => toggleMic();
+$('btnShareScreen').onclick = () => toggleScreenShare();
+$('btnStopScreenBadge').onclick = () => stopScreenShare();
+$('tileScreenShare').onclick = () => {
+  $('dlgMedia').classList.add('hidden');
+  toggleScreenShare();
+};
+$('btnOpenScreenShareFromMedia').onclick = () => {
+  $('dlgMedia').classList.add('hidden');
+  toggleScreenShare();
+};
+$('btnStopShareInDialog').onclick = () => stopScreenShare();
+$('btnCinemaMode').onclick = () => openCinemaMode();
+$('cinemaClose').onclick = () => $('dlgCinema').classList.add('hidden');
+$('cinemaToggleSound').onclick = () => toggleCinemaSound();
+$('cinemaStopShare').onclick = () => stopScreenShare();
+
+// Voice settings in dlgSettings
+$('voiceVolSlider').oninput = e => {
+  const v = parseInt(e.target.value, 10);
+  $('voiceVolVal').textContent = `${v}%`;
+  rtc?.setMasterVoiceVolume(v / 100);
+};
+$('cbProximityAudio').onchange = e => {
+  const en = e.target.checked;
+  rtc?.setProximityEnabled(en);
+  toast(en ? '🔊 Đã bật âm thanh theo khoảng cách 3D (Proximity)' : '🌐 Đã chuyển sang âm thanh toàn phòng (Global)');
+};
+$('btnToggleMicSettings').onclick = () => toggleMic();
+
 // Remove Pumpkin Hat button
 $('btnRemovePumpkin').onclick = () => {
   if (!checkCooldown()) return;
@@ -1752,15 +2027,25 @@ function updateStatusBadges() {
   $('btnRemovePumpkin').classList.toggle('hidden', !me.pumpkinHat);
   $('btnResetCostume').classList.toggle('hidden', !me.costume || me.costume === 'default');
   $('btnLeaveSeat').classList.toggle('hidden', !me.seatSlot);
-  $('btnQuickBypassAd')?.classList.toggle('hidden', !state?.mediaCurrent?.vid || state.mediaCurrent.kind === 'web');
+  $('btnQuickBypassAd')?.classList.toggle(
+    'hidden',
+    !state?.mediaCurrent?.vid || state.mediaCurrent.kind === 'web' || state.mediaCurrent.kind === 'screen'
+  );
 
-  const hasTv = !!state?.mediaCurrent?.vid;
+  const isSharing = !!rtc?.isSharingScreen;
+  $('btnStopScreenBadge')?.classList.toggle('hidden', !isSharing);
+  if ($('btnShareScreen')) {
+    $('btnShareScreen').classList.toggle('screen-active', isSharing);
+    $('btnShareScreen').textContent = isSharing ? '🛑 Dừng chiếu TV' : '🖥️ Chiếu TV';
+  }
+
+  const hasTv = !!(state?.mediaCurrent && (state.mediaCurrent.vid || state.mediaCurrent.url || state.mediaCurrent.kind === 'screen'));
   const isWeb = state?.mediaCurrent?.kind === 'web';
   const canControl = canControlTV(net?.selfId);
   const isLocked = !!document.pointerLockElement;
   const hintBtn = $('btnTvScrollHint');
   if (hintBtn) {
-    hintBtn.classList.toggle('hidden', !hasTv || !canControl);
+    hintBtn.classList.toggle('hidden', !hasTv || isSharing || !canControl);
     hintBtn.textContent = isLocked ? '🖱️ Phím [L]: Mở chuột cuộn TV' : '🖱️ Chuột tự do: Di vào TV để cuộn & bấm';
   }
   $('tvWebControls')?.classList.toggle('hidden', !isWeb || !canControl);
@@ -1990,6 +2275,8 @@ addEventListener('keydown', e => {
   }
   if (k === 'v') toggleView();
   else if (k === 'l') togglePointerLock();
+  else if (k === 'm') toggleMic();
+  else if (k === 'p') toggleScreenShare();
   else if (k === 'h') $('hud').classList.toggle('hidden');
   else if (k === 'k' && state?.mediaCurrent?.kind === 'web') scrollTv(450);
   else if (k === 'i' && state?.mediaCurrent?.kind === 'web') scrollTv(-450);
@@ -2356,6 +2643,9 @@ function loop(now) {
   });
 
   updateFloaters();
+  if (rtc && me) {
+    rtc.updatePeerDistances(me, peers);
+  }
   world.sync(state, roomName);
   world.update(dt, { x: me.x * TILE, z: me.y * TILE });
   updateCamera();
