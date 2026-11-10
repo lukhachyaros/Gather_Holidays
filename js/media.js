@@ -5,6 +5,7 @@ let player = null,
   current = null,
   loadedKey = '',
   endedCb = null,
+  stateChangeCb = null,
   userHidden = false,
   isMuted = false,
   lastAdBypassAt = 0,
@@ -150,8 +151,9 @@ export function bypassAdNow() {
   }
 }
 
-export function initPlayer(containerId, onTrackEnded) {
+export function initPlayer(containerId, onTrackEnded, onStateChange) {
   endedCb = onTrackEnded;
+  stateChangeCb = onStateChange;
   // Create the YouTube iframe only once (re-creating it on every room join left a zombie player playing audio)
   if (initStarted) return;
   initStarted = true;
@@ -197,6 +199,10 @@ function create(id) {
         checkAndBypassInjectedAd();
         if (e.data === S.ENDED) {
           endedCb?.(current);
+        } else if (e.data === S.PLAYING) {
+          stateChangeCb?.('PLAYING', player.getCurrentTime?.() || 0);
+        } else if (e.data === S.PAUSED) {
+          stateChangeCb?.('PAUSED', player.getCurrentTime?.() || 0);
         } else if (e.data === S.CUED && current?.playing && current.kind !== 'web') {
           player.playVideo?.();
         }
@@ -288,14 +294,21 @@ export function apply(media, force = false) {
   }
 
   const key = `${media.id || ''}:${media.vid}`;
-  // Prevent duplicate loadVideoById / seekTo calls that stall YouTube buffering!
+  // Prevent duplicate loadVideoById calls, but ensure playback state and time are aligned!
   if (!force && key === loadedKey) {
     const st = player.getPlayerState?.();
     const S = window.YT?.PlayerState;
-    if (media.playing && st === S?.PAUSED) {
+    if (media.playing && (st === S?.PAUSED || st === S?.CUED)) {
       player.playVideo?.();
-    } else if (!media.playing && st === S?.PLAYING) {
+    } else if (!media.playing && (st === S?.PLAYING || st === S?.BUFFERING)) {
       player.pauseVideo?.();
+    }
+    const curTime = player.getCurrentTime?.() || 0;
+    const elapsed = media.playing && media.at ? Math.max(0, (Date.now() - media.at) / 1000) : 0;
+    const target = (media.t || 0) + elapsed;
+    const diff = Math.abs(curTime - target);
+    if (diff > (media.playing ? 1.8 : 0.8)) {
+      player.seekTo?.(target, true);
     }
     return;
   }
@@ -304,13 +317,20 @@ export function apply(media, force = false) {
   const elapsed = media.playing && media.at ? Math.max(0, (Date.now() - media.at) / 1000) : 0;
   // Start at >= 1s instead of 0s to bypass YouTube's 0:00 pre-roll ad trigger!
   const rawStart = elapsed < 4 ? (media.t || 1) : (media.t || 0) + elapsed;
-  const startSeconds = Math.max(1, Math.floor(rawStart));
+  const startSeconds = Math.max(0.5, Math.floor(rawStart));
 
   try {
     player.loadVideoById({
       videoId: media.vid,
       startSeconds,
     });
+    if (!media.playing) {
+      setTimeout(() => {
+        try {
+          player.pauseVideo?.();
+        } catch {}
+      }, 400);
+    }
     player.unMute?.();
     player.setVolume?.(90);
     // Autoplay fallback: if browser blocks unmuted autoplay after 1.2s, play muted first then unmute on click
@@ -320,7 +340,7 @@ export function apply(media, force = false) {
       if (st === -1 || st === 5) {
         player.mute?.();
         isMuted = true;
-        player.playVideo?.();
+        if (current.playing) player.playVideo?.();
       }
     }, 1200);
   } catch (e) {
@@ -342,3 +362,85 @@ addEventListener(
   },
   { passive: true }
 );
+
+export function getCurrentTime() {
+  if (!ready || !player || !player.getCurrentTime) return 0;
+  try {
+    return player.getCurrentTime() || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function getDuration() {
+  if (!ready || !player || !player.getDuration) return 0;
+  try {
+    return player.getDuration() || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function isPlayerPlaying() {
+  if (!ready || !player || !player.getPlayerState) return false;
+  try {
+    const s = player.getPlayerState();
+    return s === 1 || s === 3;
+  } catch {
+    return false;
+  }
+}
+
+export function playVideo() {
+  if (!ready || !player || !player.playVideo) return;
+  try {
+    player.playVideo();
+  } catch {}
+}
+
+export function pauseVideo() {
+  if (!ready || !player || !player.pauseVideo) return;
+  try {
+    player.pauseVideo();
+  } catch {}
+}
+
+export function seekPlayer(seconds) {
+  if (!ready || !player || !player.seekTo) return;
+  try {
+    player.seekTo(Math.max(0, seconds), true);
+  } catch {}
+}
+
+export function syncPlayback(media) {
+  if (!ready || !player || !media || !media.vid || media.kind === 'web') return;
+  const key = `${media.id || ''}:${media.vid}`;
+  if (key !== loadedKey) {
+    apply(media);
+    return;
+  }
+  try {
+    const st = player.getPlayerState?.();
+    const S = window.YT?.PlayerState;
+    const curTime = player.getCurrentTime?.() || 0;
+
+    if (!media.playing) {
+      if (st === S?.PLAYING || st === S?.BUFFERING) {
+        player.pauseVideo?.();
+      }
+      if (Math.abs(curTime - (media.t || 0)) > 0.8) {
+        player.seekTo?.(media.t || 0, true);
+      }
+    } else {
+      if (st === S?.PAUSED || st === S?.CUED) {
+        player.playVideo?.();
+      }
+      const elapsed = media.at ? Math.max(0, (Date.now() - media.at) / 1000) : 0;
+      const targetTime = (media.t || 0) + elapsed;
+      if (Math.abs(curTime - targetTime) > 1.8) {
+        player.seekTo?.(targetTime, true);
+      }
+    }
+  } catch {}
+}
+
