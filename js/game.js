@@ -1500,6 +1500,8 @@ function updateLockHud() {
     btn.textContent = locked ? '🔒' : '🔓';
   }
   $('crosshair').classList.toggle('hidden', !(mode === 'fps' || locked));
+  updateStatusBadges();
+  updateScreen3D();
 }
 document.addEventListener('pointerlockchange', updateLockHud);
 
@@ -1532,6 +1534,14 @@ $('btnSaveRoomPass').onclick = () => {
 
 $('btnLock').onclick = () => togglePointerLock();
 $('lockLabel').onclick = () => togglePointerLock();
+$('btnTvScrollHint').onclick = () => {
+  if (document.pointerLockElement) {
+    document.exitPointerLock?.();
+    toast('🖱️ Đã mở chuột tự do! Di chuột vào màn hình TV để cuộn và bấm xem video.');
+  } else {
+    togglePointerLock();
+  }
+};
 $('btnHelpToggle').onclick = () => $('hud').classList.toggle('hidden');
 $('btnHudClose').onclick = () => $('hud').classList.add('hidden');
 
@@ -1680,6 +1690,14 @@ function updateStatusBadges() {
   $('btnResetCostume').classList.toggle('hidden', !me.costume || me.costume === 'default');
   $('btnLeaveSeat').classList.toggle('hidden', !me.seatSlot);
   $('btnQuickBypassAd')?.classList.toggle('hidden', !state?.mediaCurrent?.vid || state.mediaCurrent.kind === 'web');
+
+  const hasTv = !!state?.mediaCurrent?.vid;
+  const isLocked = !!document.pointerLockElement;
+  const hintBtn = $('btnTvScrollHint');
+  if (hintBtn) {
+    hintBtn.classList.toggle('hidden', !hasTv);
+    hintBtn.textContent = isLocked ? '🖱️ Phím [L]: Mở chuột cuộn TV' : '🖱️ Chuột tự do: Di vào TV để cuộn & bấm';
+  }
 
   const hb = $('heldBadge');
   if (me.heldItem) {
@@ -2318,8 +2336,8 @@ function getCameraCSSMatrix(matrix) {
   );
 }
 
-// 666x294 px scaled by (11.1 / 666 = 1/60) => 11.1m x 4.9m exact 3D Cinema Screen size at (29, 3.2, 4.27)
-const S_SCALE = 11.1 / 666;
+// 1110x490 px scaled by (11.1 / 1110 = 0.01) => 11.1m x 4.9m exact 3D Cinema Screen size at (29, 3.2, 4.27)
+const S_SCALE = 11.1 / 1110;
 const SCREEN_CSS_TRANSFORM =
   `matrix3d(${S_SCALE},0,0,0, 0,${-S_SCALE},0,0, 0,0,${S_SCALE},0, ${14.5 * TILE},3.2,${2.0 * TILE + 0.27},1) translate(-50%,-50%)`;
 let lastCamCss = '';
@@ -2337,6 +2355,10 @@ function updateScreen3D() {
 
   // Toggle WebGL depth-buffered transparent punch-out on the 3D screen mesh
   world.screenObj?.userData?.setHoleMode?.(showHole);
+
+  box.style.display = showHole ? 'block' : 'none';
+  const isLocked = !!document.pointerLockElement;
+  box.style.pointerEvents = showHole && !isLocked ? 'auto' : 'none';
 
   if (!showHole) return;
 

@@ -182,11 +182,11 @@ kbd{background:#334155;border:1px solid #64748b;border-radius:4px;padding:1px 5p
 #chatLog div{background:rgba(0,0,0,.62);padding:3px 9px;border-radius:7px;margin-top:3px;width:fit-content;max-width:100%}
 #chatIn{width:100%;background:rgba(15,23,42,.82);border-color:rgba(255,255,255,.18);padding:7px 10px;font-size:12.5px}
 
-/* 3D Cinema Screen Projected YouTube Player */
-#css3d-stage{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:1;perspective-origin:50% 50%}
+/* 3D Cinema Screen Projected YouTube Player & Web Browser */
+#css3d-stage{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:3;perspective-origin:50% 50%}
 #css3d-camera{position:absolute;left:0;top:0;width:100%;height:100%;transform-style:preserve-3d;transform-origin:0 0;pointer-events:none}
-#mediaBox{position:absolute;left:0;top:0;width:666px;height:294px;transform-origin:0 0;backface-visibility:hidden;background:#000;overflow:hidden;pointer-events:none}
-#mediaBox iframe{width:100%;height:100%;border:0;display:block}
+#mediaBox{position:absolute;left:0;top:0;width:1110px;height:490px;transform-origin:0 0;backface-visibility:hidden;background:#000;overflow:hidden;pointer-events:auto}
+#mediaBox iframe{width:100%;height:100%;border:0;display:block;pointer-events:auto}
 
 #toast{position:fixed;top:52px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,.95);border:1px solid #ffd166;color:#fef08a;padding:8px 16px;border-radius:99px;font-size:13px;font-weight:600;z-index:90;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.5)}
 #toast.show{opacity:1}
