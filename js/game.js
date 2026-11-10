@@ -261,8 +261,9 @@ const OFFICIAL_ROOMS = [
   { id: 'quang-truong-noel', title: 'Quảng Trường Giáng Sinh', theme: 'christmas', official: true },
   { id: 'lau-dai-halloween', title: 'Lâu Đài Halloween', theme: 'halloween', official: true },
   { id: 'pho-hoa-ngay-tet', title: 'Phố Hoa Ngày Tết', theme: 'tet', official: true },
+  { id: 'vuon-tinh-yeu-valentine', title: 'Vườn Tình Yêu Valentine', theme: 'valentine', official: true },
 ];
-const THEME_ICON = { christmas: '🎄', halloween: '🎃', tet: '🧧' };
+const THEME_ICON = { christmas: '🎄', halloween: '🎃', tet: '🧧', valentine: '💝' };
 
 // ---------- State ----------
 let net,
@@ -281,6 +282,9 @@ const peers = new Map(); // id -> {name, hue, x, y, tx, ty, r, tr, a, h, costume
 const floaters = [];
 let inbox = JSON.parse(localStorage.getItem('gh_inbox') || '[]');
 let mode = 'tps'; // 'tps' | 'fps'
+let camDist = 4.6,
+  targetCamDist = 4.6;
+let justLeftSeat = null;
 let yaw = 0,
   pitch = -0.25;
 const keys = new Set();
@@ -2282,15 +2286,24 @@ function updateStatusBadges() {
 
 // ---------- Views ----------
 function toggleView() {
-  mode = mode === 'tps' ? 'fps' : 'tps';
-  pitch = mode === 'fps' ? 0 : -0.25;
+  if (mode === 'tps') {
+    mode = 'fps';
+    targetCamDist = 0;
+    camDist = 0;
+    pitch = 0;
+  } else {
+    mode = 'tps';
+    targetCamDist = 4.6;
+    camDist = 1.2;
+    pitch = -0.25;
+  }
   updateHud();
 }
 
 function updateHud() {
   $('viewLabel').textContent = mode === 'fps' ? '👁️ Góc nhìn thứ nhất (FPS)' : '🎥 Góc nhìn thứ ba (TPS)';
   if ($('btnView')) $('btnView').textContent = mode === 'fps' ? '👁️ FPS' : '🎥 TPS';
-  if (me?.av) me.av.root.visible = mode !== 'fps';
+  if (me?.av) me.av.root.visible = mode !== 'fps' && camDist > 0.55;
   updateLockHud();
 }
 
@@ -2331,6 +2344,7 @@ function sitOnSeat(seat) {
 
 function leaveSeat() {
   if (!me?.seatSlot) return;
+  justLeftSeat = { id: me.seatSlot.id, sofaId: me.seatSlot.sofaId, until: performance.now() + 600 };
   me.seatSlot = null;
   updateStatusBadges();
   syncMyAppearance();
@@ -2461,6 +2475,12 @@ function triggerInteract(target = activeTarget) {
         equipCostume(h.costumeKey);
         openDialog('dlgCostume');
         break;
+      case 'heart_tree':
+      case 'love_fountain':
+        refreshRecipients();
+        $('cardStyle').value = 'love';
+        openDialog('dlgCard');
+        break;
       case 'mai_tree':
         pickAndOpenLixi();
         break;
@@ -2484,41 +2504,128 @@ $('interactPrompt').onclick = () => triggerInteract(activeTarget);
 // ---------- Input & Pointer Events ----------
 addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-  const k = e.key.toLowerCase();
+  const k = e.key ? e.key.toLowerCase() : '';
+  const code = e.code || '';
   if (e.key === 'Enter') {
     document.exitPointerLock?.();
     $('chatIn').focus();
     e.preventDefault();
     return;
   }
-  if (k === 'v') toggleView();
-  else if (k === 'l') togglePointerLock();
-  else if (k === 'm') toggleMic();
-  else if (k === 'p') toggleScreenShare();
-  else if (k === 'h') $('hud').classList.toggle('hidden');
-  else if (k === 'k' && state?.mediaCurrent?.kind === 'web') scrollTv(450);
-  else if (k === 'i' && state?.mediaCurrent?.kind === 'web') scrollTv(-450);
-  else if (k === 'b' && state?.mediaCurrent?.vid && state.mediaCurrent.kind !== 'web') triggerBypassAd();
-  else if (k === 'alt' && document.pointerLockElement) document.exitPointerLock?.();
-  else if (k === 'e') triggerInteract(activeTarget);
-  else if (e.key === '1' && me?.av) doSocialAction('👋', 'wave');
-  else if (e.key === '2' && me?.av) doSocialAction('🤝', 'handshake');
-  else if (e.key === '3' && me?.av) doSocialAction('🤗', 'hug');
-  else if (e.key === '4' && me?.av) {
+  if (k === 'v' || code === 'KeyV') toggleView();
+  else if (k === 'l' || code === 'KeyL') togglePointerLock();
+  else if (k === 'm' || code === 'KeyM') toggleMic();
+  else if (k === 'p' || code === 'KeyP') toggleScreenShare();
+  else if (k === 'h' || code === 'KeyH') $('hud').classList.toggle('hidden');
+  else if ((k === 'k' || code === 'KeyK') && state?.mediaCurrent?.kind === 'web') scrollTv(450);
+  else if ((k === 'i' || code === 'KeyI') && state?.mediaCurrent?.kind === 'web') scrollTv(-450);
+  else if ((k === 'b' || code === 'KeyB') && state?.mediaCurrent?.vid && state.mediaCurrent.kind !== 'web') triggerBypassAd();
+  else if ((k === 'alt' || code.startsWith('Alt')) && document.pointerLockElement) document.exitPointerLock?.();
+  else if (k === 'e' || code === 'KeyE') triggerInteract(activeTarget);
+  else if ((e.key === '1' || code === 'Digit1') && me?.av) doSocialAction('👋', 'wave');
+  else if ((e.key === '2' || code === 'Digit2') && me?.av) doSocialAction('🤝', 'handshake');
+  else if ((e.key === '3' || code === 'Digit3') && me?.av) doSocialAction('🤗', 'hug');
+  else if ((e.key === '4' || code === 'Digit4') && me?.av) {
     if (state?.theme === 'halloween') doSocialAction('🍬', 'trickOrTreat');
     else if (state?.theme === 'christmas') $('btnRoast').click();
     else doSocialAction('🧧', 'interact');
   }
 
-  if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault();
-  if (e.key === ' ' && me) {
+  if (e.key?.startsWith('Arrow') || code.startsWith('Arrow') || e.key === ' ' || code === 'Space') e.preventDefault();
+  if ((e.key === ' ' || code === 'Space') && me) {
     if (me.seatSlot) leaveSeat();
     else if (me.h === 0) me.vy = JUMP_V;
   }
-  keys.add(k);
+  if (k) keys.add(k);
+  if (code) keys.add(code);
+  if (code === 'KeyW' || k === 'w' || k === 'ư') {
+    keys.add('w');
+    keys.add('KeyW');
+  } else if (code === 'KeyA' || k === 'a') {
+    keys.add('a');
+    keys.add('KeyA');
+  } else if (code === 'KeyS' || k === 's') {
+    keys.add('s');
+    keys.add('KeyS');
+  } else if (code === 'KeyD' || k === 'd') {
+    keys.add('d');
+    keys.add('KeyD');
+  }
 });
-addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+
+addEventListener('keyup', e => {
+  const k = e.key ? e.key.toLowerCase() : '';
+  const code = e.code || '';
+  if (k) keys.delete(k);
+  if (code) keys.delete(code);
+  if (code === 'KeyW' || k === 'w' || k === 'ư' || k === 'process') {
+    keys.delete('w');
+    keys.delete('KeyW');
+    keys.delete('ư');
+  }
+  if (code === 'KeyA' || k === 'a') {
+    keys.delete('a');
+    keys.delete('KeyA');
+  }
+  if (code === 'KeyS' || k === 's') {
+    keys.delete('s');
+    keys.delete('KeyS');
+  }
+  if (code === 'KeyD' || k === 'd') {
+    keys.delete('d');
+    keys.delete('KeyD');
+  }
+  if (code.startsWith('Arrow') || k.startsWith('arrow')) {
+    keys.delete(code);
+    keys.delete(k);
+    keys.delete('arrowup');
+    keys.delete('arrowdown');
+    keys.delete('arrowleft');
+    keys.delete('arrowright');
+  }
+});
+
 addEventListener('blur', () => keys.clear());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) keys.clear();
+});
+addEventListener('compositionend', () => {
+  keys.delete('ư');
+  keys.delete('w');
+  keys.delete('KeyW');
+});
+
+// Roblox-style camera zoom with mouse wheel (smooth TPS distance zoom + seamless FPS transition)
+addEventListener(
+  'wheel',
+  e => {
+    if (e.target.closest('#chat, #mediaBox, .overlay:not(.hidden), .dialog:not(.hidden), #dlgCard, #dlgCostume, #dlgMusic, #inboxModal')) {
+      return;
+    }
+    e.preventDefault();
+
+    const zoomStep = Math.sign(e.deltaY) * 0.6; // > 0 scroll down (zoom out), < 0 scroll up (zoom in)
+    if (mode === 'fps') {
+      if (e.deltaY > 0) {
+        mode = 'tps';
+        camDist = 0.7;
+        targetCamDist = 1.4;
+        updateHud();
+      }
+    } else {
+      targetCamDist += zoomStep;
+      if (targetCamDist <= 0.45) {
+        mode = 'fps';
+        targetCamDist = 0;
+        camDist = 0;
+        updateHud();
+      } else {
+        targetCamDist = Math.max(0.6, Math.min(9.5, targetCamDist));
+      }
+    }
+  },
+  { passive: false }
+);
 
 const cv = $('game'),
   ray = new THREE.Raycaster(),
@@ -2709,6 +2816,21 @@ const free = (x, y) => {
       if (Math.hypot(x - c.x, y - c.y) < c.r + RADIUS) return false;
     }
   }
+  if (world?.features?.seats) {
+    const now = performance.now();
+    for (const s of world.features.seats) {
+      if (me?.seatSlot && (me.seatSlot.id === s.id || me.seatSlot.sofaId === s.id || me.seatSlot.id.startsWith(s.id))) continue;
+      if (justLeftSeat && now < justLeftSeat.until && (justLeftSeat.id === s.id || justLeftSeat.sofaId === s.id || justLeftSeat.id.startsWith(s.id))) continue;
+
+      if (s.kind === 'couple') {
+        const dx = Math.abs(x - s.x);
+        const dy = Math.abs(y - s.y);
+        if (dx < 0.46 + RADIUS * 0.75 && dy < 0.28 + RADIUS * 0.75) return false;
+      } else {
+        if (Math.hypot(x - s.x, y - s.y) < 0.22 + RADIUS * 0.75) return false;
+      }
+    }
+  }
   return true;
 };
 
@@ -2744,9 +2866,13 @@ function loop(now) {
 
   // 3. Player Locomotion & Sitting State
   const k = keys;
-  const fwd = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
-  const str = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
-  const running = k.has('shift');
+  const isUp = k.has('w') || k.has('KeyW') || k.has('ư') || k.has('arrowup') || k.has('ArrowUp');
+  const isDown = k.has('s') || k.has('KeyS') || k.has('arrowdown') || k.has('ArrowDown');
+  const isLeft = k.has('a') || k.has('KeyA') || k.has('arrowleft') || k.has('ArrowLeft');
+  const isRight = k.has('d') || k.has('KeyD') || k.has('arrowright') || k.has('ArrowRight');
+  const fwd = (isUp ? 1 : 0) - (isDown ? 1 : 0);
+  const str = (isRight ? 1 : 0) - (isLeft ? 1 : 0);
+  const running = k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight');
   let dx = -Math.sin(yaw) * fwd + Math.cos(yaw) * str,
     dz = -Math.cos(yaw) * fwd - Math.sin(yaw) * str;
   const moving = !!(dx || dz);
@@ -2866,7 +2992,7 @@ function loop(now) {
   }
   world.sync(state, roomName);
   world.update(dt, { x: me.x * TILE, z: me.y * TILE });
-  updateCamera();
+  updateCamera(dt);
   if (world.bgColor) renderer.setClearColor(world.bgColor, 1);
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
@@ -2956,22 +3082,47 @@ function updateScreen3D() {
   }
 }
 
-function updateCamera() {
+function updateCamera(dt = 0.016) {
   const px = me.x * TILE,
     pz = me.y * TILE;
   const eyeH = me.seatSlot ? 1.25 : 1.55;
   if (mode === 'fps') {
+    camDist = 0;
+    targetCamDist = 0;
     camera.position.set(px, me.h + eyeH, pz);
     camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    if (me?.av) me.av.root.visible = false;
   } else {
+    // Smooth Roblox zoom interpolation
+    camDist += (targetCamDist - camDist) * Math.min(1, dt * 14);
+
+    if (camDist <= 0.5) {
+      mode = 'fps';
+      camDist = 0;
+      targetCamDist = 0;
+      updateHud();
+      camera.position.set(px, me.h + eyeH, pz);
+      camera.rotation.set(pitch, yaw, 0, 'YXZ');
+      if (me?.av) me.av.root.visible = false;
+      updateScreen3D();
+      return;
+    }
+
+    if (me?.av) me.av.root.visible = camDist > 0.65;
+
     _head.set(px, me.h + eyeH, pz);
     const cp = Math.cos(pitch);
     _want
       .set(-Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp)
-      .multiplyScalar(-4.6)
+      .multiplyScalar(-camDist)
       .add(_head);
-    _want.x += Math.cos(yaw) * 0.65;
-    _want.z += -Math.sin(yaw) * 0.65;
+
+    // Shoulder offset fades smoothly as camera gets closer to the avatar's head
+    const shoulderRatio = Math.max(0, Math.min(1, (camDist - 0.7) / 2.5));
+    const shoulderOffset = 0.65 * shoulderRatio;
+    _want.x += Math.cos(yaw) * shoulderOffset;
+    _want.z += -Math.sin(yaw) * shoulderOffset;
+
     let t = 1;
     for (let i = 1; i <= 16; i++) {
       _p.lerpVectors(_head, _want, i / 16);

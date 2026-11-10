@@ -22,6 +22,9 @@ import {
   buildGiantMaiTree,
   buildFireworkLauncher,
   buildFirecrackerTable,
+  buildValentineHeartTree,
+  buildLoveFountain,
+  buildRoseArch,
   emojiTexture,
   geo,
   mat,
@@ -30,7 +33,7 @@ import {
 
 export const TILE = 2; // meters per grid tile
 export const WALL_H = 2.6;
-const DARK = new Set(['halloween', 'tet', 'christmas']);
+const DARK = new Set(['halloween', 'tet', 'christmas', 'valentine']);
 
 const rnd = seed => {
   let s = 0;
@@ -76,6 +79,7 @@ export class World {
     this.tomatoes = []; // flying tomato projectiles
     this.campfires = [];
     this.maiEnvelopes = [];
+    this.valentineObjs = [];
     this.treeSlots = [];
     this.vampireNPC = null;
     this.vampireSwoop = null; // { tx, tz, until }
@@ -159,11 +163,11 @@ export class World {
     this.bgColor = bg;
     this.scene.background = null;
     this.scene.fog = new THREE.Fog(bg, 34, 92);
-    this.hemi.color.set(key === 'halloween' ? '#a78bfa' : key === 'tet' ? '#fde68a' : '#e0f2fe');
+    this.hemi.color.set(key === 'halloween' ? '#a78bfa' : key === 'tet' ? '#fde68a' : key === 'valentine' ? '#fbcfe8' : '#e0f2fe');
     this.hemi.groundColor.set(dark ? '#1e1b2e' : '#8a7f70');
-    this.hemi.intensity = key === 'halloween' ? 0.72 : 0.92;
-    this.sun.color.set(key === 'halloween' ? '#c4b5fd' : '#fff1d6');
-    this.sun.intensity = key === 'halloween' ? 0.68 : 1.15;
+    this.hemi.intensity = key === 'halloween' ? 0.72 : key === 'valentine' ? 0.88 : 0.92;
+    this.sun.color.set(key === 'halloween' ? '#c4b5fd' : key === 'valentine' ? '#fecdd3' : '#fff1d6');
+    this.sun.intensity = key === 'halloween' ? 0.68 : key === 'valentine' ? 0.96 : 1.15;
     this.initParticles(th.particles);
   }
 
@@ -175,6 +179,7 @@ export class World {
 
     this.campfires = [];
     this.maiEnvelopes = [];
+    this.valentineObjs = [];
     this.treeSlots = [];
     this.vampireNPC = null;
     this.ornamentKey = '';
@@ -335,6 +340,16 @@ export class World {
         const ft = buildFirecrackerTable();
         ft.position.set(h.x * TILE, 0, h.y * TILE);
         this.group.add(ft);
+      } else if (h.type === 'heart_tree') {
+        const ht = buildValentineHeartTree();
+        ht.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(ht);
+        this.valentineObjs.push(ht);
+      } else if (h.type === 'love_fountain') {
+        const lf = buildLoveFountain();
+        lf.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(lf);
+        this.valentineObjs.push(lf);
       }
     }
 
@@ -345,6 +360,12 @@ export class World {
         sm.position.set(ep.x * TILE, 0, ep.y * TILE);
         sm.rotation.y = ep.rot || 0;
         this.group.add(sm);
+      } else if (ep.type === 'rose_arch') {
+        const arch = buildRoseArch();
+        arch.position.set(ep.x * TILE, 0, ep.y * TILE);
+        arch.rotation.y = ep.rot || 0;
+        this.group.add(arch);
+        this.valentineObjs.push(arch);
       }
     }
 
@@ -582,5 +603,6 @@ export class World {
     };
     this.decorObjs.forEach(anim);
     this.cardObjs.forEach(anim);
+    this.valentineObjs.forEach(anim);
   }
 }

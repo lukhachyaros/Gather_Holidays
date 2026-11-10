@@ -64,6 +64,18 @@ export function buildThemeMap(themeKey = 'christmas') {
     rect(20, 13, 25, 16, 'R');
   }
 
+  if (themeKey === 'valentine') {
+    // A rose-pink heart plaza, with two garden wings connected to the main path.
+    rect(12, 10, 17, 13, 'R');
+    rect(4, 13, 9, 16, 'R');
+    rect(20, 13, 25, 16, 'R');
+    rect(7, 8, 10, 10, 'P');
+    rect(19, 8, 22, 10, 'P');
+    // Decorative reflecting pools in the outer corners.
+    rect(3, 4, 5, 5, '~');
+    rect(24, 4, 26, 5, '~');
+  }
+
   return {
     w,
     h,
@@ -125,7 +137,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
     prompt: '🎬 Màn Hình Lớn · [E] Mở Hàng Chờ Video YouTube',
   });
   // Solid stage collider for TV screen
-  for (let sx = 12; sx <= 17; sx += 1) colliders.push({ x: sx, y: 2.1, r: 0.65 });
+  for (let sx = 12; sx <= 17; sx += 1) colliders.push({ x: sx, y: 2.1, r: 0.35 });
 
   // Row 1 (y = 4.5): Single chairs on sides + 1 Couple Sofa in center
   const singleCoords = [
@@ -147,7 +159,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
 
   // Couple Sofas (2 seats per sofa, players sitting together trigger Couple Heart mode!)
   const coupleSofas = [
-    { id: 'couple_front', x: 14.5, y: 4.5 },
+    { id: 'sofa_row1', x: 14.5, y: 4.5 },
     { id: 'couple_left', x: 11.8, y: 6.1 },
     { id: 'couple_center', x: 14.5, y: 6.1 },
     { id: 'couple_right', x: 17.2, y: 6.1 },
@@ -181,7 +193,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       radius: 2.9,
       prompt: '🎄 Cây Thông Giáng Sinh · [E] Treo đồ trang trí / Viết & đọc thiệp trong tất 🧦',
     });
-    colliders.push({ x: 14.5, y: 11.5, r: 1.15 });
+    colliders.push({ x: 14.5, y: 11.5, r: 0.72 });
 
     // 2 Ornament Pickup Tables near the tree
     [
@@ -196,7 +208,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         radius: 1.75,
         prompt: '🎁 Bàn Đồ Trang Trí · [E] Nhặt đồ trang trí đem treo lên cây thông',
       });
-      colliders.push({ x: tb.x, y: tb.y, r: 0.6 });
+      colliders.push({ x: tb.x, y: tb.y, r: 0.38 });
     });
 
     // 2 Campfire Zones with surrounding Log Seats
@@ -212,7 +224,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         radius: 2.5,
         prompt: '🔥 Lửa Trại Ấm Áp · [E] Nướng Marshmallow 🍡 / Uống Ca Cao Nóng ☕',
       });
-      colliders.push({ x: cf.x, y: cf.y, r: 0.55 });
+      colliders.push({ x: cf.x, y: cf.y, r: 0.38 });
 
       // 4 Log seats around each campfire
       const offsets = [
@@ -255,7 +267,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
           rot: rng() * Math.PI * 2,
           variant: i,
         });
-        colliders.push({ x: jx, y: jy, r: 0.4 });
+        colliders.push({ x: jx, y: jy, r: 0.28 });
       }
     });
   } else if (themeKey === 'halloween') {
@@ -268,7 +280,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       radius: 2.5,
       prompt: '🎃 Đại Bí Ngô Khổng Lồ · Hãy lại gần các quả bí ngô nhỏ xung quanh để đội lên đầu!',
     });
-    colliders.push({ x: 14.5, y: 11.5, r: 1.25 });
+    colliders.push({ x: 14.5, y: 11.5, r: 0.85 });
 
     // 6 Small Carved Pumpkins with distinct faces around the centerpiece
     const styleKeys = Object.keys(PUMPKIN_HATS);
@@ -303,7 +315,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         radius: 1.35,
         prompt: `🎭 Tủ Hóa Trang · [E] Đổi trang phục (${costumeKey.toUpperCase()})`,
       });
-      colliders.push({ x: bx, y: by, r: 0.42 });
+      colliders.push({ x: bx, y: by, r: 0.32 });
     });
   } else if (themeKey === 'tet') {
     // Centerpiece: Giant Golden Apricot Blossom Tree (Cây Mai Đại Thụ)
@@ -315,7 +327,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       radius: 2.9,
       prompt: '🧧 Cây Mai Đại Thụ · [E] Hái Bao Lì Xì (Ngẫu nhiên 1k–500k hoặc Câu chúc Tết)',
     });
-    colliders.push({ x: 14.5, y: 11.5, r: 1.15 });
+    colliders.push({ x: 14.5, y: 11.5, r: 0.72 });
 
     // 2 Firework Launcher Machines & surrounding Small Firecracker Tables
     [
@@ -330,7 +342,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         radius: 2.1,
         prompt: '🎆 Máy Bắn Pháo Hoa · [E] Khởi động giàn phóng pháo hoa rực rỡ!',
       });
-      colliders.push({ x: fw.x, y: fw.y, r: 0.65 });
+      colliders.push({ x: fw.x, y: fw.y, r: 0.42 });
 
       // 2 Small firecracker tables flanking each launcher
       [-1.9, 1.9].forEach((dx, ti) => {
@@ -344,7 +356,61 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
           radius: 1.5,
           prompt: '🧨 Bàn Pháo Nổ Nhỏ · [E] Đốt pháo nổ lách tách vui xuân',
         });
-        colliders.push({ x: tx, y: ty, r: 0.5 });
+        colliders.push({ x: tx, y: ty, r: 0.32 });
+      });
+    });
+  } else if (themeKey === 'valentine') {
+    // Centerpiece: a glowing heart tree where visitors can compose love notes.
+    hotspots.push({
+      id: 'valentine_heart_tree',
+      type: 'heart_tree',
+      x: 14.5,
+      y: 11.5,
+      radius: 2.9,
+      prompt: '💗 Cây Trái Tim · [E] Viết thiệp tình yêu và gửi lời thương',
+    });
+    colliders.push({ x: 14.5, y: 11.5, r: 0.72 });
+
+    // Two wishing fountains make the garden wings feel like intimate date spots.
+    [
+      { id: 'love_fountain_left', x: 6.5, y: 14.5 },
+      { id: 'love_fountain_right', x: 22.5, y: 14.5 },
+    ].forEach(f => {
+      hotspots.push({
+        id: f.id,
+        type: 'love_fountain',
+        x: f.x,
+        y: f.y,
+        radius: 2.0,
+        prompt: '⛲ Suối Ước Nguyện · [E] Gửi một tấm thiệp yêu thương',
+      });
+      colliders.push({ x: f.x, y: f.y, r: 0.42 });
+    });
+
+    // Rose arches frame the two garden entrances.
+    extraProps.push(
+      { type: 'rose_arch', x: 9.5, y: 9.6, rot: 0 },
+      { type: 'rose_arch', x: 19.5, y: 9.6, rot: 0 }
+    );
+    [9.5, 19.5].forEach(ax => {
+      colliders.push({ x: ax - 0.78, y: 9.6, r: 0.2 }, { x: ax + 0.78, y: 9.6, r: 0.2 });
+    });
+
+    // Couple sofas let visitors sit together beside each fountain.
+    [
+      { id: 'valentine_sofa_left', x: 8.6, y: 16.9 },
+      { id: 'valentine_sofa_right', x: 20.4, y: 16.9 },
+    ].forEach(cs => {
+      seats.push({
+        id: cs.id,
+        kind: 'couple',
+        x: cs.x,
+        y: cs.y,
+        rot: Math.PI,
+        slots: [
+          { id: cs.id + '_L', sofaId: cs.id, x: cs.x - 0.24, y: cs.y, rot: Math.PI, lean: -1 },
+          { id: cs.id + '_R', sofaId: cs.id, x: cs.x + 0.24, y: cs.y, rot: Math.PI, lean: 1 },
+        ],
       });
     });
   }
