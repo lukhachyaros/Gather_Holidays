@@ -1144,15 +1144,11 @@ const handlers = {
     const p = peers.get(id);
     if (p) {
       toast(`${p.name} đã rời phòng`);
-<<<<<<< HEAD
       logChat('🔔 Hệ thống', `${p.name} đã rời phòng.`, { isSystem: true });
-      if (p.av) scene.remove(p.av.root);
-=======
       if (p.av) {
         scene.remove(p.av.root);
         p.av.destroy?.();
       }
->>>>>>> e54b216 (fix: auto-hide seat prompt bubbles when seated and render chat bubbles above TV)
     }
     peers.delete(id);
 
@@ -2801,18 +2797,12 @@ addEventListener('keydown', e => {
 
   if (e.key?.startsWith('Arrow') || code.startsWith('Arrow') || e.key === ' ' || code === 'Space') e.preventDefault();
   if ((e.key === ' ' || code === 'Space') && me) {
-<<<<<<< HEAD
-    if (me.seatSlot) leaveSeat();
-    else if (me.h <= getStandHeight(me.x, me.y) + 0.15) {
-      me.vy = JUMP_V;
-      me.loco = 'jump';
-=======
     if (me.seatSlot) {
       leaveSeat(true);
       me.vy = JUMP_V;
-    } else if (me.h === 0) {
+    } else if (me.h <= getStandHeight(me.x, me.y) + 0.15) {
       me.vy = JUMP_V;
->>>>>>> be0a161 (fix: resolve seat jumping stuck, table collisions, and seat label occlusion)
+      me.loco = 'jump';
     }
   }
   if (k) keys.add(k);
@@ -3142,7 +3132,6 @@ const free = (x, y, currentH = 0) => {
     [-1, 1],
     [1, 1],
   ]) {
-<<<<<<< HEAD
     const tx = Math.floor(x + ox * RADIUS + 0.5);
     const ty = Math.floor(y + oy * RADIUS + 0.5);
     if (tx <= 0 || ty <= 0 || tx >= state.map.w - 1 || ty >= state.map.h - 1) return false;
@@ -3151,8 +3140,7 @@ const free = (x, y, currentH = 0) => {
     if (isSolid(t)) {
       const standH = t === 'T' ? 1.05 : 1.25;
       if (currentH < standH - 0.22) return false;
-=======
-    if (isSolid(tileAt(Math.floor(x + ox * RADIUS + 0.5), Math.floor(y + oy * RADIUS + 0.5)))) return false;
+    }
   }
   if (world?.features?.colliders) {
     for (const c of world.features.colliders) {
@@ -3165,7 +3153,6 @@ const free = (x, y, currentH = 0) => {
         if (curD < minD && nextD > curD) continue;
         return false;
       }
->>>>>>> be0a161 (fix: resolve seat jumping stuck, table collisions, and seat label occlusion)
     }
   }
 
