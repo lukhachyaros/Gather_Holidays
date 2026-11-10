@@ -73,6 +73,14 @@ export function normalizeWebUrl(input) {
   if (h === 'open.spotify.com' && (m = u.pathname.match(/^\/(track|album|playlist|episode|show|artist)\/(\w+)/))) {
     return 'https://open.spotify.com/embed/' + m[1] + '/' + m[2];
   }
+  if (h === 'tiktok.com' && (m = u.pathname.match(/\/video\/(\d+)/))) return 'https://www.tiktok.com/embed/v2/' + m[1];
+  if (h === 'bilibili.com' && (m = u.pathname.match(/\/video\/(BV\w+)/i))) {
+    return 'https://player.bilibili.com/player.html?bvid=' + m[1] + '&autoplay=1&high_quality=1';
+  }
+  if (h === 'streamable.com' && (m = u.pathname.match(/^\/(?:e\/)?(\w+)$/))) return 'https://streamable.com/e/' + m[1];
+  if ((h === 'facebook.com' || h === 'fb.watch') && (h === 'fb.watch' || /\/(videos?|watch|reels?)\b/.test(u.pathname))) {
+    return 'https://www.facebook.com/plugins/video.php?show_text=false&href=' + encodeURIComponent(u.href);
+  }
   return u.href;
 }
 
