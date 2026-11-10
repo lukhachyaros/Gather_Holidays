@@ -18,6 +18,14 @@ export const EMOTE_CLIP = {
   '☕': 'cocoa',
   '😱': 'scared',
   '✨': 'interact',
+  '💪': 'flex',
+  '🕺': 'cheer_jump',
+  '⭐': 'starfish',
+  '🙆': 'head_heart',
+  '🙇': 'despair',
+  '😎': 'dab',
+  '🛌': 'lay_chill',
+  '🧎': 'kneel',
 };
 
 const EMOTE_DURATION = {
@@ -30,6 +38,14 @@ const EMOTE_DURATION = {
   cocoa: 4200,
   scared: 2400,
   interact: 1800,
+  flex: 6000,
+  cheer_jump: 6000,
+  starfish: 6000,
+  head_heart: 6000,
+  despair: 6500,
+  dab: 6000,
+  lay_chill: 7000,
+  kneel: 7000,
 };
 
 function textSprite(draw, w, h, worldH) {
@@ -560,6 +576,84 @@ export class Avatar {
         case 'interact': {
           this.leftArm.rotation.x = -1.5 + Math.sin(elapsed * 10) * 0.25;
           this.rightArm.rotation.x = -1.5 - Math.sin(elapsed * 10) * 0.25;
+          break;
+        }
+        case 'flex': {
+          // Double biceps flex! Upper arms horizontal out, forearms bent up 90 deg
+          this.torso.rotation.x = -0.06;
+          this.leftArm.rotation.set(-1.15, 0.25, 1.35);
+          this.rightArm.rotation.set(-1.15, -0.25, -1.35);
+          this.hips.position.y = 0.8 + Math.sin(elapsed * 5) * 0.015;
+          break;
+        }
+        case 'cheer_jump': {
+          // Joyful cheer V-arms and one leg lifted
+          this.leftArm.rotation.set(-2.55, 0, 0.55);
+          this.rightArm.rotation.set(-2.55, 0, -0.55);
+          this.leftLeg.rotation.set(-0.85, 0, -0.2);
+          this.rightLeg.rotation.set(0.1, 0, 0.05);
+          this.hips.position.y = 0.88 + Math.abs(Math.sin(elapsed * 7)) * 0.12;
+          this.headGroup.rotation.z = Math.sin(elapsed * 6) * 0.12;
+          break;
+        }
+        case 'starfish': {
+          // Jumping Jack X-Pose
+          this.leftArm.rotation.set(-1.6, 0, 0.95);
+          this.rightArm.rotation.set(-1.6, 0, -0.95);
+          this.leftLeg.rotation.set(0, 0, 0.42);
+          this.rightLeg.rotation.set(0, 0, -0.42);
+          this.hips.position.y = 0.9 + Math.abs(Math.sin(elapsed * 6)) * 0.08;
+          break;
+        }
+        case 'head_heart': {
+          // Heart arch over crown
+          this.leftArm.rotation.set(-2.85, 0, -0.65);
+          this.rightArm.rotation.set(-2.85, 0, 0.65);
+          this.hips.rotation.z = Math.sin(elapsed * 4) * 0.06;
+          this.headGroup.rotation.y = Math.sin(elapsed * 4) * 0.1;
+          break;
+        }
+        case 'despair': {
+          // Cowering / Defeated Fetal OTL pose
+          this.hips.position.set(0, 0.22, 0.1);
+          this.torso.rotation.x = 1.35;
+          this.leftLeg.rotation.set(-1.75, 0, -0.15);
+          this.rightLeg.rotation.set(-1.75, 0, 0.15);
+          this.leftArm.rotation.set(0.65, 0, -0.2);
+          this.rightArm.rotation.set(0.65, 0, 0.2);
+          this.headGroup.rotation.x = 0.65;
+          break;
+        }
+        case 'dab': {
+          // Classic cool hip-hop Dab
+          this.rightArm.rotation.set(-1.95, -0.2, -0.95);
+          this.leftArm.rotation.set(-2.15, 0.45, 0.75);
+          this.torso.rotation.set(0.22, 0.42, -0.2);
+          this.headGroup.rotation.set(0.35, -0.4, 0.2);
+          this.leftLeg.rotation.set(-0.25, 0, -0.2);
+          this.rightLeg.rotation.set(0.35, 0, 0.2);
+          break;
+        }
+        case 'lay_chill': {
+          // Lying down sideways on the floor propped by hand
+          this.hips.position.set(0, 0.2, 0);
+          this.hips.rotation.z = Math.PI / 2 - 0.15;
+          this.leftLeg.rotation.set(0.12, 0, 0.1);
+          this.rightLeg.rotation.set(-0.12, 0, -0.1);
+          this.leftArm.rotation.set(-1.6, 0, 0.65);
+          this.rightArm.rotation.set(-0.35, 0, -0.35);
+          this.headGroup.rotation.z = -0.35;
+          break;
+        }
+        case 'kneel': {
+          // Polite Seiza kneeling pose
+          this.hips.position.set(0, 0.38, 0.04);
+          this.leftLeg.rotation.set(-1.45, 0, 0.05);
+          this.rightLeg.rotation.set(-1.45, 0, -0.05);
+          this.torso.rotation.x = -0.05;
+          this.leftArm.rotation.set(-0.65, 0, -0.1);
+          this.rightArm.rotation.set(-0.65, 0, 0.1);
+          this.headGroup.rotation.x = Math.sin(elapsed * 2) * 0.05;
           break;
         }
       }

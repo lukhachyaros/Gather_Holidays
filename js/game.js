@@ -1695,9 +1695,10 @@ function refreshRecipients() {
 }
 
 function doSocialAction(emoji, clip, toPeerId = null) {
-  if (!checkCooldown()) return;
+  // Emotes switch immediately with zero latency; only projectile tomato has cooldown
+  if (clip === 'throwTomato' && !checkCooldown()) return;
   me.av?.playEmote(clip);
-  floaters.push({ e: emoji, who: net.selfId, t: Date.now() });
+  floaters.push({ e: emoji, who: 'me', t: Date.now() });
   net.send('emote', { e: emoji, clip, to: toPeerId });
 
   if (toPeerId && peers.has(toPeerId)) {
@@ -2313,6 +2314,48 @@ $('btnBgm').onclick = () => {
   toast(on ? '🎵 Đã bật nhạc nền lễ hội' : '🔇 Đã tắt nhạc nền');
 };
 $('btnMinigame').onclick = () => minigames?.triggerAction();
+
+function toggleEmoteMenu(forceState = null) {
+  const dlg = $('dlgEmotes');
+  if (!dlg) return;
+  const isHidden = dlg.classList.contains('hidden');
+  const shouldOpen = forceState !== null ? forceState : isHidden;
+  if (shouldOpen) {
+    document.exitPointerLock?.();
+    dlg.classList.remove('hidden');
+  } else {
+    dlg.classList.add('hidden');
+  }
+}
+
+function triggerEmoteByKey(clip, emoji) {
+  doSocialAction(emoji, clip);
+  const card = document.querySelector(`.emote-card[data-emote="${clip}"]`);
+  if (card) {
+    document.querySelectorAll('.emote-card').forEach(c => c.classList.remove('active-emote'));
+    card.classList.add('active-emote');
+    setTimeout(() => card.classList.remove('active-emote'), 350);
+  }
+}
+
+if ($('btnEmotes')) $('btnEmotes').onclick = () => toggleEmoteMenu();
+
+document.querySelectorAll('.emote-card').forEach(card => {
+  card.onclick = () => {
+    const clip = card.dataset.emote;
+    const emoji = card.dataset.emoji;
+    triggerEmoteByKey(clip, emoji);
+  };
+});
+
+document.querySelectorAll('.extra-emote-btn').forEach(btn => {
+  btn.onclick = () => {
+    const clip = btn.dataset.emote;
+    const emoji = btn.dataset.emoji;
+    doSocialAction(emoji, clip);
+  };
+});
+
 $('btnStopScreenBadge').onclick = () => stopScreenShare();
 $('tileScreenShare').onclick = () => {
   $('dlgMedia').classList.add('hidden');
@@ -2649,7 +2692,7 @@ function findNearestInteractable() {
 
   // 3. Check nearby seats (if not already sitting)
   let bestSeat = null,
-    bestSeatD = 1.35;
+    bestSeatD = 1.85;
   if (!me.seatSlot) {
     for (const s of world.features.seats) {
       const d = Math.hypot(s.x - me.x, s.y - me.y);
@@ -2666,8 +2709,17 @@ function findNearestInteractable() {
     }
   }
 
-  // Prioritize seat if right next to it, then hotspot, then peer
-  if (bestSeat && (!bestHotspot || bestSeat.d < bestHotspot.d * 0.7)) return bestSeat;
+  // Prioritize seat if near it:
+  // If near a seat, the seat ALWAYS takes precedence over the TV screen hotspot (which has a giant 3.8 radius),
+  // unless the player is standing right at the stage platform (me.y <= 2.9).
+  if (bestSeat) {
+    if (!bestHotspot) return bestSeat;
+    if (bestHotspot.hotspot.type === 'screen') {
+      if (me.y > 2.9) return bestSeat;
+    } else if (bestSeat.d <= bestHotspot.d * 1.15) {
+      return bestSeat;
+    }
+  }
   if (bestHotspot) return bestHotspot;
   if (bestPeer) return bestPeer;
 
@@ -2780,12 +2832,30 @@ addEventListener('keydown', e => {
   else if (k === 'm' || code === 'KeyM') toggleMic();
   else if (k === 'p' || code === 'KeyP') toggleScreenShare();
   else if (k === 'h' || code === 'KeyH') $('hud').classList.toggle('hidden');
+  else if (k === 'f' || code === 'KeyF') {
+    toggleEmoteMenu();
+    e.preventDefault();
+  }
   else if ((k === 'k' || code === 'KeyK') && state?.mediaCurrent?.kind === 'web') scrollTv(450);
   else if ((k === 'i' || code === 'KeyI') && state?.mediaCurrent?.kind === 'web') scrollTv(-450);
   else if ((k === 'b' || code === 'KeyB') && state?.mediaCurrent?.vid && state.mediaCurrent.kind !== 'web') triggerBypassAd();
   else if ((k === 'alt' || code.startsWith('Alt')) && document.pointerLockElement) document.exitPointerLock?.();
   else if (k === 'e' || code === 'KeyE') triggerInteract(activeTarget);
   else if (k === 'g' || code === 'KeyG') minigames?.triggerAction();
+  else if (e.key === 'Escape' && !$('dlgEmotes').classList.contains('hidden')) {
+    toggleEmoteMenu(false);
+    e.preventDefault();
+  }
+  else if (!$('dlgEmotes').classList.contains('hidden')) {
+    if (e.key === '1' || code === 'Digit1') { triggerEmoteByKey('flex', '💪'); e.preventDefault(); return; }
+    if (e.key === '2' || code === 'Digit2') { triggerEmoteByKey('cheer_jump', '🕺'); e.preventDefault(); return; }
+    if (e.key === '3' || code === 'Digit3') { triggerEmoteByKey('starfish', '⭐'); e.preventDefault(); return; }
+    if (e.key === '4' || code === 'Digit4') { triggerEmoteByKey('head_heart', '🙆'); e.preventDefault(); return; }
+    if (e.key === '5' || code === 'Digit5') { triggerEmoteByKey('despair', '🙇'); e.preventDefault(); return; }
+    if (e.key === '6' || code === 'Digit6') { triggerEmoteByKey('dab', '😎'); e.preventDefault(); return; }
+    if (e.key === '7' || code === 'Digit7') { triggerEmoteByKey('lay_chill', '🛌'); e.preventDefault(); return; }
+    if (e.key === '8' || code === 'Digit8') { triggerEmoteByKey('kneel', '🧎'); e.preventDefault(); return; }
+  }
   else if ((e.key === '1' || code === 'Digit1') && me?.av) doSocialAction('👋', 'wave');
   else if ((e.key === '2' || code === 'Digit2') && me?.av) doSocialAction('🤝', 'handshake');
   else if ((e.key === '3' || code === 'Digit3') && me?.av) doSocialAction('🤗', 'hug');

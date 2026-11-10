@@ -317,6 +317,24 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       });
       colliders.push({ x: bx, y: by, r: 0.32 });
     });
+
+    // 2 Gothic Couple Sofas in the garden wings
+    [
+      { id: 'halloween_sofa_left', x: 6.5, y: 16.5 },
+      { id: 'halloween_sofa_right', x: 22.5, y: 16.5 },
+    ].forEach(cs => {
+      seats.push({
+        id: cs.id,
+        kind: 'couple',
+        x: cs.x,
+        y: cs.y,
+        rot: Math.PI,
+        slots: [
+          { id: cs.id + '_L', sofaId: cs.id, x: cs.x - 0.24, y: cs.y, rot: Math.PI, lean: -1 },
+          { id: cs.id + '_R', sofaId: cs.id, x: cs.x + 0.24, y: cs.y, rot: Math.PI, lean: 1 },
+        ],
+      });
+    });
   } else if (themeKey === 'tet') {
     // Centerpiece: Giant Golden Apricot Blossom Tree (Cây Mai Đại Thụ)
     hotspots.push({
@@ -357,6 +375,24 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
           prompt: '🧨 Bàn Pháo Nổ Nhỏ · [E] Đốt pháo nổ lách tách vui xuân',
         });
         colliders.push({ x: tx, y: ty, r: 0.32 });
+      });
+    });
+
+    // 2 Festive Couple Sofas beside the firework plazas
+    [
+      { id: 'tet_sofa_left', x: 6.5, y: 17.5 },
+      { id: 'tet_sofa_right', x: 22.5, y: 17.5 },
+    ].forEach(cs => {
+      seats.push({
+        id: cs.id,
+        kind: 'couple',
+        x: cs.x,
+        y: cs.y,
+        rot: Math.PI,
+        slots: [
+          { id: cs.id + '_L', sofaId: cs.id, x: cs.x - 0.24, y: cs.y, rot: Math.PI, lean: -1 },
+          { id: cs.id + '_R', sofaId: cs.id, x: cs.x + 0.24, y: cs.y, rot: Math.PI, lean: 1 },
+        ],
       });
     });
   } else if (themeKey === 'valentine') {
