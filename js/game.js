@@ -1118,6 +1118,7 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'tvScroll': {
+      if (senderId && !canControlTV(senderId)) return;
       if (state?.mediaCurrent?.kind === 'web') {
         const box = $('mediaBox');
         if (box && senderId !== net?.selfId) {
@@ -1463,9 +1464,18 @@ $('mediaHide').onclick = () => {
 };
 
 let lastTvScrollSync = 0;
+let lastScrollWarnAt = 0;
 function scrollTv(deltaY) {
   const box = $('mediaBox');
   if (!box || state?.mediaCurrent?.kind !== 'web') return;
+  if (!canControlTV(net?.selfId)) {
+    const now = Date.now();
+    if (now - lastScrollWarnAt > 2800) {
+      lastScrollWarnAt = now;
+      toast('🔒 Chỉ Chủ phòng hoặc Người phát link này mới có quyền cuộn màn hình TV!');
+    }
+    return;
+  }
   const nextY = Math.max(0, box.scrollTop + deltaY);
   box.scrollTo({ top: nextY, behavior: 'smooth' });
   const now = Date.now();
@@ -1746,14 +1756,15 @@ function updateStatusBadges() {
 
   const hasTv = !!state?.mediaCurrent?.vid;
   const isWeb = state?.mediaCurrent?.kind === 'web';
+  const canControl = canControlTV(net?.selfId);
   const isLocked = !!document.pointerLockElement;
   const hintBtn = $('btnTvScrollHint');
   if (hintBtn) {
-    hintBtn.classList.toggle('hidden', !hasTv);
+    hintBtn.classList.toggle('hidden', !hasTv || !canControl);
     hintBtn.textContent = isLocked ? '🖱️ Phím [L]: Mở chuột cuộn TV' : '🖱️ Chuột tự do: Di vào TV để cuộn & bấm';
   }
-  $('tvWebControls')?.classList.toggle('hidden', !isWeb);
-  $('mediaScrollDown')?.classList.toggle('hidden', !isWeb);
+  $('tvWebControls')?.classList.toggle('hidden', !isWeb || !canControl);
+  $('mediaScrollDown')?.classList.toggle('hidden', !isWeb || !canControl);
   $('mediaFullscreen')?.classList.toggle('hidden', !isWeb);
 
   const hb = $('heldBadge');
