@@ -295,6 +295,7 @@ export class World {
         mesh.position.set(s.x * TILE, 0, s.y * TILE);
         if (s.kind !== 'log') mesh.rotation.y = 0; // faces North (-Z)
         this.group.add(mesh);
+        s.mesh = mesh;
       }
     }
 

@@ -726,11 +726,15 @@ function leaveCurrentRoom() {
   } catch {}
   net = null;
   peers.forEach(p => {
-    if (p.av) scene.remove(p.av.root);
+    if (p.av) {
+      scene.remove(p.av.root);
+      p.av.destroy?.();
+    }
   });
   peers.clear();
   if (me?.av) {
     scene.remove(me.av.root);
+    me.av.destroy?.();
     me.av = null;
   }
   if (me) me.started = false;
@@ -1140,8 +1144,15 @@ const handlers = {
     const p = peers.get(id);
     if (p) {
       toast(`${p.name} đã rời phòng`);
+<<<<<<< HEAD
       logChat('🔔 Hệ thống', `${p.name} đã rời phòng.`, { isSystem: true });
       if (p.av) scene.remove(p.av.root);
+=======
+      if (p.av) {
+        scene.remove(p.av.root);
+        p.av.destroy?.();
+      }
+>>>>>>> e54b216 (fix: auto-hide seat prompt bubbles when seated and render chat bubbles above TV)
     }
     peers.delete(id);
 
@@ -1317,7 +1328,10 @@ function applyOp(op, senderId = null) {
       }
       const p = peers.get(op.targetId);
       if (p) {
-        if (p.av) scene.remove(p.av.root);
+        if (p.av) {
+          scene.remove(p.av.root);
+          p.av.destroy?.();
+        }
         peers.delete(op.targetId);
         refreshRecipients();
         updateLiveStats();
@@ -2171,9 +2185,13 @@ $('mediaFullscreen').onclick = () => {
 // ---------- Topbar, Settings, Pointer Lock, Costume & Campfire Buttons ----------
 const openDialog = id => {
   document.exitPointerLock?.();
+  keys.clear();
   $(id).classList.remove('hidden');
 };
-document.querySelectorAll('[data-close]').forEach(b => (b.onclick = () => b.closest('.overlay').classList.add('hidden')));
+document.querySelectorAll('[data-close]').forEach(b => (b.onclick = () => {
+  keys.clear();
+  b.closest('.overlay').classList.add('hidden');
+}));
 
 // Initialize Mouse Sensitivity & Lock Mode UI
 $('mouseSens').value = mouseSens;
@@ -2522,10 +2540,26 @@ function updateHud() {
 
 // ---------- Seat & Hotspot Proximity / Interaction ----------
 function isSlotOccupied(slotId) {
+  if (me?.seatSlot?.id === slotId) return true;
   for (const p of peers.values()) {
     if (p.seatId === slotId) return true;
   }
   return false;
+}
+
+function updateSeatLabels() {
+  if (!world?.features?.seats) return;
+  const amSitting = !!me?.seatSlot;
+  for (const s of world.features.seats) {
+    const lbl = s.mesh?.userData?.label;
+    if (!lbl) continue;
+    if (amSitting) {
+      lbl.visible = false;
+      continue;
+    }
+    const hasOccupant = (s.slots || [{ id: s.id }]).some(slot => isSlotOccupied(slot.id));
+    lbl.visible = !hasOccupant;
+  }
 }
 
 function sitOnSeat(seat) {
@@ -2539,6 +2573,7 @@ function sitOnSeat(seat) {
   me.vy = 0;
   updateStatusBadges();
   syncMyAppearance();
+  updateSeatLabels();
 
   if (seat.kind === 'couple') {
     const partner = findCouplePartner();
@@ -2555,12 +2590,25 @@ function sitOnSeat(seat) {
   }
 }
 
-function leaveSeat() {
+function leaveSeat(isJump = false) {
   if (!me?.seatSlot) return;
-  justLeftSeat = { id: me.seatSlot.id, sofaId: me.seatSlot.sofaId, until: performance.now() + 600 };
+  const slot = me.seatSlot;
+  justLeftSeat = { id: slot.id, sofaId: slot.sofaId, until: performance.now() + 1200 };
   me.seatSlot = null;
+
+  // Step slightly out in front of the seat so player isn't inside the seat collider
+  const rot = slot.rot ?? Math.PI;
+  const stepOut = slot.kind === 'couple' ? 0.38 : 0.32;
+  const stepX = -Math.sin(rot) * stepOut;
+  const stepY = -Math.cos(rot) * stepOut;
+  if (!isSolid(tileAt(Math.floor(me.x + stepX + 0.5), Math.floor(me.y + stepY + 0.5)))) {
+    me.x += stepX;
+    me.y += stepY;
+  }
+
   updateStatusBadges();
   syncMyAppearance();
+  updateSeatLabels();
 }
 
 function findCouplePartner() {
@@ -2753,10 +2801,18 @@ addEventListener('keydown', e => {
 
   if (e.key?.startsWith('Arrow') || code.startsWith('Arrow') || e.key === ' ' || code === 'Space') e.preventDefault();
   if ((e.key === ' ' || code === 'Space') && me) {
+<<<<<<< HEAD
     if (me.seatSlot) leaveSeat();
     else if (me.h <= getStandHeight(me.x, me.y) + 0.15) {
       me.vy = JUMP_V;
       me.loco = 'jump';
+=======
+    if (me.seatSlot) {
+      leaveSeat(true);
+      me.vy = JUMP_V;
+    } else if (me.h === 0) {
+      me.vy = JUMP_V;
+>>>>>>> be0a161 (fix: resolve seat jumping stuck, table collisions, and seat label occlusion)
     }
   }
   if (k) keys.add(k);
@@ -3086,6 +3142,7 @@ const free = (x, y, currentH = 0) => {
     [-1, 1],
     [1, 1],
   ]) {
+<<<<<<< HEAD
     const tx = Math.floor(x + ox * RADIUS + 0.5);
     const ty = Math.floor(y + oy * RADIUS + 0.5);
     if (tx <= 0 || ty <= 0 || tx >= state.map.w - 1 || ty >= state.map.h - 1) return false;
@@ -3094,6 +3151,21 @@ const free = (x, y, currentH = 0) => {
     if (isSolid(t)) {
       const standH = t === 'T' ? 1.05 : 1.25;
       if (currentH < standH - 0.22) return false;
+=======
+    if (isSolid(tileAt(Math.floor(x + ox * RADIUS + 0.5), Math.floor(y + oy * RADIUS + 0.5)))) return false;
+  }
+  if (world?.features?.colliders) {
+    for (const c of world.features.colliders) {
+      const minD = c.r + RADIUS;
+      const nextD = Math.hypot(x - c.x, y - c.y);
+      if (nextD < minD) {
+        // If player is already within or touching the collider boundary,
+        // ALWAYS allow any movement that increases distance (moving away from the obstacle)!
+        const curD = Math.hypot(me.x - c.x, me.y - c.y);
+        if (curD < minD && nextD > curD) continue;
+        return false;
+      }
+>>>>>>> be0a161 (fix: resolve seat jumping stuck, table collisions, and seat label occlusion)
     }
   }
 
@@ -3118,9 +3190,22 @@ const free = (x, y, currentH = 0) => {
       if (s.kind === 'couple') {
         const dx = Math.abs(x - s.x);
         const dy = Math.abs(y - s.y);
-        if (dx < 0.46 + RADIUS * 0.75 && dy < 0.28 + RADIUS * 0.75) return false;
+        const limitX = 0.46 + RADIUS * 0.75;
+        const limitY = 0.28 + RADIUS * 0.75;
+        if (dx < limitX && dy < limitY) {
+          const curDx = Math.abs(me.x - s.x);
+          const curDy = Math.abs(me.y - s.y);
+          if (curDx < limitX && curDy < limitY && (dx > curDx || dy > curDy)) continue;
+          return false;
+        }
       } else {
-        if (Math.hypot(x - s.x, y - s.y) < 0.22 + RADIUS * 0.75) return false;
+        const minD = 0.22 + RADIUS * 0.75;
+        const nextD = Math.hypot(x - s.x, y - s.y);
+        if (nextD < minD) {
+          const curD = Math.hypot(me.x - s.x, me.y - s.y);
+          if (curD < minD && nextD > curD) continue;
+          return false;
+        }
       }
     }
   }
@@ -3184,6 +3269,24 @@ function loop(now) {
     // Hard coordinate clamp against any glitching
     me.x = Math.max(1.25, Math.min(state.map.w - 1.25, me.x));
     me.y = Math.max(1.25, Math.min(state.map.h - 1.25, me.y));
+  }
+
+  // Auto-resolve any slight penetration with colliders so player never gets stuck against item tables or obstacles
+  if (!me.seatSlot && world?.features?.colliders) {
+    for (const c of world.features.colliders) {
+      const d = Math.hypot(me.x - c.x, me.y - c.y);
+      const minD = c.r + RADIUS;
+      if (d < minD && d > 0.0001) {
+        const overlap = minD - d;
+        const pushFactor = Math.min(overlap, dt * 8);
+        const px = ((me.x - c.x) / d) * pushFactor;
+        const py = ((me.y - c.y) / d) * pushFactor;
+        if (!isSolid(tileAt(Math.floor(me.x + px + 0.5), Math.floor(me.y + py + 0.5)))) {
+          me.x += px;
+          me.y += py;
+        }
+      }
+    }
   }
 
   if (mode === 'fps') me.r = yaw + Math.PI;
@@ -3299,6 +3402,12 @@ function loop(now) {
   updateCamera(dt);
   if (world.bgColor) renderer.setClearColor(world.bgColor, 1);
   renderer.render(scene, camera);
+
+  // Update HTML speech bubbles on top of TV screen & 3D world
+  me.av?.updateBubble(camera);
+  peers.forEach(p => p.av?.updateBubble(camera));
+  updateSeatLabels();
+
   requestAnimationFrame(loop);
 }
 

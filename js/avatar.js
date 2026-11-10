@@ -4,6 +4,7 @@ import { COSTUMES } from './themes.js';
 import { buildCarvedPumpkin, buildOrnamentMesh, G, mat, part } from './props.js';
 
 const HEIGHT = 1.72;
+const _headPos = new THREE.Vector3();
 export const loadCharacter = async () => true;
 
 // Social & Interactive Emote Mapping
@@ -71,7 +72,7 @@ export class Avatar {
     this.animTime = Math.random() * 10;
 
     this.setName(name);
-    this.bubble = null;
+    this.bubbleEl = null;
     this.bubbleUntil = 0;
   }
 
@@ -350,30 +351,51 @@ export class Avatar {
   }
 
   say(text) {
-    if (this.bubble) this.root.remove(this.bubble);
-    const t = text.length > 60 ? text.slice(0, 57) + '…' : text;
-    this.bubble = textSprite(
-      (x, w, h) => {
-        x.font = 'bold 32px system-ui, sans-serif';
-        x.textAlign = 'center';
-        x.textBaseline = 'middle';
-        x.fillStyle = 'rgba(255, 255, 255, 0.96)';
-        x.beginPath();
-        x.roundRect(6, 6, w - 12, h - 12, 24);
-        x.fill();
-        x.strokeStyle = '#38bdf8';
-        x.lineWidth = 4;
-        x.stroke();
-        x.fillStyle = '#0f172a';
-        x.fillText(t, w / 2, h / 2, w - 34);
-      },
-      512,
-      82,
-      0.48
-    );
-    this.bubble.position.y = HEIGHT + 0.88;
-    this.root.add(this.bubble);
-    this.bubbleUntil = performance.now() + 5500;
+    const t = text.length > 70 ? text.slice(0, 67) + '…' : text;
+    this.bubbleUntil = performance.now() + 6500;
+    if (!this.bubbleEl) {
+      this.bubbleEl = document.createElement('div');
+      this.bubbleEl.className = 'speech-bubble';
+      document.getElementById('speechLayer')?.appendChild(this.bubbleEl);
+    }
+    this.bubbleEl.textContent = t;
+    this.bubbleEl.style.display = 'block';
+  }
+
+  updateBubble(camera) {
+    if (!this.bubbleEl) return;
+    if (performance.now() > this.bubbleUntil) {
+      this.bubbleEl.remove();
+      this.bubbleEl = null;
+      return;
+    }
+    if (!camera || !this.root.visible) {
+      this.bubbleEl.style.display = 'none';
+      return;
+    }
+    _headPos.set(0, HEIGHT + 0.35, 0);
+    this.root.localToWorld(_headPos);
+    _headPos.project(camera);
+
+    if (_headPos.z > 1 || _headPos.z < -1) {
+      this.bubbleEl.style.display = 'none';
+      return;
+    }
+    const sx = Math.round((_headPos.x * 0.5 + 0.5) * innerWidth);
+    const sy = Math.round((-_headPos.y * 0.5 + 0.5) * innerHeight);
+    this.bubbleEl.style.display = 'block';
+    this.bubbleEl.style.left = `${sx}px`;
+    this.bubbleEl.style.top = `${sy}px`;
+  }
+
+  destroy() {
+    if (this.bubbleEl) {
+      this.bubbleEl.remove();
+      this.bubbleEl = null;
+    }
+    if (this.root.parent) {
+      this.root.parent.remove(this.root);
+    }
   }
 
   /** Locomotion state: 'idle' | 'walk' | 'run' | 'jump' | 'sit' | 'couple_sit' */
@@ -541,11 +563,6 @@ export class Avatar {
           break;
         }
       }
-    }
-
-    if (this.bubble && now > this.bubbleUntil) {
-      this.root.remove(this.bubble);
-      this.bubble = null;
     }
   }
 }
