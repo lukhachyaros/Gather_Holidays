@@ -250,7 +250,7 @@ kbd{background:#334155;border:1px solid #64748b;border-radius:4px;padding:1px 5p
   background:rgba(255,255,255,.06);border:1px solid rgba(56,189,248,.35);
   margin-right:3px;user-select:none;
 }
-.dock-logo-img{width:22px;height:22px;filter:drop-shadow(0 0 6px rgba(56,189,248,.6))}
+.dock-logo-img{width:22px;height:22px;border-radius:6px;object-fit:cover;box-shadow:0 0 6px rgba(56,189,248,.6)}
 .dock-logo-title{
   font-size:12px;font-weight:700;letter-spacing:.3px;
   background:linear-gradient(90deg,#38bdf8,#facc15,#f43f5e);
