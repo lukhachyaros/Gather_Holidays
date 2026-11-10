@@ -3226,7 +3226,7 @@ function updateFloaters() {
   for (let i = floaters.length - 1; i >= 0; i--) {
     const f = floaters[i],
       age = (now - f.t) / 1000,
-      who = f.who === net.selfId ? me : peers.get(f.who);
+      who = f.who === net?.selfId || f.who === 'me' ? me : peers.get(f.who);
     if (age > 2.2 || !who) {
       if (f.s) scene.remove(f.s);
       floaters.splice(i, 1);
