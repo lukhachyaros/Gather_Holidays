@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gather Holidays 3D 🎄🎃🧧</title>
+<title>Gather Holidays 3D 🎄🎃🧧💝</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">
 { "imports": {
@@ -17,9 +18,12 @@
 <div id="landing" class="overlay">
   <div class="panel lobby-panel">
     <div class="lobby-header">
-      <div>
-        <h1>🎉 Gather Holidays 3D</h1>
-        <p class="sub">Sảnh chờ trực tuyến — Chọn phòng đang mở để giao lưu cùng mọi người hoặc tự tạo phòng riêng.</p>
+      <div style="display:flex;align-items:center;gap:14px">
+        <img src="favicon.svg" alt="Gather Holidays Logo" style="width:46px;height:46px;filter:drop-shadow(0 0 10px rgba(56,189,248,.6))">
+        <div>
+          <h1>🎉 Gather Holidays 3D</h1>
+          <p class="sub">Sảnh chờ trực tuyến — Chọn phòng đang mở để giao lưu cùng mọi người hoặc tự tạo phòng riêng.</p>
+        </div>
       </div>
       <div class="lobby-profile">
         <label class="inline-label">
@@ -86,6 +90,10 @@
 
 <!-- Compact Top Navigation Dock -->
 <div id="topbar" class="top-dock">
+  <div class="brand-dock" title="Gather Holidays 3D">
+    <img src="favicon.svg" alt="Logo" class="dock-logo-img">
+    <span class="dock-logo-title">Gather Holidays</span>
+  </div>
   <button id="btnLobby" class="dock-btn accent" title="Mở Sảnh chờ (Danh sách phòng & Đổi phòng)">🏠 Sảnh</button>
   <span id="roomInfo" title="Phòng hiện tại & Quyền chủ phòng"></span>
   <select id="topTheme" title="Chủ đề phòng (Chỉ chủ phòng mới đổi được)"></select>
@@ -104,6 +112,22 @@
   <button id="btnChatHistoryTop" class="dock-btn" title="Mở lịch sử trò chuyện (Chat History)">💬 Chat<span id="unreadChatBadge" class="mini-badge hidden">0</span></button>
   <button id="btnSettings" class="dock-btn" title="Cài đặt chuột, Voice Chat, Mật khẩu & Quản lý thành viên">⚙️</button>
   <button id="btnCloseRoomTop" class="dock-btn danger-btn hidden" title="Đóng phòng hiện tại (Chỉ Chủ phòng)">🛑 Đóng phòng</button>
+</div>
+
+<!-- Safe Zone Indicator & Player HP Bar -->
+<div id="safeZoneBadge" class="safe-zone-badge hidden">🛡️ VÙNG AN TOÀN (Miễn Sát Thương)</div>
+<div id="playerHpBar" class="player-hp-bar hidden">
+  <div class="hp-label"><span>❤️ MÁU CỦA BẠN</span><b id="hpValue">100 / 100</b></div>
+  <div class="hp-track"><div id="hpFill" class="hp-fill" style="width:100%"></div></div>
+</div>
+
+<!-- Vampire Jumpscare Fullscreen Overlay -->
+<div id="jumpscareOverlay" class="jumpscare-overlay hidden">
+  <div class="jumpscare-content">
+    <div class="vampire-scare-face">🧛🩸</div>
+    <div class="jumpscare-title">BÁ TƯỚC MA CÀ RỒNG ĐÃ VỒ ĐƯỢC BẠN!</div>
+    <div class="jumpscare-hint">Chạy vào Vùng Ghế Ngồi TV để an toàn nhé!</div>
+  </div>
 </div>
 
 <!-- Compact Top-Right Status Bar -->

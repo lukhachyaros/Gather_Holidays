@@ -297,18 +297,23 @@ export class Avatar {
     if (this.label) this.root.remove(this.label);
     this.label = textSprite(
       (x, w, h) => {
-        x.font = 'bold 38px system-ui, sans-serif';
+        // Sleek modern glassmorphic name pill
+        x.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        x.beginPath();
+        x.roundRect(8, 8, w - 16, h - 16, 20);
+        x.fill();
+        x.strokeStyle = 'rgba(56, 189, 248, 0.85)';
+        x.lineWidth = 3.5;
+        x.stroke();
+        x.font = 'bold 32px system-ui, sans-serif';
         x.textAlign = 'center';
         x.textBaseline = 'middle';
-        x.lineWidth = 7;
-        x.strokeStyle = 'rgba(0,0,0,0.85)';
-        x.strokeText(name, w / 2, h / 2);
-        x.fillStyle = '#ffffff';
+        x.fillStyle = '#f8fafc';
         x.fillText(name, w / 2, h / 2);
       },
-      280,
+      320,
       64,
-      0.36
+      0.38
     );
     this.label.position.y = HEIGHT + 0.38;
     this.root.add(this.label);
@@ -419,10 +424,14 @@ export class Avatar {
 
     // 1. Base Locomotion or Sitting Pose
     if (this.jumping) {
-      this.leftArm.rotation.x = -2.4;
-      this.rightArm.rotation.x = -2.4;
-      this.leftLeg.rotation.x = -0.45;
-      this.rightLeg.rotation.x = 0.35;
+      // Dynamic parkour airborne leaping silhouette
+      this.hips.position.y = 0.82;
+      this.torso.rotation.x = 0.18;
+      this.leftArm.rotation.set(-2.3, 0.2, 0.45);
+      this.rightArm.rotation.set(-2.1, -0.2, -0.45);
+      this.leftLeg.rotation.set(-0.65, 0, -0.1);
+      this.rightLeg.rotation.set(0.42, 0, 0.1);
+      this.headGroup.rotation.x = -0.12;
     } else if (this.base === 'Sitting') {
       // Sitting on Chair / Couple Sofa / Campfire Log
       this.hips.position.set(0, 0.48, 0.06);
@@ -439,19 +448,25 @@ export class Avatar {
       const speed = this.base === 'Running' ? 12 : 7.5;
       const amp = this.base === 'Running' ? 0.85 : 0.52;
       const s = Math.sin(t * speed);
-      this.hips.position.y = 0.78 + Math.abs(Math.cos(t * speed)) * 0.05;
+      this.hips.position.y = 0.78 + Math.abs(Math.cos(t * speed)) * (this.base === 'Running' ? 0.08 : 0.04);
       this.leftLeg.rotation.x = s * amp;
       this.rightLeg.rotation.x = -s * amp;
       this.leftArm.rotation.x = -s * amp * 0.85;
       this.rightArm.rotation.x = s * amp * 0.85;
-      this.torso.rotation.x = this.base === 'Running' ? 0.14 : 0.05;
+      // Natural shoulder / torso twist
+      this.torso.rotation.x = this.base === 'Running' ? 0.16 : 0.06;
+      this.torso.rotation.y = -s * (this.base === 'Running' ? 0.14 : 0.06);
+      this.headGroup.rotation.y = s * (this.base === 'Running' ? 0.06 : 0.03);
     } else {
-      // Idle gentle breathing
+      // Idle gentle breathing with natural weight shift
       const b = Math.sin(t * 2.2);
       this.hips.position.y = 0.78 + b * 0.015;
-      this.leftArm.rotation.z = 0.06 + b * 0.02;
-      this.rightArm.rotation.z = -0.06 - b * 0.02;
-      this.headGroup.rotation.y = Math.sin(t * 0.9) * 0.08;
+      this.hips.rotation.z = Math.sin(t * 1.1) * 0.02;
+      this.leftArm.rotation.z = 0.08 + b * 0.02;
+      this.rightArm.rotation.z = -0.08 - b * 0.02;
+      this.torso.rotation.z = -Math.sin(t * 1.1) * 0.015;
+      this.headGroup.rotation.y = Math.sin(t * 0.8) * 0.09;
+      this.headGroup.rotation.x = Math.sin(t * 1.6) * 0.03;
     }
 
     // If holding an ornament, raise right forearm slightly
