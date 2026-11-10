@@ -228,7 +228,19 @@ kbd{background:#334155;border:1px solid #64748b;border-radius:4px;padding:1px 5p
 
 #toast{position:fixed;top:52px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,.95);border:1px solid #ffd166;color:#fef08a;padding:8px 16px;border-radius:99px;font-size:13px;font-weight:600;z-index:90;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.5)}
 #toast.show{opacity:1}
-#crosshair{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font-size:20px;color:#fff;text-shadow:0 0 3px #000;pointer-events:none;z-index:5}
+#crosshair{
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:26px;height:26px;pointer-events:none;z-index:90;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .08s ease-out;
+}
+.ch-center-dot{width:4px;height:4px;background:#38bdf8;border-radius:50%;box-shadow:0 0 6px #38bdf8}
+.ch-bar{position:absolute;background:rgba(255,255,255,.92);box-shadow:0 0 4px rgba(0,0,0,.9);border-radius:1px}
+.ch-top{top:0;left:12px;width:2px;height:7px}
+.ch-bottom{bottom:0;left:12px;width:2px;height:7px}
+.ch-left{left:0;top:12px;width:7px;height:2px}
+.ch-right{right:0;top:12px;width:7px;height:2px}
+.crosshair-fire{transform:translate(-50%,-50%) scale(1.4)!important}
 
 
 /* ---------- TV launcher & Fullscreen TV Browser (Android-TV style) ---------- */

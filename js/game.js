@@ -2229,7 +2229,8 @@ function updateLockHud() {
   if (btn) {
     btn.textContent = locked ? '🔒' : '🔓';
   }
-  $('crosshair').classList.toggle('hidden', !(mode === 'fps' || locked));
+  const isCombat = state?.theme === 'christmas' || state?.theme === 'valentine' || state?.theme === 'tet';
+  $('crosshair').classList.toggle('hidden', !(mode === 'fps' || locked || isCombat));
   updateStatusBadges();
   updateScreen3D();
 }
@@ -3011,6 +3012,15 @@ cv.addEventListener('pointerdown', e => {
     togglePointerLock();
     return;
   }
+  if (e.button === 0 && (document.pointerLockElement || mode === 'fps')) {
+    // FPS Left-Click firing with precision crosshair recoil
+    minigames?.triggerAction();
+    const ch = $('crosshair');
+    if (ch) {
+      ch.classList.add('crosshair-fire');
+      setTimeout(() => ch.classList.remove('crosshair-fire'), 80);
+    }
+  }
   down = { x: e.clientX, y: e.clientY, moved: 0, button: e.button };
   if (!document.pointerLockElement) {
     try {
@@ -3076,6 +3086,11 @@ function handleClick(ndc, cx, cy) {
     renderInbox();
     openDialog('dlgInbox');
     return;
+  }
+
+  // If clicking open 3D space in combat/festive theme, fire weapon towards click point!
+  if (state.theme === 'christmas' || state.theme === 'valentine' || state.theme === 'tet') {
+    minigames?.triggerAction();
   }
 
   // If clicking empty 3D space and lockMode === 'click' (or in FPS mode), lock pointer for smooth look
