@@ -99,6 +99,7 @@
   <button id="btnCard" class="dock-btn" title="Viết thiệp chúc mừng">💌</button>
   <button id="btnInbox" class="dock-btn" title="Hộp thư thiệp đã lưu">📬<span id="inboxCount" class="mini-badge">0</span></button>
   <button id="btnMedia" class="dock-btn" title="Rạp chiếu TV & Hàng chờ video YouTube">🎬<span id="queueCount" class="mini-badge">0</span></button>
+  <button id="btnChatHistoryTop" class="dock-btn" title="Mở lịch sử trò chuyện (Chat History)">💬 Chat<span id="unreadChatBadge" class="mini-badge hidden">0</span></button>
   <button id="btnSettings" class="dock-btn" title="Cài đặt chuột, Voice Chat, Mật khẩu & Quản lý thành viên">⚙️</button>
   <button id="btnCloseRoomTop" class="dock-btn danger-btn hidden" title="Đóng phòng hiện tại (Chỉ Chủ phòng)">🛑 Đóng phòng</button>
 </div>
@@ -169,8 +170,11 @@
 
 <!-- Chat Box -->
 <div id="chat">
-  <div id="chatLog"></div>
-  <input id="chatIn" maxlength="140" placeholder="Nhấn Enter để chat…">
+  <div id="chatLog" title="Nhấp vào để xem toàn bộ lịch sử trò chuyện"></div>
+  <div class="chat-input-row">
+    <input id="chatIn" maxlength="140" placeholder="Nhấn Enter để chat…">
+    <button id="btnOpenChatHistory" class="chat-history-btn" title="Mở lịch sử trò chuyện (Chat History)">💬</button>
+  </div>
 </div>
 
 <!-- 3D CSS Stage for projecting YouTube Player directly onto the 3D Cinema Screen -->
@@ -413,6 +417,29 @@
     <div class="row">
       <button id="btnConfirmPass" class="primary" style="flex:1">🔓 Vào phòng</button>
       <button id="btnCancelPass">Hủy</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG 11: Full Chat History & Room Messages -->
+<div id="dlgChatHistory" class="overlay hidden">
+  <div class="panel chat-history-panel">
+    <div class="chat-history-header">
+      <div>
+        <h2>💬 Lịch Sử Trò Chuyện</h2>
+        <p class="sub">Tất cả trao đổi trong phòng <b id="chatHistoryRoomName">#phong</b> (<span id="chatHistoryCount">0</span> tin nhắn)</p>
+      </div>
+      <button id="btnCloseChatHistory" data-close class="icon-chip" title="Đóng">✕</button>
+    </div>
+    <div class="chat-history-search">
+      <input id="inSearchChat" placeholder="🔍 Tìm kiếm tin nhắn theo nội dung hoặc tên người gửi…">
+    </div>
+    <div id="chatHistoryList" class="chat-history-list"></div>
+    <div class="chat-history-bottom">
+      <div class="row" style="width:100%">
+        <input id="chatHistoryIn" maxlength="140" style="flex:1" placeholder="Nhập tin nhắn rồi nhấn Enter…">
+        <button id="btnSendChatHistory" class="primary">Gửi</button>
+      </div>
     </div>
   </div>
 </div>
