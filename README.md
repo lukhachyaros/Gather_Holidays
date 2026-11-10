@@ -1,9 +1,12 @@
+
+
+
 # 🎉 Gather Holidays 3D
 
 Một không gian 3D tương tác nhiều người chơi chạy hoàn toàn trên trình duyệt để mọi người cùng đón lễ hội: đi dạo, ngắm cảnh, tương tác, viết thiệp, trang trí map theo chủ đề và xem YouTube chung. **Không cần server backend, không cần build** — chạy bằng HTML, WebGL (three.js) và P2P WebRTC.
 
 ## Tính năng
-- 🎮 **2 góc nhìn kiểu game 3D (như PUBG):**
+- 🎮 **2 góc nhìn:**
   - **Góc nhìn thứ ba (TPS):** Camera bám sau lưng nhân vật, tự né tường/vật cản.
   - **Góc nhìn thứ nhất (FPS):** Nhìn qua mắt nhân vật, tâm ngắm giữa màn hình.
   - Phím **V** để chuyển nhanh giữa 2 góc nhìn. Phím **L** để khoá/mở chuột (Pointer Lock).
@@ -12,19 +15,18 @@ Một không gian 3D tương tác nhiều người chơi chạy hoàn toàn trê
   - Model 3D nhân vật đầy đủ bộ khung xương và animation (Idle, Walk, Run, Jump).
   - Tự đổi màu nhân vật theo avatar bạn chọn để dễ phân biệt.
 - 🤝 **Tương tác trực tiếp:**
-  - Nhắm vào người chơi khác rồi click chuột hoặc bấm phím **E** khi đứng gần để mở menu tương tác: Vẫy tay (Wave), Nhảy múa ăn mừng (Dance), Đập tay (Thumbs up), Tặng quà (Yes/gift), Gửi thiệp riêng.
+  - Nhắm vào người chơi khác rồi click chuột hoặc bấm phím **E** khi đứng gần để mở menu tương tác:
+  - Vẫy tay (Wave)
+  - Nhảy múa ăn mừng (Dance)
+  - Đập tay (Thumbs up)
+  - Tặng quà (Yes/gift), Gửi thiệp riêng.
   - Phím tắt nhanh `1` - `4` để phát emote chuyển động tức thì.
   - Chat bong bóng thoại nổi trên đầu nhân vật và thanh chat góc dưới.
 - 💌 **Viết thiệp lễ hội:**
   - Gửi riêng cho bạn bè trong phòng hoặc **ghim trực tiếp lên map 3D** thành hình phong thư 💌 bay bổng. Người khác có thể lại gần bấm xem và lưu vào hộp thư cá nhân (`localStorage`).
 - 🎨 **Trang trí 3D theo từng mùa lễ:**
   - 6 chủ đề: 🎃 Halloween, 🎄 Giáng sinh, 🧧 Tết Nguyên Đán, 🥮 Trung thu, 🎆 Năm mới, 💝 Valentine.
-  - Bật thanh trang trí, chọn món đồ và click vào nền map để đặt mô hình 3D (cây thông, bí ngô phát sáng, lồng đèn đỏ, bao lì xì, hoa mai, pháo hoa, người tuyết, quà...).
   - Hiệu ứng hạt bay 3D đặc trưng: tuyết rơi, hoa mai, cánh hoa hồng, dơi đêm...
-- 🛠️ **Admin Builder & Chế độ vẽ map:**
-  - Chọn ô vẽ trong Admin -> Camera tự động chuyển góc nhìn từ trên cao (Top-down) để admin dễ dàng kéo chuột tạo tường, sàn, hồ nước, thảm, màn hình lớn.
-  - Xuất/nhập bản đồ dưới dạng file `map.json`.
-  - Phân quyền cho phép/khoá tính năng trang trí và điều khiển video của khách.
 - 🎵 **Rạp chiếu YouTube đồng bộ:**
   - Dán link video/nhạc YouTube, cả phòng sẽ cùng xem và nghe đồng thời theo thời gian thực. Màn hình ảo hiển thị trên map 3D kèm khung video trực quan.
 
@@ -33,7 +35,6 @@ Mở thư mục bằng bất kỳ static web server nào (do các ES module và 
 ```bash
 python3 -m http.server 8080   # rồi mở http://localhost:8080 trên trình duyệt
 ```
-Hoặc dùng `npx serve`, extension Live Server trong VS Code.
 
 ### Triển khai lên GitHub Pages
 Dự án đã tích hợp sẵn GitHub Actions workflow `.github/workflows/pages.yml`.
