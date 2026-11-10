@@ -126,6 +126,7 @@
     <div><kbd>2</kbd> 🤝 Bắt tay</div>
     <div><kbd>3</kbd> 🤗 Ôm ấm áp</div>
     <div><kbd>4</kbd> 🍬/🧧 Tương tác lễ hội</div>
+    <div><kbd>K</kbd> / <kbd>I</kbd> Cuộn TV xuống/lên</div>
     <div><kbd>B</kbd> ⚡ Bỏ qua QC TV</div>
   </div>
 </div>
@@ -136,6 +137,12 @@
   <button id="btnResetCostume" class="badge-btn hidden">🧑 Về trang phục thường</button>
   <button id="btnLeaveSeat" class="badge-btn info hidden">🪑 Đứng dậy (Space)</button>
   <button id="btnTvScrollHint" class="badge-btn info hidden" title="Bấm hoặc nhấn phím L để mở chuột tự do, sau đó di chuột vào màn hình TV để cuộn & bấm">🖱️ Phím [L]: Mở chuột cuộn TV</button>
+  <div id="tvWebControls" class="badge-group hidden">
+    <span>📺 Web TV:</span>
+    <button id="btnTvScrollDown" class="badge-btn info" title="Cuộn trang web xuống phía dưới để xem video (Phím K)">🔽 Cuộn xuống video (K)</button>
+    <button id="btnTvScrollUp" class="badge-btn" title="Cuộn trang web lên phía trên (Phím I)">🔼 Cuộn lên (I)</button>
+    <button id="btnTvFullscreen" class="badge-btn primary" title="Mở website toàn màn hình để dễ xem và bấm">🖥️ Mở to toàn màn hình</button>
+  </div>
   <button id="btnQuickBypassAd" class="badge-btn warn hidden" title="Bấm hoặc nhấn phím B để bỏ qua quảng cáo trên màn hình TV">⚡ Bỏ qua Quảng cáo TV (Phím B)</button>
   <div id="heldBadge" class="badge-pill hidden"></div>
   <div id="campfireBar" class="badge-group hidden">
@@ -259,6 +266,8 @@
     </div>
     <div id="nowPlayingBox" class="queue-now"></div>
     <div class="row">
+      <button id="mediaScrollDown" class="info hidden" title="Cuộn trang web xuống để đưa video ra giữa màn hình TV">🔽 Cuộn xuống Video (K)</button>
+      <button id="mediaFullscreen" class="primary hidden" title="Mở trang web toàn màn hình để dễ xem và bấm">🖥️ Mở to toàn màn hình</button>
       <button id="mediaBypassAd" class="info" title="Tự động bỏ qua quảng cáo đang chạy trên TV">⚡ Bỏ qua Quảng cáo (B)</button>
       <button id="mediaSkip" class="warn" disabled>⏭ Skip qua bài tiếp</button>
       <button id="mediaMute">🔊 Bật/Tắt tiếng</button>

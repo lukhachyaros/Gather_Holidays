@@ -1117,6 +1117,15 @@ function applyOp(op, senderId = null) {
       else toast('⏹ Đã phát hết danh sách chờ video');
       break;
     }
+    case 'tvScroll': {
+      if (state?.mediaCurrent?.kind === 'web') {
+        const box = $('mediaBox');
+        if (box && senderId !== net?.selfId) {
+          box.scrollTo({ top: Math.max(0, op.y || 0), behavior: 'smooth' });
+        }
+      }
+      break;
+    }
   }
   state.v = Math.max(state.v || 0, op.v || 0);
   if (isHost() && state) {
@@ -1453,6 +1462,50 @@ $('mediaHide').onclick = () => {
   toast(h ? '📺 Đã ẩn video trên màn hình lớn' : '📺 Đã hiện video trên màn hình lớn');
 };
 
+let lastTvScrollSync = 0;
+function scrollTv(deltaY) {
+  const box = $('mediaBox');
+  if (!box || state?.mediaCurrent?.kind !== 'web') return;
+  const nextY = Math.max(0, box.scrollTop + deltaY);
+  box.scrollTo({ top: nextY, behavior: 'smooth' });
+  const now = Date.now();
+  if (now - lastTvScrollSync > 250) {
+    lastTvScrollSync = now;
+    emitOp({ k: 'tvScroll', y: nextY });
+  }
+}
+function scrollTvToTop() {
+  const box = $('mediaBox');
+  if (!box) return;
+  box.scrollTo({ top: 0, behavior: 'smooth' });
+  emitOp({ k: 'tvScroll', y: 0 });
+}
+
+// Direct wheel listener on mediaBox for 100% reliable mouse wheel scroll on 3D TV screen
+$('mediaBox')?.addEventListener(
+  'wheel',
+  e => {
+    if (state?.mediaCurrent?.kind === 'web') {
+      e.preventDefault();
+      scrollTv(e.deltaY * 1.5);
+    }
+  },
+  { passive: false }
+);
+
+$('btnTvScrollDown').onclick = () => scrollTv(450);
+$('btnTvScrollUp').onclick = () => scrollTv(-450);
+$('mediaScrollDown').onclick = () => scrollTv(450);
+$('btnTvFullscreen').onclick = () => {
+  if (state?.mediaCurrent?.url) openTvBrowser(state.mediaCurrent.url);
+};
+$('mediaFullscreen').onclick = () => {
+  if (state?.mediaCurrent?.url) {
+    $('dlgMedia').classList.add('hidden');
+    openTvBrowser(state.mediaCurrent.url);
+  }
+};
+
 // ---------- Topbar, Settings, Pointer Lock, Costume & Campfire Buttons ----------
 const openDialog = id => {
   document.exitPointerLock?.();
@@ -1692,12 +1745,16 @@ function updateStatusBadges() {
   $('btnQuickBypassAd')?.classList.toggle('hidden', !state?.mediaCurrent?.vid || state.mediaCurrent.kind === 'web');
 
   const hasTv = !!state?.mediaCurrent?.vid;
+  const isWeb = state?.mediaCurrent?.kind === 'web';
   const isLocked = !!document.pointerLockElement;
   const hintBtn = $('btnTvScrollHint');
   if (hintBtn) {
     hintBtn.classList.toggle('hidden', !hasTv);
     hintBtn.textContent = isLocked ? '🖱️ Phím [L]: Mở chuột cuộn TV' : '🖱️ Chuột tự do: Di vào TV để cuộn & bấm';
   }
+  $('tvWebControls')?.classList.toggle('hidden', !isWeb);
+  $('mediaScrollDown')?.classList.toggle('hidden', !isWeb);
+  $('mediaFullscreen')?.classList.toggle('hidden', !isWeb);
 
   const hb = $('heldBadge');
   if (me.heldItem) {
@@ -1923,6 +1980,8 @@ addEventListener('keydown', e => {
   if (k === 'v') toggleView();
   else if (k === 'l') togglePointerLock();
   else if (k === 'h') $('hud').classList.toggle('hidden');
+  else if (k === 'k' && state?.mediaCurrent?.kind === 'web') scrollTv(450);
+  else if (k === 'i' && state?.mediaCurrent?.kind === 'web') scrollTv(-450);
   else if (k === 'b' && state?.mediaCurrent?.vid && state.mediaCurrent.kind !== 'web') triggerBypassAd();
   else if (k === 'alt' && document.pointerLockElement) document.exitPointerLock?.();
   else if (k === 'e') triggerInteract(activeTarget);

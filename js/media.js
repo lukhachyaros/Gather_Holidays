@@ -28,9 +28,11 @@ const webEl = () => document.getElementById('webTv');
 
 function setSurface(kind) {
   const w = webEl(),
-    y = ytEl();
+    y = ytEl(),
+    box = document.getElementById('mediaBox');
   if (w) w.style.display = kind === 'web' ? 'block' : 'none';
   if (y) y.style.display = kind === 'web' ? 'none' : 'block';
+  if (box && kind === 'yt') box.scrollTop = 0;
 }
 
 // Completely stop & clear the shared TV (used when leaving / closing / being kicked out of a room)
