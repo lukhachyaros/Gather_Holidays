@@ -73,6 +73,10 @@ function initRtc(selfId) {
   });
 }
 
+// Unlock remote WebRTC audio playback on user gesture
+window.addEventListener('pointerdown', () => rtc?.unlockAudioPlayback(), { passive: true });
+window.addEventListener('keydown', () => rtc?.unlockAudioPlayback(), { passive: true });
+
 function updateMicUI(isEnabled) {
   const btn = $('btnMic');
   if (btn) {
@@ -1033,6 +1037,7 @@ function renderSettingsModal() {
 // ---------- Network Handlers ----------
 async function addOrUpdatePeer(id, d) {
   if (state?.kickedIds?.includes(id)) return;
+  rtc?.getOrCreatePeer(id);
   let p = peers.get(id);
   const isNew = !p;
   if (!p) {
@@ -1078,7 +1083,10 @@ async function addOrUpdatePeer(id, d) {
   p.av.setHeldItem(p.heldItem);
   scene.add(p.av.root);
   p.loading = false;
-  if (isNew) toast(`👋 ${p.name} đã tham gia phòng!`);
+  if (isNew) {
+    toast(`👋 ${p.name} đã tham gia phòng!`);
+    logChat('🔔 Hệ thống', `${p.name} đã tham gia phòng!`, { isSystem: true });
+  }
 }
 
 const handlers = {
@@ -1113,6 +1121,7 @@ const handlers = {
     const p = peers.get(id);
     if (p) {
       toast(`${p.name} đã rời phòng`);
+      logChat('🔔 Hệ thống', `${p.name} đã rời phòng.`, { isSystem: true });
       if (p.av) scene.remove(p.av.root);
     }
     peers.delete(id);
@@ -1135,6 +1144,7 @@ const handlers = {
   },
   hello(d, id) {
     addOrUpdatePeer(id, d);
+    rtc?.getOrCreatePeer(id);
   },
   rtc_signal(d, id) {
     rtc?.handleSignal(id, d);
@@ -1198,7 +1208,7 @@ const handlers = {
     const p = peers.get(id);
     if (p) {
       p.av?.say(d.t);
-      logChat(p.name, d.t);
+      logChat(p.name, d.t, { fromId: id, hue: d.hue || p.hue });
     }
   },
   emote(d, id) {
@@ -1447,28 +1457,178 @@ function updateLiveStats() {
   renderSettingsModal();
 }
 
-// ---------- Chat, Emotes & Greeting Cards ----------
-function logChat(name, t) {
-  const d = document.createElement('div');
-  d.textContent = `${name}: ${t}`;
-  const l = $('chatLog');
-  l.appendChild(d);
-  while (l.children.length > 7) l.firstChild.remove();
-  setTimeout(() => d.remove(), 18000);
+// ---------- Chat, Chat History & Emotes ----------
+const chatHistory = [];
+let unreadChatCount = 0;
+
+function formatChatTime(date = new Date()) {
+  const h = String(date.getHours()).padStart(2, '0');
+  const m = String(date.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function logChat(name, text, { isSystem = false, hue = null, fromId = null } = {}) {
+  const isMe = name === me?.name;
+  const item = {
+    id: uid(),
+    time: formatChatTime(),
+    name,
+    text,
+    isMe,
+    isSystem,
+    hue: hue ?? (isMe ? me?.hue : (peers.get(fromId)?.hue || hueFor(name))),
+  };
+
+  chatHistory.push(item);
+  if (chatHistory.length > 500) chatHistory.shift();
+
+  // 1. Render in bottom-left floating HUD log
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble' + (isSystem ? ' system' : '');
+  const nameSpan = document.createElement('b');
+  nameSpan.textContent = name + ': ';
+  if (!isSystem && item.hue !== undefined) {
+    nameSpan.style.color = `hsl(${item.hue}, 80%, 72%)`;
+  }
+  bubble.appendChild(nameSpan);
+  bubble.appendChild(document.createTextNode(text));
+
+  const logBox = $('chatLog');
+  if (logBox) {
+    logBox.appendChild(bubble);
+    while (logBox.children.length > 10) logBox.firstChild.remove();
+    setTimeout(() => {
+      if (bubble.parentNode) {
+        bubble.style.opacity = '0';
+        setTimeout(() => bubble.remove(), 400);
+      }
+    }, 28000);
+  }
+
+  // 2. Update Chat History modal if open or update unread badge if closed
+  const dlgOpen = !$('dlgChatHistory')?.classList.contains('hidden');
+  if (dlgOpen) {
+    appendChatHistoryItem(item);
+  } else if (!isMe) {
+    unreadChatCount++;
+    const badge = $('unreadChatBadge');
+    if (badge) {
+      badge.textContent = unreadChatCount;
+      badge.classList.remove('hidden');
+    }
+  }
+
+  const countEl = $('chatHistoryCount');
+  if (countEl) countEl.textContent = chatHistory.length;
+}
+
+function appendChatHistoryItem(item) {
+  const list = $('chatHistoryList');
+  if (!list) return;
+
+  const emptyHint = list.querySelector('.hint');
+  if (emptyHint) emptyHint.remove();
+
+  const el = document.createElement('div');
+  el.className = 'chat-history-item' + (item.isMe ? ' is-me' : '') + (item.isSystem ? ' system' : '');
+
+  const meta = document.createElement('div');
+  meta.className = 'chat-item-meta';
+
+  const timeEl = document.createElement('span');
+  timeEl.className = 'chat-item-time';
+  timeEl.textContent = `[${item.time}]`;
+
+  const nameEl = document.createElement('span');
+  nameEl.className = 'chat-item-name';
+  nameEl.textContent = item.name + (item.isMe ? ' (Bạn)' : '');
+  if (!item.isSystem && item.hue !== undefined) {
+    nameEl.style.color = `hsl(${item.hue}, 80%, 75%)`;
+  }
+
+  meta.appendChild(timeEl);
+  meta.appendChild(nameEl);
+
+  const textEl = document.createElement('div');
+  textEl.className = 'chat-item-text';
+  textEl.textContent = item.text;
+
+  el.appendChild(meta);
+  el.appendChild(textEl);
+  list.appendChild(el);
+
+  list.scrollTop = list.scrollHeight;
+}
+
+function renderChatHistory(filterText = '') {
+  const list = $('chatHistoryList');
+  if (!list) return;
+  list.innerHTML = '';
+
+  const q = (filterText || '').trim().toLowerCase();
+  const filtered = q
+    ? chatHistory.filter(i => i.text.toLowerCase().includes(q) || i.name.toLowerCase().includes(q))
+    : chatHistory;
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="hint" style="text-align:center;padding:25px">${
+      q ? 'Không tìm thấy tin nhắn phù hợp.' : 'Chưa có tin nhắn nào trong phòng. Hãy bắt đầu trò chuyện! 👋'
+    }</div>`;
+    return;
+  }
+
+  filtered.forEach(item => appendChatHistoryItem(item));
+}
+
+function openChatHistory() {
+  unreadChatCount = 0;
+  $('unreadChatBadge')?.classList.add('hidden');
+  if ($('chatHistoryRoomName')) $('chatHistoryRoomName').textContent = roomTitle || roomName || 'Phòng hiện tại';
+  if ($('chatHistoryCount')) $('chatHistoryCount').textContent = chatHistory.length;
+  openDialog('dlgChatHistory');
+  renderChatHistory($('inSearchChat')?.value || '');
+  setTimeout(() => $('chatHistoryIn')?.focus(), 60);
+}
+
+function sendChatMessage(text) {
+  const t = (text || '').trim();
+  if (!t || !me) return;
+  me.av?.say(t);
+  logChat(me.name, t, { isMe: true, hue: me.hue });
+  net?.send('chat', { t, hue: me.hue });
 }
 
 $('chatIn').addEventListener('keydown', e => {
   e.stopPropagation();
   if (e.key === 'Enter' && e.target.value.trim()) {
-    const t = e.target.value.trim();
-    me.av?.say(t);
-    logChat(me.name, t);
-    net.send('chat', { t });
+    sendChatMessage(e.target.value);
     e.target.value = '';
     e.target.blur();
   }
   if (e.key === 'Escape') e.target.blur();
 });
+
+$('chatLog').onclick = () => openChatHistory();
+$('btnOpenChatHistory').onclick = () => openChatHistory();
+$('btnChatHistoryTop').onclick = () => openChatHistory();
+
+$('chatHistoryIn').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Enter' && e.target.value.trim()) {
+    sendChatMessage(e.target.value);
+    e.target.value = '';
+  }
+});
+$('btnSendChatHistory').onclick = () => {
+  if ($('chatHistoryIn').value.trim()) {
+    sendChatMessage($('chatHistoryIn').value);
+    $('chatHistoryIn').value = '';
+    $('chatHistoryIn').focus();
+  }
+};
+$('inSearchChat').oninput = e => {
+  renderChatHistory(e.target.value);
+};
 
 const saveInbox = () => {
   localStorage.setItem('gh_inbox', JSON.stringify(inbox.slice(0, 50)));

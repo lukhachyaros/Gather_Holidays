@@ -130,7 +130,13 @@ export class RtcManager {
         audioTrack.enabled = true;
         for (const [peerId, peer] of this.peers.entries()) {
           try {
-            peer.pc.addTrack(audioTrack, stream);
+            const senders = peer.pc.getSenders();
+            const existing = senders.find(s => s.track && s.track.kind === 'audio');
+            if (existing) {
+              existing.replaceTrack(audioTrack);
+            } else {
+              peer.pc.addTrack(audioTrack, stream);
+            }
           } catch (e) {
             console.warn(`[RTC] Failed to add audio track to peer ${peerId}:`, e);
           }
@@ -400,47 +406,48 @@ export class RtcManager {
   setupRemoteAudioGraph(peerData) {
     if (!this.audioCtx) return;
     try {
-      const gainNode = this.audioCtx.createGain();
-      gainNode.gain.value = this.masterVoiceVolume;
-
       const analyser = this.audioCtx.createAnalyser();
       analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.4;
-
-      gainNode.connect(analyser);
-      analyser.connect(this.audioCtx.destination);
-
-      peerData.audioGain = gainNode;
       peerData.analyser = analyser;
     } catch (e) {
-      console.warn('[RTC] Audio graph setup error:', e);
+      console.warn('[RTC] Audio analyser setup error:', e);
     }
   }
 
   attachRemoteAudioTrack(peerData, stream, track) {
-    // 1. Web Audio graph for 3D spatial attenuation & VAD
-    if (this.audioCtx && peerData.audioGain) {
+    // 1. Resume AudioContext if suspended
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
+
+    // 2. Connect to Web Audio Analyser for VAD (Voice Activity Detection)
+    if (this.audioCtx && peerData.analyser) {
       try {
         const source = this.audioCtx.createMediaStreamSource(stream);
-        source.connect(peerData.audioGain);
+        source.connect(peerData.analyser);
       } catch (e) {
         console.warn('[RTC] MediaStreamSource connection warning:', e);
       }
     }
 
-    // 2. Fallback HTMLAudioElement to ensure sound keeps playing across browsers
-    if (!peerData.audioEl) {
-      const audio = document.createElement('audio');
+    // 3. Native HTMLAudioElement attached to DOM as Primary, 100% Reliable Audio Output
+    let audio = peerData.audioEl;
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.id = `gh-voice-${peerData.peerId}`;
       audio.autoplay = true;
       audio.playsInline = true;
-      audio.srcObject = stream;
-      audio.volume = this.audioCtx ? 0 : this.masterVoiceVolume; // If WebAudio connects to destination, mute fallback to prevent echo
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
       peerData.audioEl = audio;
-      audio.play().catch(() => {});
-    } else {
-      peerData.audioEl.srcObject = stream;
-      peerData.audioEl.play().catch(() => {});
     }
+
+    audio.srcObject = stream;
+    audio.volume = this.masterVoiceVolume;
+    audio.play().catch(err => {
+      console.warn('[RTC] Audio autoplay waiting for user interaction:', err);
+    });
 
     this.startVadLoop();
   }
@@ -483,11 +490,6 @@ export class RtcManager {
     const peer = this.peers.get(peerId);
     if (!peer) return;
 
-    if (peer.audioGain) {
-      try {
-        peer.audioGain.disconnect();
-      } catch {}
-    }
     if (peer.analyser) {
       try {
         peer.analyser.disconnect();
@@ -512,10 +514,10 @@ export class RtcManager {
   // -------------------------------------------------------------
   // Called every animation frame with player's 3D coordinates
   updatePeerDistances(myPos, peerPositionsMap) {
-    if (!this.audioCtx || !this.peers.size) return;
+    if (!this.peers.size) return;
 
     for (const [peerId, peer] of this.peers.entries()) {
-      if (!peer.audioGain) continue;
+      if (!peer.audioEl) continue;
 
       let volume = this.masterVoiceVolume;
 
@@ -534,23 +536,46 @@ export class RtcManager {
         }
       }
 
+      const clampedVol = Math.max(0, Math.min(1, volume));
       try {
-        peer.audioGain.gain.setValueAtTime(Math.max(0, Math.min(1, volume)), this.audioCtx.currentTime + 0.05);
+        if (Math.abs(peer.audioEl.volume - clampedVol) > 0.02) {
+          peer.audioEl.volume = clampedVol;
+        }
       } catch {}
+    }
+  }
+
+  unlockAudioPlayback() {
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
+    for (const peer of this.peers.values()) {
+      if (peer.audioEl && peer.audioEl.paused && peer.audioEl.srcObject) {
+        peer.audioEl.play().catch(() => {});
+      }
     }
   }
 
   setProximityEnabled(enabled) {
     this.proximityEnabled = !!enabled;
+    if (!this.proximityEnabled) {
+      for (const peer of this.peers.values()) {
+        if (peer.audioEl) {
+          try {
+            peer.audioEl.volume = this.masterVoiceVolume;
+          } catch {}
+        }
+      }
+    }
   }
 
   setMasterVoiceVolume(val) {
     this.masterVoiceVolume = Math.max(0, Math.min(1, val));
-    if (!this.proximityEnabled) {
-      for (const peer of this.peers.values()) {
-        if (peer.audioGain && this.audioCtx) {
-          peer.audioGain.gain.setValueAtTime(this.masterVoiceVolume, this.audioCtx.currentTime + 0.02);
-        }
+    for (const peer of this.peers.values()) {
+      if (peer.audioEl && !this.proximityEnabled) {
+        try {
+          peer.audioEl.volume = this.masterVoiceVolume;
+        } catch {}
       }
     }
   }
