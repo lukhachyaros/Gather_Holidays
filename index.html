@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gather Holidays 🎃🎄🧧</title>
+<title>Gather Holidays 3D 🎄🎃🧧</title>
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">
 { "imports": {
@@ -13,69 +13,307 @@
 </script>
 </head>
 <body>
-<!-- Landing -->
+<!-- Lobby / Room Browser Overlay -->
 <div id="landing" class="overlay">
-  <div class="panel">
-    <h1>🎉 Gather Holidays</h1>
-    <p class="sub">Cùng nhau đón lễ hội — đi dạo, trang trí, gửi thiệp, xem YouTube chung.</p>
-    <label>Tên của bạn <input id="inName" maxlength="16" placeholder="Tên hiển thị"></label>
-    <div id="avatars" class="avatars"></div>
-    <label>Mã phòng <input id="inRoom" maxlength="24" placeholder="vd: halloween-party"></label>
-    <label>Chủ đề (khi tạo phòng mới) <select id="inTheme"></select></label>
-    <label>Mật khẩu admin (tuỳ chọn, để build map) <input id="inAdmin" type="password" placeholder="Bỏ trống nếu không cần"></label>
-    <button id="btnJoin" class="primary">Vào phòng</button>
-    <p class="hint">Chưa có ai trong phòng? Bạn sẽ là người tạo phòng. Chia sẻ link để bạn bè vào.</p>
+  <div class="panel lobby-panel">
+    <div class="lobby-header">
+      <div>
+        <h1>🎉 Gather Holidays 3D</h1>
+        <p class="sub">Sảnh chờ trực tuyến — Chọn phòng đang mở để giao lưu cùng mọi người hoặc tự tạo phòng riêng.</p>
+      </div>
+      <div class="lobby-profile">
+        <label class="inline-label">
+          <span>👤 Tên của bạn</span>
+          <input id="inName" maxlength="16" placeholder="Nhập tên hiển thị…">
+        </label>
+        <button id="btnCloseLobby" class="hidden" title="Quay lại phòng đang chơi">✕ Đóng</button>
+      </div>
+    </div>
+
+    <div class="lobby-grid">
+      <!-- Left Column: Live Active Rooms List -->
+      <div class="lobby-rooms-col">
+        <div class="lobby-bar">
+          <div class="lobby-bar-title">
+            <span>🌐 Phòng đang sẵn có</span>
+            <span id="lobbyOnlineBadge" class="live-dot">● Trực tuyến</span>
+          </div>
+          <div class="lobby-filters">
+            <button class="filter-chip active" data-filter="all">Tất cả</button>
+            <button class="filter-chip" data-filter="christmas">🎄 Noel</button>
+            <button class="filter-chip" data-filter="halloween">🎃 Halloween</button>
+            <button class="filter-chip" data-filter="tet">🧧 Tết</button>
+            <button id="btnRefreshLobby" class="icon-chip" title="Làm mới danh sách phòng">🔄</button>
+          </div>
+        </div>
+        <div id="lobbyRoomList" class="lobby-room-list"></div>
+      </div>
+
+      <!-- Right Column: Create New Room (Public or Private with Password) -->
+      <div class="lobby-create-col">
+        <h3>➕ Tạo Phòng Mới</h3>
+        <p class="hint">Tạo không gian riêng cho nhóm bạn. Có thể đặt mật khẩu nếu muốn phòng riêng tư (Private).</p>
+        <label>Tên phòng hiển thị
+          <input id="inRoomTitle" maxlength="30" placeholder="vd: Xóm Đêm Giáng Sinh">
+        </label>
+        <label>Mã phòng (ID đường dẫn)
+          <input id="inRoom" maxlength="24" placeholder="vd: xom-giang-sinh">
+        </label>
+        <label>Chủ đề lễ hội
+          <select id="inTheme"></select>
+        </label>
+        <label>🔒 Mật khẩu phòng <span class="opt-tag">(Bỏ trống = Công khai)</span>
+          <input id="inRoomPass" type="password" maxlength="24" placeholder="Nhập mật khẩu nếu muốn Private…">
+        </label>
+        <button id="btnJoin" class="primary">🚀 Tạo & Vào Phòng</button>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- Game -->
+<!-- 3D Game Canvas -->
 <canvas id="game"></canvas>
-<div id="topbar">
-  <span id="roomInfo"></span>
-  <button id="btnCopy">🔗 Link</button>
-  <button id="btnView">📷 Đổi góc nhìn (V)</button>
-  <button id="btnCard">💌 Viết thiệp</button>
-  <button id="btnInbox">📬 <span id="inboxCount">0</span></button>
-  <button id="btnDecor">🎨 Trang trí</button>
-  <button id="btnMedia">🎵 Nhạc/Video</button>
-  <button id="btnAdmin">🛠️ Admin</button>
-</div>
-<div id="crosshair" class="hidden">+</div>
-<div id="hud"><b id="viewLabel"></b><br>WASD di chuyển · Shift chạy · Space nhảy · V góc nhìn · E tương tác · L khoá chuột · 1-4 emote<br>Kéo chuột để xoay camera <button id="btnStopBrush" class="hidden">Thoát chế độ vẽ</button></div>
-<div id="decorBar" class="bar hidden"></div>
-<div id="peerMenu" class="menu hidden"></div>
-<div id="chat"><div id="chatLog"></div><input id="chatIn" maxlength="140" placeholder="Nhấn Enter để chat…"></div>
-<div id="mediaBox" class="hidden"><div id="yt"></div></div>
 
-<!-- Dialogs -->
-<div id="dlgCard" class="overlay hidden"><div class="panel">
-  <h2>💌 Viết thiệp</h2>
-  <textarea id="cardText" maxlength="280" placeholder="Lời chúc của bạn…"></textarea>
-  <label>Kiểu thiệp <select id="cardStyle"></select></label>
-  <label>Gửi tới <select id="cardTo"></select></label>
-  <div class="row"><button id="cardSend" class="primary">Gửi / Treo</button><button data-close>Đóng</button></div>
-</div></div>
-<div id="dlgInbox" class="overlay hidden"><div class="panel"><h2>📬 Thiệp nhận được</h2><div id="inboxList"></div><button data-close>Đóng</button></div></div>
-<div id="dlgMedia" class="overlay hidden"><div class="panel">
-  <h2>🎵 Xem/nghe cùng nhau</h2>
-  <input id="mediaUrl" placeholder="Dán link YouTube">
-  <div class="row"><button id="mediaPlay" class="primary">▶ Phát</button><button id="mediaPause">⏸ Dừng</button><button id="mediaHide">Ẩn/Hiện</button></div>
-  <button data-close>Đóng</button>
-</div></div>
-<div id="dlgAdmin" class="overlay hidden"><div class="panel">
-  <h2>🛠️ Admin — Build map</h2>
-  <div id="adminLogin"><input id="adminPass" type="password" placeholder="Mật khẩu admin"><button id="adminGo" class="primary">Đăng nhập</button></div>
-  <div id="adminTools" class="hidden">
-    <label>Chủ đề phòng <select id="admTheme"></select></label>
-    <div id="brushes" class="brushes"></div>
-    <p class="hint">Chọn ô rồi <b>kéo chuột trên map</b> để vẽ. Đóng hộp thoại này để vẽ.</p>
-    <div class="row"><label>Rộng <input id="admW" type="number" min="8" max="80" value="28"></label><label>Cao <input id="admH" type="number" min="8" max="80" value="18"></label><button id="admResize">Đổi cỡ (xoá map)</button></div>
-    <label><input type="checkbox" id="admOpenDecor" checked> Cho mọi người trang trí</label>
-    <label><input type="checkbox" id="admOpenMedia" checked> Cho mọi người điều khiển nhạc/video</label>
-    <div class="row"><button id="admExport">⬇ Xuất map</button><button id="admImport">⬆ Nhập map</button><button id="admClearDecor">Xoá decor</button></div>
+<!-- Compact Top Navigation Dock -->
+<div id="topbar" class="top-dock">
+  <button id="btnLobby" class="dock-btn accent" title="Mở Sảnh chờ (Danh sách phòng & Đổi phòng)">🏠 Sảnh</button>
+  <span id="roomInfo" title="Phòng hiện tại & Quyền chủ phòng"></span>
+  <select id="topTheme" title="Chủ đề phòng (Chỉ chủ phòng mới đổi được)"></select>
+  <span class="dock-sep"></span>
+  <button id="btnCopy" class="dock-btn" title="Sao chép link mời bạn bè vào phòng này">🔗</button>
+  <button id="btnView" class="dock-btn" title="Đổi góc nhìn Thứ nhất / Thứ ba (Phím V)">🎥 TPS</button>
+  <button id="btnLock" class="dock-btn" title="Khóa/Mở con trỏ chuột (Phím L hoặc Chuột phải)">🔓</button>
+  <button id="btnCard" class="dock-btn" title="Viết thiệp chúc mừng">💌</button>
+  <button id="btnInbox" class="dock-btn" title="Hộp thư thiệp đã lưu">📬<span id="inboxCount" class="mini-badge">0</span></button>
+  <button id="btnMedia" class="dock-btn" title="Rạp chiếu TV & Hàng chờ video YouTube">🎬<span id="queueCount" class="mini-badge">0</span></button>
+  <button id="btnSettings" class="dock-btn" title="Cài đặt chuột, Mật khẩu & Quản lý thành viên">⚙️</button>
+  <button id="btnCloseRoomTop" class="dock-btn danger-btn hidden" title="Đóng phòng hiện tại (Chỉ Chủ phòng)">🛑 Đóng phòng</button>
+</div>
+
+<!-- Compact Top-Right Status Bar -->
+<div id="statsCorner">
+  <span id="statPlayers" title="Nhấn để xem danh sách người chơi & Quản lý phòng">👥 1</span>
+  <span class="sep">·</span>
+  <span id="statFps" title="Số khung hình/giây">⚡ 60 FPS</span>
+  <span class="sep">·</span>
+  <span id="lockLabel" title="Nhấn phím L hoặc Chuột phải để Khóa/Mở chuột">🔓 Tự do</span>
+  <button id="btnHelpToggle" class="help-btn" title="Ẩn/Hiện bảng hướng dẫn phím tắt (Phím H)">❓</button>
+</div>
+
+<!-- Collapsible Keybind Guide Popover (Hidden by default to keep UI clean) -->
+<div id="hud" class="hidden">
+  <div class="hud-head">
+    <b id="viewLabel">🎥 Góc nhìn thứ ba (TPS)</b>
+    <button id="btnHudClose" class="hud-close" title="Thu gọn">✕</button>
   </div>
-  <button data-close>Đóng</button>
-</div></div>
+  <div class="hud-grid">
+    <div><kbd>WASD</kbd> Di chuyển</div>
+    <div><kbd>Shift</kbd> Chạy nhanh</div>
+    <div><kbd>Space</kbd> Nhảy / Đứng dậy</div>
+    <div><kbd>E</kbd> Tương tác</div>
+    <div><kbd>V</kbd> Đổi góc nhìn</div>
+    <div><kbd>L</kbd> / <kbd>Chuột phải</kbd> Khóa chuột</div>
+    <div><kbd>1</kbd> 👋 Vẫy tay</div>
+    <div><kbd>2</kbd> 🤝 Bắt tay</div>
+    <div><kbd>3</kbd> 🤗 Ôm ấm áp</div>
+    <div><kbd>4</kbd> 🍬/🧧 Tương tác lễ hội</div>
+  </div>
+</div>
+
+<!-- Contextual Status & Action Buttons (Remove Pumpkin, Held Ornament, Campfire Actions, Cooldown) -->
+<div id="statusBadges">
+  <button id="btnRemovePumpkin" class="badge-btn warn hidden">🎃 Tháo bí ngô khỏi đầu</button>
+  <button id="btnResetCostume" class="badge-btn hidden">🧑 Về trang phục thường</button>
+  <button id="btnLeaveSeat" class="badge-btn info hidden">🪑 Đứng dậy (Space)</button>
+  <div id="heldBadge" class="badge-pill hidden"></div>
+  <div id="campfireBar" class="badge-group hidden">
+    <span>🔥 Lửa trại:</span>
+    <button id="btnRoast" class="badge-btn">🍡 Nướng Marshmallow</button>
+    <button id="btnCocoa" class="badge-btn">☕ Uống Ca cao nóng</button>
+  </div>
+  <div id="cooldownBadge" class="badge-pill cooldown hidden">⏳ Chờ 3.0s…</div>
+</div>
+
+<!-- Interactive Prompt Banner near Hotspots / Seats / Peers -->
+<div id="interactPrompt" class="hidden"></div>
+
+<div id="crosshair" class="hidden">+</div>
+<div id="peerMenu" class="menu hidden"></div>
+
+<!-- Chat Box -->
+<div id="chat">
+  <div id="chatLog"></div>
+  <input id="chatIn" maxlength="140" placeholder="Nhấn Enter để chat…">
+</div>
+
+<!-- 3D CSS Stage for projecting YouTube Player directly onto the 3D Cinema Screen -->
+<div id="css3d-stage">
+  <div id="css3d-camera">
+    <div id="mediaBox">
+      <div id="yt"></div>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG 1: Write Greeting Card -->
+<div id="dlgCard" class="overlay hidden">
+  <div class="panel">
+    <h2>💌 Viết Thiệp Lễ Hội</h2>
+    <textarea id="cardText" maxlength="280" placeholder="Viết lời chúc ấm áp của bạn…"></textarea>
+    <label>Phong cách thiệp <select id="cardStyle"></select></label>
+    <label>Nơi gửi <select id="cardTo"></select></label>
+    <div class="row">
+      <button id="cardSend" class="primary">✨ Gửi thiệp</button>
+      <button data-close>Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG 2: Personal Inbox -->
+<div id="dlgInbox" class="overlay hidden">
+  <div class="panel">
+    <h2>📬 Thiệp Đã Lưu</h2>
+    <div id="inboxList"></div>
+    <button data-close>Đóng</button>
+  </div>
+</div>
+
+<!-- DIALOG 3: Christmas Tree Stockings & Ornament Hang -->
+<div id="dlgStocking" class="overlay hidden">
+  <div class="panel">
+    <h2>🎄 Cây Thông Lớn & Tất Giáng Sinh 🧦</h2>
+    <p class="sub">Treo đồ trang trí lên cây thông hoặc đọc/bỏ thiệp chúc mừng vào những chiếc tất đỏ treo sẵn trên cây.</p>
+    <div class="row">
+      <button id="btnHangNow" class="primary hidden">🎄 Treo món đồ đang cầm lên cây</button>
+      <button id="btnWriteStocking" class="primary">🧦 Viết thiệp bỏ vào tất</button>
+    </div>
+    <h3>📜 Thiệp trong tất trên cây thông (<span id="stockingCount">0</span>)</h3>
+    <div id="stockingList" class="card-list"></div>
+    <button data-close>Đóng</button>
+  </div>
+</div>
+
+<!-- DIALOG 4: Christmas Ornament Pickup Table -->
+<div id="dlgOrnament" class="overlay hidden">
+  <div class="panel">
+    <h2>🎁 Bàn Đồ Trang Trí Cây Thông</h2>
+    <p class="sub">Chọn 1 món đồ trang trí để cầm trên tay, sau đó lại gần Cây Thông Lớn giữa map để treo lên nhé!</p>
+    <div id="ornamentGrid" class="grid-list"></div>
+    <button data-close>Đóng</button>
+  </div>
+</div>
+
+<!-- DIALOG 5: Halloween Costume Station -->
+<div id="dlgCostume" class="overlay hidden">
+  <div class="panel">
+    <h2>🎭 Tủ Hóa Trang Halloween</h2>
+    <p class="sub">Biến hình thành các nhân vật kinh điển của đêm lễ hội ma quái!</p>
+    <div id="costumeGrid" class="grid-list"></div>
+    <button data-close>Đóng</button>
+  </div>
+</div>
+
+<!-- DIALOG 6: Tet Lucky Money (Bao Li Xi) -->
+<div id="dlgLixi" class="overlay hidden">
+  <div class="panel lixi-panel">
+    <h2>🧧 Hái Lộc Đầu Xuân — Cây Mai Đại Thụ</h2>
+    <div id="lixiResult" class="lixi-box">
+      <div class="lixi-title" id="lixiTitle">🌸 Bao Lì Xì May Mắn</div>
+      <div class="lixi-detail" id="lixiDetail">Nhấn nút bên dưới để mở phong bao lì xì trên cành mai!</div>
+    </div>
+    <div class="row">
+      <button id="btnOpenAnotherLixi" class="primary">🧧 Hái bao lì xì khác</button>
+      <button data-close>Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG 7: Giant TV Cinema & Video Queue -->
+<div id="dlgMedia" class="overlay hidden">
+  <div class="panel">
+    <h2>🎬 Rạp Chiếu TV Lớn & Hàng Chờ Video</h2>
+    <p class="sub">Ngồi xuống các hàng ghế đơn hoặc ghế Couple trước màn hình lớn để thưởng thức cùng nhau!</p>
+    <div class="row">
+      <input id="mediaUrl" style="flex:1" placeholder="Dán link hoặc ID video YouTube…">
+      <button id="mediaAdd" class="primary">➕ Thêm vào phát</button>
+    </div>
+    <div id="nowPlayingBox" class="queue-now"></div>
+    <div class="row">
+      <button id="mediaSkip" class="warn" disabled>⏭ Skip qua video tiếp theo</button>
+      <button id="mediaMute">🔊 Bật/Tắt tiếng</button>
+      <button id="mediaReload">🔄 Tải lại</button>
+      <button id="mediaHide">📺 Ẩn/Hiện màn hình</button>
+    </div>
+    <h3>📋 Hàng chờ tiếp theo</h3>
+    <div id="queueList" class="queue-list"></div>
+    <button data-close>Đóng</button>
+  </div>
+</div>
+
+<!-- DIALOG 8: Mouse Settings, Password & Host Room Management -->
+<div id="dlgSettings" class="overlay hidden">
+  <div class="panel">
+    <h2>⚙️ Cài Đặt & Quản Lý Phòng</h2>
+
+    <h3>🖱️ Điều khiển Chuột & Camera</h3>
+    <label>
+      <span>Tốc độ chuột (Sensitivity): <b id="sensVal" style="color:#4ade80">1.0x</b></span>
+      <input id="mouseSens" type="range" min="0.2" max="3.0" step="0.1" value="1.0">
+    </label>
+    <label>
+      <span>Cơ chế khóa chuột (Pointer Lock)</span>
+      <select id="lockModeSel">
+        <option value="click">Tự động khóa khi click vào cảnh 3D (Chuẩn game 3D - khuyên dùng)</option>
+        <option value="manual">Chỉ khóa khi bấm phím L hoặc Chuột phải</option>
+      </select>
+    </label>
+
+    <div id="hostPasswordSection" class="hidden">
+      <h3>🔒 Bảo Mật Phòng (Chỉ Chủ Phòng)</h3>
+      <div class="row">
+        <input id="setRoomPassInput" type="password" maxlength="24" style="flex:1" placeholder="Nhập mật khẩu mới (Để trống = Mở công khai)…">
+        <button id="btnSaveRoomPass" class="info">Lưu mật khẩu</button>
+      </div>
+    </div>
+
+    <h3>👑 Chủ Phòng & Thành Viên (<span id="settingsPlayerCount">1</span>)</h3>
+    <div id="hostInfoBox" class="queue-now"></div>
+    <div id="playerList" class="queue-list"></div>
+    <div class="row" style="justify-content:space-between;margin-top:4px">
+      <div class="row">
+        <button id="btnOpenLobbyFromSettings" class="info">🏠 Về Sảnh Chờ Đổi Phòng</button>
+        <button id="btnCloseRoomSettings" class="danger-btn hidden">🛑 Đóng Phòng Giải Tán</button>
+      </div>
+      <button data-close>Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG 9: Kicked or Room Closed Notification -->
+<div id="dlgKicked" class="overlay hidden">
+  <div class="panel" style="text-align:center">
+    <h2 id="kickedTitle">🚫 Bạn đã bị mời ra khỏi phòng</h2>
+    <p class="sub" id="kickedMsg">Chủ phòng đã mời bạn rời khỏi phòng hiện tại.</p>
+    <button id="btnRejoinOther" class="primary">🏠 Về Sảnh Chờ Chọn Phòng Khác</button>
+  </div>
+</div>
+
+<!-- DIALOG 10: Password Prompt for Private Room -->
+<div id="dlgRoomPass" class="overlay hidden">
+  <div class="panel" style="width:min(390px,100%)">
+    <h2>🔒 Phòng Riêng Tư</h2>
+    <p class="sub" id="passRoomLabel">Phòng này yêu cầu mật khẩu để tham gia.</p>
+    <label>Mật khẩu phòng
+      <input id="joinPassInput" type="password" maxlength="24" placeholder="Nhập mật khẩu…">
+    </label>
+    <div id="joinPassErr" class="err-msg hidden">❌ Mật khẩu không chính xác, vui lòng thử lại!</div>
+    <div class="row">
+      <button id="btnConfirmPass" class="primary" style="flex:1">🔓 Vào phòng</button>
+      <button id="btnCancelPass">Hủy</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 <script type="module" src="js/game.js"></script>
 </body>
