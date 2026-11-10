@@ -102,6 +102,7 @@
   <button id="btnShareScreen" class="dock-btn" title="Chia sẻ màn hình máy tính lên TV lớn (Phím P)">🖥️ Chiếu TV</button>
   <button id="btnBgm" class="dock-btn bgm-active" title="Bật/Tắt Nhạc nền lễ hội (BGM)">🎵 Nhạc</button>
   <button id="btnMinigame" class="dock-btn minigame-btn" title="Chơi Minigame theo chủ đề phòng (Phím G)">🎮 Minigame</button>
+  <button id="btnEmotes" class="dock-btn emote-btn" title="Mở Bộ Emote Pack Meccha (Phím F)">🎭 Emotes [F]</button>
   <span class="dock-sep"></span>
   <button id="btnCopy" class="dock-btn icon-only" title="Sao chép link mời bạn bè vào phòng này">🔗</button>
   <button id="btnView" class="dock-btn" title="Đổi góc nhìn Thứ nhất / Thứ ba (Phím V)">🎥 TPS</button>
@@ -150,15 +151,13 @@
     <div><kbd>WASD</kbd> Di chuyển</div>
     <div><kbd>Shift</kbd> Chạy nhanh</div>
     <div><kbd>Space</kbd> Nhảy / Đứng dậy</div>
+    <div><kbd>F</kbd> 🎭 Bộ Emote Pack</div>
     <div><kbd>M</kbd> 🎙️ Bật/Tắt Micro nói</div>
     <div><kbd>P</kbd> 🖥️ Chiếu màn hình lên TV</div>
     <div><kbd>E</kbd> Tương tác</div>
     <div><kbd>V</kbd> Đổi góc nhìn</div>
     <div><kbd>L</kbd> / <kbd>Chuột phải</kbd> Khóa chuột</div>
-    <div><kbd>1</kbd> 👋 Vẫy tay</div>
-    <div><kbd>2</kbd> 🤝 Bắt tay</div>
-    <div><kbd>3</kbd> 🤗 Ôm ấm áp</div>
-    <div><kbd>4</kbd> 🍬/🧧 Tương tác lễ hội</div>
+    <div><kbd>1</kbd> - <kbd>8</kbd> Biểu cảm Emote</div>
     <div><kbd>G</kbd> 🎮 Chơi Minigame lễ hội</div>
     <div><kbd>K</kbd> / <kbd>I</kbd> Cuộn TV xuống/lên</div>
     <div><kbd>B</kbd> ⚡ Bỏ qua QC TV</div>
@@ -192,7 +191,13 @@
 <!-- Interactive Prompt Banner near Hotspots / Seats / Peers -->
 <div id="interactPrompt" class="hidden"></div>
 
-<div id="crosshair" class="hidden">+</div>
+<div id="crosshair" class="hidden">
+  <div class="ch-center-dot"></div>
+  <div class="ch-bar ch-top"></div>
+  <div class="ch-bar ch-bottom"></div>
+  <div class="ch-bar ch-left"></div>
+  <div class="ch-bar ch-right"></div>
+</div>
 <div id="peerMenu" class="menu hidden"></div>
 
 <!-- Chat Box -->
@@ -263,6 +268,91 @@
     <p class="sub">Chọn 1 món đồ trang trí để cầm trên tay, sau đó lại gần Cây Thông Lớn giữa map để treo lên nhé!</p>
     <div id="ornamentGrid" class="grid-list"></div>
     <button data-close>Đóng</button>
+  </div>
+</div>
+
+<!-- DIALOG: Meccha Chameleon Emote Pack (Phím F) -->
+<div id="dlgEmotes" class="overlay hidden">
+  <div class="panel emote-panel">
+    <div class="emote-modal-header">
+      <div>
+        <h2>🎭 MECCHA EMOTE PACK</h2>
+        <p class="sub">Nhấn phím <b>1 - 8</b> hoặc click chuột để biểu cảm ngay lập tức (Chuyển đổi tức thì ⚡)</p>
+      </div>
+      <button class="close-x-btn" data-close title="Đóng [F / Esc]">✕</button>
+    </div>
+
+    <div class="emote-grid">
+      <button class="emote-card" data-emote="flex" data-emoji="💪">
+        <span class="emote-key">1</span>
+        <span class="emote-icon">💪</span>
+        <b class="emote-name">Khoe Cơ Bắp</b>
+        <small class="emote-desc">Gồng cơ cuồn cuộn</small>
+      </button>
+
+      <button class="emote-card" data-emote="cheer_jump" data-emoji="🕺">
+        <span class="emote-key">2</span>
+        <span class="emote-icon">🕺</span>
+        <b class="emote-name">Nhảy Ăn Mừng</b>
+        <small class="emote-desc">Vui sướng giương tay</small>
+      </button>
+
+      <button class="emote-card" data-emote="starfish" data-emoji="⭐">
+        <span class="emote-key">3</span>
+        <span class="emote-icon">⭐</span>
+        <b class="emote-name">Sao Biển X</b>
+        <small class="emote-desc">Nhảy dang tay chân</small>
+      </button>
+
+      <button class="emote-card" data-emote="head_heart" data-emoji="🙆">
+        <span class="emote-key">4</span>
+        <span class="emote-icon">🙆</span>
+        <b class="emote-name">Tim Trên Đầu</b>
+        <small class="emote-desc">Bắn tim vòng tay chữ O</small>
+      </button>
+
+      <button class="emote-card" data-emote="despair" data-emoji="🙇">
+        <span class="emote-key">5</span>
+        <span class="emote-icon">🙇</span>
+        <b class="emote-name">Gục Ngã Despair</b>
+        <small class="emote-desc">Cúi đầu cowering OTL</small>
+      </button>
+
+      <button class="emote-card" data-emote="dab" data-emoji="😎">
+        <span class="emote-key">6</span>
+        <span class="emote-icon">😎</span>
+        <b class="emote-name">Dab Cực Ngầu</b>
+        <small class="emote-desc">Dab phong cách hip-hop</small>
+      </button>
+
+      <button class="emote-card" data-emote="lay_chill" data-emoji="🛌">
+        <span class="emote-key">7</span>
+        <span class="emote-icon">🛌</span>
+        <b class="emote-name">Nằm Chill</b>
+        <small class="emote-desc">Nằm nghiêng thư giãn</small>
+      </button>
+
+      <button class="emote-card" data-emote="kneel" data-emoji="🧎">
+        <span class="emote-key">8</span>
+        <span class="emote-icon">🧎</span>
+        <b class="emote-name">Quỳ Gối Seiza</b>
+        <small class="emote-desc">Lễ phép nghiêm túc</small>
+      </button>
+    </div>
+
+    <!-- Extra Quick Social Emotes -->
+    <div class="emote-extra-bar">
+      <span class="extra-label">Giao lưu nhanh:</span>
+      <button class="extra-emote-btn" data-emote="wave" data-emoji="👋">👋 Vẫy tay</button>
+      <button class="extra-emote-btn" data-emote="handshake" data-emoji="🤝">🤝 Bắt tay</button>
+      <button class="extra-emote-btn" data-emote="hug" data-emoji="🤗">🤗 Ôm</button>
+      <button class="extra-emote-btn" data-emote="scared" data-emoji="😱">😱 Hốt hoảng</button>
+    </div>
+
+    <div class="modal-footer" style="margin-top:14px;display:flex;justify-content:space-between;align-items:center">
+      <small style="color:#94a3b8">💡 Mẹo: Bấm phím <b>F</b> để mở/đóng bảng Emote siêu tốc!</small>
+      <button class="btn accent" data-close>Đóng</button>
+    </div>
   </div>
 </div>
 
