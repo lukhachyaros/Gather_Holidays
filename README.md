@@ -13,7 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 **Không gian lễ hội 3D trực tuyến đa người chơi chạy 100% trên trình duyệt.**  
-*Giao lưu, đi dạo, Voice Chat không gian 3D, chiếu màn hình máy tính & YouTube lên TV lớn, chơi Minigame PvP và viết thiệp chúc mừng cùng bạn bè mà không cần cài đặt hay server backend phức tạp.*
+*Giao lưu, đi dạo, Voice Chat không gian 3D, chiếu màn hình máy tính & YouTube lên TV lớn, chơi Minigame PvP, giải mã câu đố tìm Mật Thất Casino Hoàng Gia và viết thiệp chúc mừng cùng bạn bè mà không cần cài đặt hay server backend phức tạp.*
 
 [🎮 **Chơi Ngay Trên Web**](https://lukhachyaros.github.io/Gather_Holidays/) • [📖 **Hướng Dẫn Chạy Local**](#-hướng-dẫn-chạy-cục-bộ) • [⌨️ **Bảng Phím Tắt**](#️-bảng-phím-tắt-điều-khiển)
 
@@ -21,7 +21,7 @@
 
 ---
 
-## ✨ Điểm Nổi Bật & Tính Năng Chính
+## ✨ Điểm Nổi Bật & Tính Năng Mới
 
 <table>
   <tr>
@@ -44,6 +44,44 @@
   </tr>
   <tr>
     <td width="50%">
+      <h3>🎰 Mật Thất Casino Hoàng Gia (Secret Speakeasy)</h3>
+      <ul>
+        <li><b>Căn phòng bí mật ẩn giấu</b> dưới lòng đất, không hiển thị trên danh sách sảnh chờ công khai.</li>
+        <li>Mỗi bản đồ sở hữu một <b>cổng phong ấn và câu đố logic cổ xưa riêng biệt</b> để giải mã bước vào mật thất.</li>
+        <li>Đồng bộ đa người chơi (Multiplayer): Cả phòng cùng quan sát vòng quay Roulette, đường đua vịt Duck Derby, bàn Blackjack so điểm nhà cái, máy Slot kéo cần giật nổ hũ và Plinko thả bi sắc màu.</li>
+        <li>Hiệu ứng âm thanh chân thực, pháo hoa rực sáng và loa chúc mừng toàn server khi có người nổ Jackpot!</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>📜 Săn Mã Code Dán Tường & Kinh Tế Chip</h3>
+      <ul>
+        <li>Người chơi bắt đầu với <b>0 xu</b> trong ví và phải tự mình đi săn tìm các <b>mảnh giấy ghi chú dán bí mật</b> khắp 4 bản đồ theo phong cách <i>"Find the button"</i>.</li>
+        <li>Mỗi mảnh giấy chứa gợi ý giải đố ký tự và mã bí mật để nhận ngay 500 xu (hồi chiêu 10 phút mỗi mã).</li>
+        <li>Bấm phím <code>C</code> hoặc nhấp vào ví tiền để nhập mã đổi xu bất cứ lúc nào.</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>👑 Bộ Sưu Tập Danh Hiệu (Titles System)</h3>
+      <ul>
+        <li>Mở khóa các danh hiệu lấp lánh hiển thị trang trọng ngay trên đầu nhân vật.</li>
+        <li>Danh hiệu độc quyền <b>"Vua Đỏ Đen"</b> dành cho cao thủ chinh phục Jackpot cả 5 trò chơi casino.</li>
+        <li>Danh hiệu đặc biệt: <i>Bậc Thầy Đỏ Đen</i>, <i>Đại Phú Hào Las Vegas</i>, <i>Thợ Săn Mật Mã</i>, <i>Lễ Hội Vương</i>...</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>📱 Tối Ưu Hóa Điều Khiển Trên Di Động (Mobile)</h3>
+      <ul>
+        <li>Tự động nhận diện thiết bị cảm ứng và kích hoạt giao diện điều khiển chuyên dụng.</li>
+        <li><b>Cần điều khiển ảo (Virtual Analog Joystick):</b> Điều hướng WASD 360 độ mượt mà.</li>
+        <li><b>Cụm nút cảm ứng trực quan:</b> Nhảy vọt, Tương tác thông minh <code>[E]</code>, Bắn Minigame <code>[G]</code> và Menu Hoạt cảnh Emote <code>[F]</code>.</li>
+        <li>Vuốt màn hình xoay góc nhìn camera linh hoạt.</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
       <h3>🖥️ Rạp TV 3D & Chia Sẻ Màn Hình</h3>
       <ul>
         <li><b>Chiếu màn hình máy tính</b> (phím <code>P</code>) trực tiếp lên TV 3D cho cả phòng cùng xem.</li>
@@ -54,28 +92,10 @@
     <td width="50%">
       <h3>🎨 4 Đại Chủ Đề Lễ Hội Tuyệt Đẹp</h3>
       <ul>
-        <li>🎄 <b>Giáng Sinh:</b> Cây thông khổng lồ, lò sưởi nướng marshmallow, ném tuyết PvP.</li>
-        <li>🎃 <b>Halloween:</b> Đại bí ngô, quầy hóa trang, Boss Vampire rình mồi.</li>
-        <li>🧧 <b>Tết Cổ Truyền:</b> Cây mai đại thụ, hái lì xì may mắn, pháo múa lân.</li>
-        <li>💝 <b>Valentine:</b> Vườn tình yêu, ghế đôi couple sofa, cung Cupid ghép đôi.</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3>🎮 Minigame Độc Quyền & PvP Theo Mùa</h3>
-      <ul>
-        <li><b>Bắn Tuyết PvP & Cung Cupid:</b> Thanh máu (HP), khu an toàn (Safe Zone), bảng xếp hạng trực tiếp.</li>
-        <li><b>Boss Vampire:</b> Cơ chế AI bay rình vồ jumpscare kịch tính.</li>
-        <li>Bấm phím <code>G</code> để kích hoạt Minigame mọi lúc.</li>
-      </ul>
-    </td>
-    <td width="50%">
-      <h3>💌 Thiệp Lễ Hội & Tương Tác Xã Hội</h3>
-      <ul>
-        <li>Viết thiệp chúc mừng và ghim thành phong thư 3D bay bổng trên bản đồ.</li>
-        <li>Hộp thư lưu trữ thiệp cá nhân tiện lợi.</li>
-        <li>Cử động nhân vật (Emote) phong phú: vẫy tay, bắt tay, ôm ấm áp, xin kẹo, ném cà chua.</li>
+        <li>🎄 <b>Giáng Sinh:</b> Cây thông tuyết khổng lồ, lò sưởi nướng marshmallow, ném tuyết FPS.</li>
+        <li>🎃 <b>Halloween:</b> Đại bí ngô, quầy hóa trang, Boss Vampire rình rập và khu an toàn 3D.</li>
+        <li>🧧 <b>Tết Cổ Truyền:</b> Cây mai đại thụ, Kim Long pháo hoa rực rỡ mang tài lộc.</li>
+        <li>💝 <b>Valentine:</b> Vườn hoa tình yêu, ghế đôi couple sofa, bắn cung Cupid ngắm tâm crosshair.</li>
       </ul>
     </td>
   </tr>
@@ -87,16 +107,18 @@
 
 | Phím Tắt | Hành Động | Ghi Chú |
 |:---:|:---|:---|
-| <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> | Di chuyển nhân vật | Hỗ trợ cả 4 phím mũi tên và gõ tiếng Việt |
+| <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> | Di chuyển nhân vật | Hỗ trợ cả 4 phím mũi tên và bộ gõ tiếng Việt |
 | <kbd>Shift</kbd> (Giữ) | Chạy nhanh | Tăng tốc độ di chuyển gấp đôi |
 | <kbd>Space</kbd> | Nhảy / Đứng dậy | Nhảy vượt chướng ngại vật hoặc rời ghế ngồi |
 | <kbd>Chuột phải</kbd> / <kbd>L</kbd> | Khóa / Mở con trỏ chuột | Xoay camera mượt mà góc nhìn thứ 3 |
 | <kbd>V</kbd> | Chuyển đổi góc nhìn | Góc nhìn thứ 3 (TPS) ↔ Góc nhìn thứ nhất (FPS) |
-| <kbd>E</kbd> | Tương tác thông minh | Ngồi ghế, nhặt đồ trang trí, nướng kẹo, đọc thiệp, tương tác bạn bè |
+| <kbd>E</kbd> | Tương tác thông minh | Ngồi ghế, giải phong ấn mật thất, đọc mảnh giấy note, tương tác bạn bè |
+| <kbd>G</kbd> | Kích hoạt Minigame | Ném tuyết, bắn cung Cupid, bắn pháo Kim Long |
+| <kbd>F</kbd> | Menu Động Tác (Emotes) | Bật danh sách hoạt ảnh; bấm các phím từ 1-8 để duy trì tư thế |
+| <kbd>C</kbd> | Nhập Mã Code Bí Mật | Đổi 500 xu cờ bạc từ các note giấy tìm được |
+| <kbd>O</kbd> / <kbd>U</kbd> | Cài Đặt Âm Lượng & Độ Nhạy | Mở nhanh bảng tùy chỉnh âm thanh và chuột |
 | <kbd>M</kbd> | Bật / Tắt Microphone | Voice chat trực tiếp thời gian thực |
 | <kbd>P</kbd> | Chiếu màn hình lên TV | Chia sẻ màn hình máy tính / ứng dụng / tab trình duyệt |
-| <kbd>G</kbd> | Kích hoạt Minigame | Ném tuyết, bắn cung Cupid, đốt pháo múa lân |
-| <kbd>1</kbd> - <kbd>4</kbd> | Hoạt ảnh Emote nhanh | 1: Vẫy tay • 2: Bắt tay • 3: Ôm • 4: Tương tác theo mùa |
 | <kbd>Enter</kbd> | Nhập chat phòng | Bong bóng chat nổi trên đầu và khung chat lịch sử |
 
 ---
@@ -108,7 +130,7 @@ Vì ứng dụng tải các Three.js ES Modules và mô hình 3D, bạn cần m�
 ### Cách 1: Sử dụng Python (khuyên dùng, không cần cài thêm thư viện)
 ```bash
 # Mở terminal tại thư mục dự án Gather_Holidays
-python -m http.server 8080
+python3 -m http.server 8080
 ```
 Sau đó truy cập trên trình duyệt: [http://localhost:8080](http://localhost:8080)
 
@@ -123,24 +145,26 @@ npx serve .
 
 ```plaintext
 Gather_Holidays/
-├── assets/                  # Hình ảnh banner, logo và mô hình 3D
+├── assets/                  # Hình ảnh banner, logo, tranh phong ấn và mô hình 3D
 │   ├── logo.jpg             # Logo chính thức của Gather Holidays 3D
 │   ├── banner.jpg           # Ảnh bìa không gian lễ hội
+│   ├── pin_note.jpg         # Giấy note dán tường bí mật
 │   └── models/              # Mô hình nhân vật 3D
 ├── css/
-│   └── style.css            # Toàn bộ hiệu ứng, HUD dock tinh gọn, sảnh chờ và rạp chiếu
+│   └── style.css            # Hiệu ứng ánh sáng, HUD dock, giao diện Mobile & Casino Arcade
 ├── js/
-│   ├── game.js              # Vòng lặp game, quản lý input bàn phím/chuột, khởi tạo sảnh
-│   ├── avatar.js            # Khung xương nhân vật, animation, bong bóng chat DOM, VAD mic
-│   ├── world.js             # Dựng bối cảnh 3D Three.js, instanced mesh sàn/tường, collider
-│   ├── props.js             # Đồ vật 3D procedural (ghế đôi couple, TV rạp chiếu, cây thông...)
-│   ├── maps.js              # Bản đồ ma trận, vị trí chỗ ngồi và hotspot tương tác
+│   ├── game.js              # Vòng lặp game, quản lý input, tương tác mật thất & câu đố logic
+│   ├── casino.js            # Hệ thống 5 máy Arcade Casino, kinh tế xu, jackpot & broadcast
+│   ├── avatar.js            # Khung xương nhân vật, danh hiệu lấp lánh, hoạt ảnh emote
+│   ├── world.js             # Dựng bối cảnh 3D Three.js, phòng Casino Speakeasy, colliders
+│   ├── props.js             # Đồ vật 3D procedural (bàn Roulette, máy Slot, cây thông...)
+│   ├── maps.js              # Bản đồ ma trận, vị trí cổng bí mật và giấy note dán tường
 │   ├── themes.js            # Cấu hình màu sắc, vật phẩm, trang phục của từng mùa lễ hội
-│   ├── minigames.js         # Hệ thống Minigame PvP ném tuyết, cung Cupid, Vampire AI
-│   ├── audio.js             # Nhạc nền lễ hội BGM & bộ phát âm thanh hiệu ứng SFX Web Audio
+│   ├── minigames.js         # Hệ thống Minigame PvP ném tuyết, cung Cupid, pháo Tết Kim Long
+│   ├── audio.js             # Nhạc nền Speakeasy BGM, âm thanh thắng cược & SFX Web Audio
 │   ├── rtc.js               # Động cơ WebRTC Voice Chat P2P, Spatial Audio & Screen Sharing
 │   └── net.js               # Kết nối MQTT WebSocket đồng bộ trạng thái phòng
-├── index.html               # Trang chính chứa giao diện sảnh chờ và canvas 3D
+├── index.html               # Cấu trúc giao diện web, modal câu đố mật thất & điều khiển mobile
 └── README.md                # Tài liệu dự án
 ```
 

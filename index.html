@@ -585,13 +585,16 @@
   <div class="panel" style="width:min(420px,100%);background:transparent;box-shadow:none;border:none;align-items:center">
     <div style="position:relative;width:320px;height:320px;background:url('assets/pin_note.jpg') no-repeat center/contain;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:45px 35px 25px 35px;box-sizing:border-box;filter:drop-shadow(0 15px 30px rgba(0,0,0,0.85))">
       <span style="font-size:12px;font-weight:700;color:#78350f;letter-spacing:1px;text-transform:uppercase">MẢNH GIẤY BÍ MẬT</span>
-      <div id="noteContentCode" style="font-family:'Courier New',monospace;font-size:26px;font-weight:900;color:#991b1b;margin:12px 0;letter-spacing:1.5px;text-align:center;user-select:all">
+      <p id="noteClueText" style="font-size:11px;color:#713f12;text-align:center;margin:6px 0 2px 0;font-style:italic;line-height:1.3">
+        Manh mối: Tìm kiếm ký tự ẩn...
+      </p>
+      <div id="noteContentCode" style="font-family:'Courier New',monospace;font-size:24px;font-weight:900;color:#991b1b;margin:8px 0;letter-spacing:1.5px;text-align:center;user-select:all">
         CODE
       </div>
-      <p style="font-size:12px;color:#451a03;text-align:center;margin:0;line-height:1.4">
-        Nhấn phím <b>[C]</b> hoặc nút dưới đây để nhập mã này và nhận ngay <b>500 xu</b>!
+      <p style="font-size:11.5px;color:#451a03;text-align:center;margin:0;line-height:1.3">
+        Nhấn nút dưới để đổi mã này và nhận ngay <b>500 xu</b>!
       </p>
-      <button id="btnRedeemFoundCode" class="primary" style="margin-top:14px;padding:6px 16px;font-size:12px">🪙 Nhận 500 Xu Ngay</button>
+      <button id="btnRedeemFoundCode" class="primary" style="margin-top:12px;padding:6px 16px;font-size:12px">🪙 Nhận 500 Xu Ngay</button>
     </div>
     <button data-close style="margin-top:14px;background:rgba(15,23,42,0.85);border:1px solid rgba(255,255,255,0.2);color:#cbd5e1">✕ Đóng [ESC]</button>
   </div>
@@ -606,13 +609,43 @@
     </div>
     <p class="sub">Tìm các mảnh giấy dán bí mật ở khắp 4 bản đồ để thu thập mã nhận <b>500 xu</b> mỗi code (Cooldown: 10 phút/code)!</p>
     <label>Mã Code bí mật:
-      <input id="inSecretCode" maxlength="24" placeholder="Ví dụ: Chu0n6, BoKho, Raumania…">
+      <input id="inSecretCode" maxlength="24" placeholder="Nhập mã code bạn tìm được trên map…">
     </label>
     <div id="codeErr" class="err-msg hidden"></div>
     <div id="codeSuccess" style="background:rgba(34,197,94,0.2);border:1px solid #22c55e;color:#86efac;padding:8px 10px;border-radius:8px;font-size:12.5px" class="hidden"></div>
     <div class="row">
       <button id="btnSubmitCode" class="primary" style="flex:1">🪙 Xác Nhận Đổi Xu</button>
       <button data-close>Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG 13B: Secret Casino Passage Riddle Puzzle -->
+<div id="dlgSecretPassage" class="overlay hidden">
+  <div class="panel" style="width:min(520px,100%);background:linear-gradient(135deg,#131126,#1f153a);border:1px solid rgba(250,204,21,0.4);box-shadow:0 0 35px rgba(234,179,8,0.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:26px" id="passageIcon">🔮</span>
+        <div>
+          <h2 style="margin:0;color:#facc15" id="passageTitle">Phong Ấn Mật Thất Bí Ẩn</h2>
+          <p class="sub" style="margin:0;color:#cbd5e1" id="passageSub">Giải câu đố cổ xưa để mở cánh cổng dẫn tới Speakeasy Casino</p>
+        </div>
+      </div>
+      <button data-close class="icon-chip">✕</button>
+    </div>
+    
+    <div style="background:rgba(0,0,0,0.3);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);margin-top:6px">
+      <p id="passageRiddleQuestion" style="font-size:14px;line-height:1.6;color:#fef08a;margin:0 0 12px 0;font-weight:600">
+        Câu đố...
+      </p>
+      <div id="passageOptions" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+    
+    <div id="passageFeedback" class="hidden" style="padding:10px 12px;border-radius:8px;font-size:13px;line-height:1.4"></div>
+    
+    <div class="row" style="margin-top:8px;justify-content:flex-end">
+      <button data-close>Hủy Bỏ</button>
+      <button id="btnSubmitPassage" class="primary" style="background:linear-gradient(135deg,#eab308,#ca8a04);border-color:#fde047;color:#000;font-weight:700">🔓 Giải Phong Ấn</button>
     </div>
   </div>
 </div>
@@ -721,11 +754,33 @@
       </div>
 
       <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px">
-        <b style="color:#ec4899">4. Giải trí & Troll (Fun & Troll Commands):</b>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;margin-top:6px">
-          <span><code>:fire &lt;tên&gt;</code> — Gắn lửa cháy người</span>
+        <b style="color:#ec4899">4. Hỗn Loạn & Troll Hài Hước (Fun & Chaos Commands):</b>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;margin-top:6px">
+          <span><code>:spin / :spinall &lt;tên&gt;</code> — Xoay mòng mòng chóng mặt</span>
+          <span><code>:disco</code> — Vũ trường đèn Disco chớp nháy</span>
+          <span><code>:earthquake</code> — Động đất rung chuyển màn hình</span>
+          <span><code>:nuke</code> — Kích nổ bom hạt nhân chói lóa</span>
+          <span><code>:giant / :tiny &lt;tên&gt;</code> — Phóng to khổng lồ / Tí hon</span>
+          <span><code>:rocket &lt;tên&gt;</code> — Bắn bay vút lên trời như tên lửa</span>
+          <span><code>:slap &lt;tên&gt;</code> — Tát bay người chơi + Cà chua bét nhè</span>
+          <span><code>:danceall</code> — Ép toàn bộ server cùng nhảy múa</span>
+          <span><code>:clown &lt;tên&gt;</code> — Đội mũ bí ngô hề hước</span>
+          <span><code>:jailall / :unjailall</code> — Nhốt / Thả lồng giam cả phòng</span>
+          <span><code>:freezeall / :thawall</code> — Đóng băng / Rã đông cả phòng</span>
+          <span><code>:bringall</code> — Dịch chuyển tất cả người chơi về trước mặt</span>
+          <span><code>:fire &lt;tên&gt;</code> — Gắn lửa cháy bập bùng</span>
           <span><code>:blind / :unblind &lt;tên&gt;</code> — Làm tối đen màn hình</span>
           <span><code>:chips &lt;số xu&gt;</code> — Tự cấp thêm xu cờ bạc</span>
+        </div>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px">
+        <b style="color:#22c55e">5. Khôi Phục & Đặt Lại Trạng Thái (Reset Commands):</b>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;margin-top:6px">
+          <span><code>:resetall / :clean</code> — Khôi phục mọi hiệu ứng troll về bình thường</span>
+          <span><code>:resetchips</code> — Đặt lại ví xu cờ bạc về 0</span>
+          <span><code>:clearhistory</code> — Xóa hồi chiêu 10 phút của các mã code</span>
+          <span><code>:clearmap</code> — Dọn dẹp thiệp và đồ trang trí trên map</span>
         </div>
       </div>
     </div>
@@ -737,6 +792,21 @@
   <div class="admin-banner-content">
     <span style="font-size:26px">📢</span>
     <span id="adminBannerText">THÔNG BÁO TỪ QUẢN TRỊ VIÊN</span>
+  </div>
+</div>
+
+<!-- Mobile On-Screen Virtual Controls -->
+<div id="mobileControls" class="mobile-controls hidden">
+  <div id="joystickZone" class="joystick-zone">
+    <div id="joystickBase" class="joystick-base">
+      <div id="joystickThumb" class="joystick-thumb"></div>
+    </div>
+  </div>
+  <div class="mobile-actions">
+    <button id="btnMobileJump" class="mobile-btn jump-btn" title="Nhảy">🦘</button>
+    <button id="btnMobileInteract" class="mobile-btn interact-btn" title="Tương tác [E]">✋</button>
+    <button id="btnMobileAction" class="mobile-btn action-btn" title="Minigame [G]">🎯</button>
+    <button id="btnMobileEmote" class="mobile-btn emote-btn" title="Emote [F]">🎭</button>
   </div>
 </div>
 
