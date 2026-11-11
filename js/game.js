@@ -64,7 +64,9 @@ import {
   equipShopItem,
   unequipShopItem,
 } from './casino.js';
+import { loadAvatarCustomization, saveAvatarCustomization, openAvatarStudioModal } from './avatar_customizer.js';
 
+let myAvatarCustom = loadAvatarCustomization();
 let rtc = null;
 let minigames = null;
 
@@ -644,6 +646,18 @@ $('inName').addEventListener('change', () => {
   }
 });
 
+$('btnOpenAvatarStudio')?.addEventListener('click', () => {
+  openAvatarStudioModal(myAvatarCustom, (newCfg) => {
+    myAvatarCustom = newCfg;
+    if (me?.av) {
+      me.avatarCustom = newCfg;
+      me.av.applyCustomization(newCfg);
+      syncMyAppearance();
+    }
+    toast('✨ Đã lưu diện mạo Avatar mới!');
+  });
+});
+
 let manualRoomIdEdited = false;
 $('inRoom').addEventListener('input', () => {
   manualRoomIdEdited = !!$('inRoom').value.trim();
@@ -1118,6 +1132,12 @@ async function start() {
     console.warn('Error loading equipped items:', err);
   }
 
+  // Apply saved avatar customization
+  if (myAvatarCustom) {
+    me.avatarCustom = myAvatarCustom;
+    me.av.applyCustomization(myAvatarCustom);
+  }
+
   scene.add(me.av.root);
 
   // Immediately synchronize 3D world before starting animation loop
@@ -1162,6 +1182,7 @@ const pubInfo = () => ({
   nametagStyle: me.nametagStyle || null,
   isAdmin: typeof isAdminVerified === 'function' ? isAdminVerified() : false,
   seatId: me.seatSlot?.id || null,
+  avatarCustom: me.avatarCustom || null,
 });
 
 function syncMyAppearance() {
@@ -1331,6 +1352,7 @@ async function addOrUpdatePeer(id, d) {
     pumpkinHat: d.pumpkinHat || null,
     heldItem: d.heldItem || null,
     seatId: d.seatId || null,
+    avatarCustom: d.avatarCustom !== undefined ? d.avatarCustom : p.avatarCustom,
   });
   if (state && id === state.hostId && d.name) {
     state.hostName = d.name;
@@ -1348,6 +1370,7 @@ async function addOrUpdatePeer(id, d) {
     p.av.setAccessory(p.accessory);
     p.av.setAura(p.aura);
     p.av.setAdminAura?.(!!p.isAdmin);
+    if (p.avatarCustom) p.av.applyCustomization(p.avatarCustom);
     return;
   }
   if (p.loading) return;
@@ -1361,6 +1384,7 @@ async function addOrUpdatePeer(id, d) {
     costume: p.costume,
     pumpkinHat: p.pumpkinHat,
   });
+  if (p.avatarCustom) p.av.applyCustomization(p.avatarCustom);
   p.av.setHeldItem(p.heldItem);
   p.av.setAccessory(p.accessory);
   p.av.setAura(p.aura);
@@ -2954,6 +2978,18 @@ $('topTheme').onchange = e => {
   emitOp({ k: 'theme', theme: e.target.value, byHost: net.selfId });
 };
 
+$('btnDrawerAvatarStudio').onclick = () => {
+  closeVerticalDrawer();
+  openAvatarStudioModal(myAvatarCustom, (newCfg) => {
+    myAvatarCustom = newCfg;
+    if (me?.av) {
+      me.avatarCustom = newCfg;
+      me.av.applyCustomization(newCfg);
+      syncMyAppearance();
+    }
+    toast('✨ Đã cập nhật diện mạo Avatar mới!');
+  });
+};
 $('btnLobby').onclick = () => { closeVerticalDrawer(); openLobbyOverlay(); };
 $('btnOpenLobbyFromSettings').onclick = () => {
   $('dlgSettings').classList.add('hidden');

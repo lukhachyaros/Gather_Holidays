@@ -26,13 +26,27 @@
 <table>
   <tr>
     <td width="50%">
+      <h3>🎨 Avatar Studio 3D (Tùy Chỉnh Nhân Vật Chuẩn Roblox)</h3>
+      <ul>
+        <li><b>Studio 3D Thời Gian Thực:</b> Xem trước nhân vật trong khung studio Three.js xoay 360 độ mượt mà bằng chuột hoặc cảm ứng trước khi vào phòng hoặc ngay khi đang chơi.</li>
+        <li><b>Màu Da Từng Bộ Phận:</b> Tùy chọn đổi màu toàn thân hoặc chỉnh màu riêng cho từng phần (Đầu, Thân, Tay trái, Tay phải, Chân trái, Chân phải) theo bảng màu kinh điển của Roblox.</li>
+        <li><b>Dáng Đầu & Khuôn Mặt 2D Classic:</b> Hỗ trợ đầu hộp vuông Classic Blocky R6, đầu tròn, anime dynamic, chibi cùng kho 9 decal biểu cảm (Smile, Trollface, Man Face lịch lãm, Smug, Kawaii Anime, Sunglasses,...).</li>
+        <li><b>Tóc 3D & Bảng Nhuộm Đa Sắc:</b> Kiểu tóc gai anime, tóc layer bồng bềnh, đuôi ngựa, afro, mũ len beanie kèm bảng màu nhuộm phong phú.</li>
+        <li><b>Trang Phục 3D Co Giãn (Layered Clothing) & 2D Classic:</b> Áo khoác Bomber, Trench coat, áo da biker, varsity, hoodie nỉ, chân váy xòe tennis, đầm dạ hội, giày sneaker thể thao, quần jeans rách, đồ camo.</li>
+        <li><b>Đồng Bộ P2P Trực Tuyến:</b> Tự động lưu trữ trên trình duyệt và đồng bộ hóa ngoại hình cho tất cả bạn bè trong phòng cùng chiêm ngưỡng.</li>
+      </ul>
+    </td>
+    <td width="50%">
       <h3>🌐 Sảnh Chờ Đa Phòng (Multi-Room Lobby)</h3>
       <ul>
         <li>Tự do tạo phòng công khai hoặc phòng riêng tư có <b>mật khẩu bảo vệ</b>.</li>
+        <li>Nút mở nhanh <b>Studio Avatar 3D</b> ngay tại màn hình sảnh chờ để tân trang diện mạo trước khi tham gia trò chơi.</li>
         <li>Hỗ trợ link mời nhanh <code>#room=ten-phong</code> gửi cho bạn bè vào cùng phòng ngay lập tức.</li>
         <li>Bộ lọc danh mục sảnh theo chủ đề lễ hội.</li>
       </ul>
     </td>
+  </tr>
+  <tr>
     <td width="50%">
       <h3>🎙️ Voice Chat P2P & Spatial 3D Audio</h3>
       <ul>
@@ -41,15 +55,24 @@
         <li>Biểu tượng sóng âm VAD <code>🎙️</code> tự động phát sáng trên đầu khi bạn nói.</li>
       </ul>
     </td>
+    <td width="50%">
+      <h3>🎰 Mật Thất Casino Multiplayer & Kinh Tế 0 Xu</h3>
+      <ul>
+        <li><b>Bức Tường Ảo Ảnh (Illusion Walls):</b> Cổng vào mật thất được giấu kín sau các bức tường bí mật trong góc khuất của cả 4 bản đồ, bấm <code>[E]</code> để dịch chuyển tức thời vào casino.</li>
+        <li><b>Đồng Bộ Multiplayer Thời Gian Thực:</b> Cả phòng cùng quan sát và tương tác trên bàn cược Roulette 3D, đường đua vịt Duck Derby, bàn Blackjack chia bài, máy Slot kéo cần giật nổ hũ và Plinko thả bi mượt mà.</li>
+        <li><b>Kinh Tế Xu Nghiêm Ngặt:</b> Người chơi bắt đầu phòng với <b>0 xu</b>, tìm kiếm các mảnh note dán tường bí mật (<code>"Raumania"</code>, <code>"BoKho"</code>, <code>"Chu0n6"</code>, <code>"Trung Legit"</code>, <code>"toilagay"</code>) để nạp 500 xu chơi casino.</li>
+        <li>Quầy VIP Pub được bố trí hài hòa phía bên trái màn hình TV lớn.</li>
+      </ul>
+    </td>
   </tr>
   <tr>
     <td width="50%">
-      <h3>🎰 Mật Thất Casino Hoàng Gia (Secret Speakeasy) & Bức Tường Ảo Ảnh</h3>
+      <h3>🛠️ Admin Studio, Lệnh Điều Khiển & Quái Thú Slime</h3>
       <ul>
-        <li><b>Bức Tường Ảo Ảnh Đi Xuyên Qua (Illusion Walls):</b> Cổng vào mật thất được giấu kín sau các bức tường bí mật trong góc khuất của cả 4 bản đồ.</li>
-        <li><b>Câu Đố Mẹo & Phong Ấn Cổ Xưa:</b> Giải các câu đố mẹo dân gian hài hước (Người tuyết mùa đông, con ma sợ môn Lịch sử, Cupid bịt mắt) và phương trình Số Dư Trung Hoa để mở khóa cánh cổng dẫn thẳng vào Mật Thất Casino & Pub.</li>
-        <li>Đồng bộ đa người chơi (Multiplayer): Cả phòng cùng quan sát Roulette 3D, đường đua vịt Duck Derby, bàn Blackjack rút bài tính toán, máy Slot kéo cần giật nổ hũ và Plinko thả bi mượt mà.</li>
-        <li>Âm thanh Jazz cổ điển chân thực và loa chúc mừng toàn server khi có người nổ Jackpot!</li>
+        <li>Bảng điều khiển Admin tự động gợi ý lệnh thông minh theo từ khóa gõ vào (autocomplete commands & tên người chơi).</li>
+        <li>Đóng modal tức thì khi chạy lệnh để theo dõi trọn vẹn kết quả trên không gian 3D.</li>
+        <li>Lệnh troll độc lạ: <code>:truonggiang</code> triệu hồi khối slime cube 6 mặt nhảy tung tăng đuổi theo người chơi, <code>:dinnerbone</code> đảo ngược trọng lực cắm đầu xuống đất, <code>:clone</code>, <code>:btools</code>, <code>:guillotine</code>, <code>:telecasino</code>...</li>
+        <li>Hào quang Admin rực rỡ và thông báo toàn server.</li>
       </ul>
     </td>
     <td width="50%">
@@ -59,6 +82,42 @@
         <li><b>Thanh Tìm Kiếm Real-Time:</b> Gõ từ khóa để lọc ngay lập tức danh hiệu yêu thích trên giao diện grid trực quan.</li>
         <li><b>Danh Hiệu GAY - Rainbow RGB 24/7:</b> Hiệu ứng dải màu quang phổ biến đổi liên tục 24/7 cả trên thẻ huy hiệu lẫn nhãn tên nhân vật trong không gian 3D.</li>
         <li><b>Splash Screen Thương Hiệu:</b> Màn hình chào với logo chính thức, hiệu ứng nhịp đập ánh sáng và thanh tải tiến trình mượt mà.</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🐉 Thần Rồng Kim Long Khổng Lồ (Tết Giáp Thìn)</h3>
+      <ul>
+        <li>Nâng cấp quy mô Kim Long gấp <b>2.5 lần</b> với độ chi tiết hoành tráng vượt trội.</li>
+        <li>Thân rồng gồm <b>14 đốt uốn lượn</b> mềm mại kèm vây lưng, sừng ngọc bích, hàm răng ngà và đôi râu lửa bập bùng.</li>
+        <li>Quả cầu <b>Dạ Minh Châu</b> thần bí bay lượn hộ thân quanh đầu rồng tạo nên khung cảnh Tết đầy uy nghi.</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>⛲ Suối Nguyện Ước Tình Yêu (Valentine Wishing Fountain)</h3>
+      <ul>
+        <li>Cơ chế đặc quyền độc nhất vô nhị chỉ có tại bản đồ Valentine: <b>Tung Đồng Xu Nguyện Ước Tình Yêu</b>.</li>
+        <li>Phun trào pháo hoa và cột nước trái tim 3D huyền ảo.</li>
+        <li>Ngẫu nhiên nhận lời ban phúc từ Cupid: <i>Hào Quang Trái Tim Vĩnh Cửu</i>, tăng tốc độ chạy +45%, lì xì may mắn +200 xu, danh hiệu tình yêu và cử chỉ hôn gió ngọt ngào.</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>📜 Săn Mã Code Dán Tường & Kinh Tế Chip</h3>
+      <ul>
+        <li>Người chơi bắt đầu với <b>0 xu</b> trong ví và phải tự mình đi săn tìm các <b>mảnh giấy ghi chú dán bí mật</b> khắp 4 bản đồ theo phong cách <i>"Find the button"</i>.</li>
+        <li>Mỗi mảnh giấy chứa gợi ý giải đố ký tự và mã bí mật để nhận ngay 500 xu (hồi chiêu 10 phút mỗi mã).</li>
+        <li>Bấm phím <code>C</code> hoặc nhấp vào ví tiền để nhập mã đổi xu bất cứ lúc nào.</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>👑 Bộ Sưu Tập Danh Hiệu (Titles System)</h3>
+      <ul>
+        <li>Mở khóa các danh hiệu lấp lánh hiển thị trang trọng ngay trên đầu nhân vật.</li>
+        <li>Danh hiệu độc quyền <b>"Vua Đỏ Đen"</b> dành cho cao thủ chinh phục Jackpot cả 5 trò chơi casino.</li>
+        <li>Danh hiệu đặc biệt: <i>Bậc Thầy Đỏ Đen</i>, <i>Đại Phú Hào Las Vegas</i>, <i>Thợ Săn Mật Mã</i>, <i>Lễ Hội Vương</i>...</li>
       </ul>
     </td>
   </tr>
@@ -187,11 +246,14 @@ Gather_Holidays/
 │   ├── pin_note.jpg         # Giấy note dán tường bí mật
 │   └── models/              # Mô hình nhân vật 3D
 ├── css/
-│   └── style.css            # Hiệu ứng ánh sáng, HUD dock, giao diện Mobile & Casino Arcade
+│   ├── style.css            # Hiệu ứng ánh sáng, HUD dock, giao diện Mobile & Casino Arcade
+│   ├── casino.css           # Giao diện bàn cược Roulette, Slot, Duck Derby, Plinko, Blackjack
+│   └── avatar_customizer.css# Studio tùy biến nhân vật 3D, thanh trượt tỷ lệ, tab chọn trang phục
 ├── js/
 │   ├── game.js              # Vòng lặp game, quản lý input, tương tác mật thất & câu đố logic
+│   ├── avatar_customizer.js # Studio 3D nhân vật: da từng bộ phận, tóc 3D, trang phục co giãn, mặt 2D
+│   ├── avatar.js            # Khung xương nhân vật, danh hiệu lấp lánh, hoạt ảnh emote, rig Roblox
 │   ├── casino.js            # Hệ thống 5 máy Arcade Casino, kinh tế xu, jackpot & broadcast
-│   ├── avatar.js            # Khung xương nhân vật, danh hiệu lấp lánh, hoạt ảnh emote
 │   ├── world.js             # Dựng bối cảnh 3D Three.js, phòng Casino Speakeasy, colliders
 │   ├── props.js             # Đồ vật 3D procedural (bàn Roulette, máy Slot, cây thông...)
 │   ├── maps.js              # Bản đồ ma trận, vị trí cổng bí mật và giấy note dán tường
