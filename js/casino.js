@@ -13,8 +13,77 @@ let worldRef = null;
 let toastRef = null;
 
 // ---------- Chip Wallet Management ----------
-let chips = parseInt(localStorage.getItem('gh_casino_chips') || '2000', 10);
-if (isNaN(chips) || chips < 100) chips = 2000;
+let chips = parseInt(localStorage.getItem('gh_casino_chips') || '0', 10);
+if (isNaN(chips) || chips < 0) chips = 0;
+
+export const VALID_CODES = {
+  raumania: { label: 'Raumania', reward: 500 },
+  bokho: { label: 'BoKho', reward: 500 },
+  chu0n6: { label: 'Chu0n6', reward: 500 },
+  'trung legit': { label: 'Trung Legit', reward: 500 },
+  toilagay: { label: 'toilagay', reward: 500 },
+};
+
+const CODE_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+
+export function redeemCode(rawCode) {
+  if (!rawCode) return { success: false, msg: 'Vui lòng nhập mã code!' };
+  const clean = String(rawCode).trim().toLowerCase();
+  const cfg = VALID_CODES[clean];
+  if (!cfg) {
+    return { success: false, msg: 'Mã code không chính xác! Hãy tìm các tờ note bí mật dán quanh map.' };
+  }
+
+  const history = JSON.parse(localStorage.getItem('gh_code_history') || '{}');
+  const lastUsed = history[clean] || 0;
+  const now = Date.now();
+  const diff = now - lastUsed;
+
+  if (diff < CODE_COOLDOWN_MS) {
+    const remainSec = Math.ceil((CODE_COOLDOWN_MS - diff) / 1000);
+    const m = Math.floor(remainSec / 60);
+    const s = remainSec % 60;
+    return {
+      success: false,
+      msg: `Code [${cfg.label}] đang cooldown! Vui lòng thử lại sau ${m} phút ${s} giây.`,
+    };
+  }
+
+  history[clean] = now;
+  localStorage.setItem('gh_code_history', JSON.stringify(history));
+
+  addChips(cfg.reward);
+  playSfx('jackpot_voice', 'casino');
+
+  return {
+    success: true,
+    msg: `🎉 Đổi mã thành công! Bạn nhận được +${cfg.reward} xu cờ bạc từ [${cfg.label}]!`,
+    reward: cfg.reward,
+  };
+}
+
+export function recordJackpotWin(gameType) {
+  try {
+    const won = new Set(JSON.parse(localStorage.getItem('gh_jackpots_won') || '[]'));
+    won.add(gameType);
+    localStorage.setItem('gh_jackpots_won', JSON.stringify([...won]));
+
+    playSfx('jackpot_voice', 'casino');
+
+    const allGames = ['roulette', 'duck_derby', 'blackjack', 'slot_machine', 'plinko'];
+    const remaining = allGames.filter(g => !won.has(g));
+
+    if (remaining.length === 0) {
+      localStorage.setItem('gh_unlocked_vuadoden', '1');
+      toastRef?.('👑 HUYỀN THOẠI! Bạn đã thắng Jackpot ở cả 5 trò và mở khóa danh hiệu độc quyền: [👑 Vua Đỏ Đen]!');
+      worldRef?.spawnFireworksShow(14.5, 11.5);
+    } else {
+      toastRef?.(`💥 JACKPOT! Bạn đã thắng lớn ở trò ${gameType}! (Còn ${remaining.length} trò nữa để đạt danh hiệu [👑 Vua Đỏ Đen])`);
+    }
+  } catch (err) {
+    console.warn(err);
+  }
+}
 
 export function getChips() {
   return chips;
@@ -32,12 +101,6 @@ export function spendChips(amount) {
   localStorage.setItem('gh_casino_chips', String(chips));
   updateAllWalletBadges();
   return true;
-}
-
-export function claimFreeChips() {
-  addChips(1000);
-  playSfx('slot_win', 'casino');
-  toastRef?.('🎁 Bạn đã nhận thêm $1,000 Chips Casino miễn phí!');
 }
 
 function updateAllWalletBadges() {
@@ -393,7 +456,11 @@ export function openRoulette() {
 
     if (totalWin > 0) {
       addChips(totalWin);
-      playSfx('slot_win', 'casino');
+      if (bets.has(String(winningNum))) {
+        recordJackpotWin('roulette');
+      } else {
+        playSfx('slot_win', 'casino');
+      }
       modal.querySelector('#rouletteResult').innerHTML = `
         <span style="color:#4ade80;font-size:16px">🎉 THẮNG LỚN +$${totalWin.toLocaleString()}!</span><br>
         Bóng rơi vào <b>${colName}</b>!
@@ -620,7 +687,7 @@ export function openDuckDerby() {
     if (winIdx === chosenDuckIdx) {
       const payout = Math.floor(betAmount * winner.odds);
       addChips(payout);
-      playSfx('slot_win', 'casino');
+      recordJackpotWin('duck_derby');
       modal.querySelector('#duckRaceToast').innerHTML = `
         <span style="color:#4ade80;font-size:16px">🏆 VÔ ĐỊCH: #${winIdx + 1} ${winner.name}!</span>
         Chúc mừng bạn đã đoán trúng và nhận <b>+$${payout.toLocaleString()} Chips</b>!
@@ -852,7 +919,7 @@ export function openBlackjack() {
     } else if (pScore === 21 && playerCards.length === 2 && (dScore !== 21 || dealerCards.length > 2)) {
       const win = Math.floor(betAmount * 2.5); // 3:2 payout
       addChips(win);
-      playSfx('slot_win', 'casino');
+      recordJackpotWin('blackjack');
       resultToast.innerHTML = `<span style="color:#4ade80">⭐ BLACKJACK 21 ĐIỂM! Bạn thắng lớn +$${win.toLocaleString()} Chips!</span>`;
     } else if (dScore > 21) {
       const win = betAmount * 2;
@@ -1000,7 +1067,7 @@ export function openSlotMachine() {
     if (r1 === '7️⃣' && r2 === '7️⃣' && r3 === '7️⃣') {
       const jackpot = betAmount * 100;
       addChips(jackpot);
-      playSfx('slot_win', 'casino');
+      recordJackpotWin('slot_machine');
       worldRef?.spawnFireworksShow(14.5, 11.5);
       modal.querySelector('#slotResultToast').innerHTML = `
         <span style="color:#facc15;font-size:18px">💥 MEGA JACKPOT 777!</span><br>
@@ -1165,14 +1232,17 @@ export function openPlinko() {
       ctx.strokeStyle = '#fff';
       ctx.stroke();
 
-      // Check Land in Bottom Bins
       if (ball.y >= binY) {
         const binIdx = Math.max(0, Math.min(bins.length - 1, Math.floor((ball.x - binStartX) / binWidth)));
         const wonBin = bins[binIdx];
         const payout = Math.floor(ball.bet * wonBin.mult);
 
         addChips(payout);
-        playSfx(wonBin.mult >= 2 ? 'slot_win' : 'plinko_win', 'casino');
+        if (wonBin.mult >= 25) {
+          recordJackpotWin('plinko');
+        } else {
+          playSfx(wonBin.mult >= 2 ? 'slot_win' : 'plinko_win', 'casino');
+        }
 
         modal.querySelector('#plinkoResultToast').innerHTML = `
           🟡 Bóng rơi vào ô <b>[${wonBin.mult}x]</b>!

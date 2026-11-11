@@ -58,7 +58,6 @@
             <button class="filter-chip" data-filter="halloween">🎃 Halloween</button>
             <button class="filter-chip" data-filter="tet">🧧 Tết</button>
             <button class="filter-chip" data-filter="valentine">💝 Valentine</button>
-            <button class="filter-chip" data-filter="casino">🎰 Casino (Test)</button>
             <button id="btnRefreshLobby" class="icon-chip" title="Làm mới danh sách phòng">🔄</button>
           </div>
         </div>
@@ -105,7 +104,10 @@
   <button id="btnBgm" class="dock-btn bgm-active" title="Bật/Tắt Nhạc nền lễ hội (BGM)">🎵 Nhạc</button>
   <button id="btnMinigame" class="dock-btn minigame-btn" title="Chơi Minigame theo chủ đề phòng (Phím G)">🎮 Minigame</button>
   <button id="btnEmotes" class="dock-btn emote-btn" title="Mở Bộ Emote Pack Meccha (Phím F)">🎭 Emotes [F]</button>
-  <button id="btnCasinoWallet" class="dock-btn hidden" style="background:linear-gradient(135deg,#f59e0b,#b45309);border-color:#fef08a;color:#000;font-weight:700" title="Ví tiền Chips Casino (Nhận thêm $1,000 chips)">🪙 <span class="casino-chip-count">$2,000</span></button>
+  <button id="btnEnterCode" class="dock-btn" title="Nhập Mật Mã Bí Mật Đổi Xu (Phím C)" style="background:rgba(234,179,8,0.2);border-color:#facc15;color:#fef08a">🎟️ Code [C]</button>
+  <button id="btnTitles" class="dock-btn" title="Bộ Sưu Tập Danh Hiệu">👑 Danh Hiệu</button>
+  <button id="btnCasinoWallet" class="dock-btn hidden" style="background:linear-gradient(135deg,#f59e0b,#b45309);border-color:#fef08a;color:#000;font-weight:700" title="Ví tiền Chips Casino (Nhận thêm chips)">🪙 <span class="casino-chip-count">$0</span></button>
+  <button id="btnAdminCmds" class="dock-btn danger-btn hidden" title="Bảng Lệnh Quản Trị Admin Roblox (Phím ;)">⚡ Admin [;]</button>
   <span class="dock-sep"></span>
   <button id="btnCopy" class="dock-btn icon-only" title="Sao chép link mời bạn bè vào phòng này">🔗</button>
   <button id="btnView" class="dock-btn" title="Đổi góc nhìn Thứ nhất / Thứ ba (Phím V)">🎥 TPS</button>
@@ -575,6 +577,136 @@
         <button id="btnSendChatHistory" class="primary">Gửi</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- DIALOG 12: Secret Paper Note Inspection -->
+<div id="dlgNote" class="overlay hidden">
+  <div class="panel" style="width:min(420px,100%);background:transparent;box-shadow:none;border:none;align-items:center">
+    <div style="position:relative;width:320px;height:320px;background:url('assets/pin_note.jpg') no-repeat center/contain;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:45px 35px 25px 35px;box-sizing:border-box;filter:drop-shadow(0 15px 30px rgba(0,0,0,0.85))">
+      <span style="font-size:12px;font-weight:700;color:#78350f;letter-spacing:1px;text-transform:uppercase">MẢNH GIẤY BÍ MẬT</span>
+      <div id="noteContentCode" style="font-family:'Courier New',monospace;font-size:26px;font-weight:900;color:#991b1b;margin:12px 0;letter-spacing:1.5px;text-align:center;user-select:all">
+        CODE
+      </div>
+      <p style="font-size:12px;color:#451a03;text-align:center;margin:0;line-height:1.4">
+        Nhấn phím <b>[C]</b> hoặc nút dưới đây để nhập mã này và nhận ngay <b>500 xu</b>!
+      </p>
+      <button id="btnRedeemFoundCode" class="primary" style="margin-top:14px;padding:6px 16px;font-size:12px">🪙 Nhận 500 Xu Ngay</button>
+    </div>
+    <button data-close style="margin-top:14px;background:rgba(15,23,42,0.85);border:1px solid rgba(255,255,255,0.2);color:#cbd5e1">✕ Đóng [ESC]</button>
+  </div>
+</div>
+
+<!-- DIALOG 13: Enter Secret Code for Chips -->
+<div id="dlgCode" class="overlay hidden">
+  <div class="panel" style="width:min(420px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2>🎟️ Nhập Code Đổi Xu</h2>
+      <button data-close class="icon-chip">✕</button>
+    </div>
+    <p class="sub">Tìm các mảnh giấy dán bí mật ở khắp 4 bản đồ để thu thập mã nhận <b>500 xu</b> mỗi code (Cooldown: 10 phút/code)!</p>
+    <label>Mã Code bí mật:
+      <input id="inSecretCode" maxlength="24" placeholder="Ví dụ: Chu0n6, BoKho, Raumania…">
+    </label>
+    <div id="codeErr" class="err-msg hidden"></div>
+    <div id="codeSuccess" style="background:rgba(34,197,94,0.2);border:1px solid #22c55e;color:#86efac;padding:8px 10px;border-radius:8px;font-size:12.5px" class="hidden"></div>
+    <div class="row">
+      <button id="btnSubmitCode" class="primary" style="flex:1">🪙 Xác Nhận Đổi Xu</button>
+      <button data-close>Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG 14: Title Selection -->
+<div id="dlgTitles" class="overlay hidden">
+  <div class="panel" style="width:min(480px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2>👑 Bộ Sưu Tập Danh Hiệu</h2>
+      <button data-close class="icon-chip">✕</button>
+    </div>
+    <p class="sub">Danh hiệu hiển thị lấp lánh ngay phía trên tên của bạn để mọi người cùng chiêm ngưỡng!</p>
+    <div id="titlesList" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto;padding-right:4px"></div>
+    <button data-close style="margin-top:8px">Đóng</button>
+  </div>
+</div>
+
+<!-- DIALOG 15: Roblox Style Admin Command Console -->
+<div id="dlgAdmin" class="overlay hidden">
+  <div class="panel" style="width:min(680px,100%);max-height:88vh">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:24px">⚡</span>
+        <div>
+          <h2 style="margin:0;color:#facc15">BẢNG ĐIỀU KHIỂN QUẢN TRỊ VIÊN (ROBLOX ADMIN)</h2>
+          <p class="sub" style="margin:0">Đặc quyền dành riêng cho Contributors: <b>chu0n6</b>, <b>trung</b>, <b>khoa pug (lukhachyaros)</b></p>
+        </div>
+      </div>
+      <button data-close class="icon-chip">✕</button>
+    </div>
+
+    <!-- Quick Command Runner -->
+    <div style="display:flex;gap:8px;align-items:center;background:rgba(15,23,42,0.8);padding:10px;border-radius:10px;border:1px solid rgba(250,204,21,0.3)">
+      <span style="font-family:monospace;font-weight:900;color:#facc15">CMD &gt;</span>
+      <input id="inAdminCmd" placeholder="Nhập lệnh (ví dụ: fly, noclip, god, speed 5, jail <tên>, sm <thông báo>)..." style="flex:1;background:#090d16">
+      <button id="btnRunAdminCmd" class="primary">Thực thi [Enter]</button>
+    </div>
+
+    <!-- Command Categories Tabs & Help -->
+    <div style="display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:380px;font-size:12.5px">
+      <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px">
+        <b style="color:#38bdf8">1. Quản lý Người chơi (Player Management):</b>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;margin-top:6px">
+          <span><code>:kick &lt;tên&gt;</code> — Đuổi người chơi</span>
+          <span><code>:ban / :unban &lt;tên&gt;</code> — Cấm / Gỡ cấm</span>
+          <span><code>:mute / :unmute &lt;tên&gt;</code> — Cấm chat</span>
+          <span><code>:jail / :unjail &lt;tên&gt;</code> — Nhốt lồng giam</span>
+          <span><code>:freeze / :thaw &lt;tên&gt;</code> — Đóng băng</span>
+          <span><code>:god / :ungod</code> — Bất tử máu</span>
+          <span><code>:kill / :respawn &lt;tên&gt;</code> — Hạ gục/Hồi sinh</span>
+          <span><code>:bring &lt;tên&gt;</code> — Kéo lại gần mình</span>
+          <span><code>:to &lt;tên&gt;</code> — Bay tới chỗ người khác</span>
+        </div>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px">
+        <b style="color:#4ade80">2. Nhân vật & Ngoại hình (Character & Customization):</b>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;margin-top:6px">
+          <span><code>:speed &lt;hệ số&gt;</code> — Tốc độ chạy (vd: 5)</span>
+          <span><code>:jp &lt;lực&gt;</code> — Lực nhảy cao (vd: 16)</span>
+          <span><code>:fly / :unfly</code> — Chế độ bay tự do</span>
+          <span><code>:noclip / :clip</code> — Đi xuyên mọi bức tường</span>
+          <span><code>:invisible / :visible</code> — Tàng hình hoàn toàn</span>
+          <span><code>:size &lt;hệ số&gt;</code> — Phóng to/thu nhỏ</span>
+        </div>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px">
+        <b style="color:#f59e0b">3. Thế giới & Môi trường (World & Environment):</b>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;margin-top:6px">
+          <span><code>:time &lt;day|night&gt;</code> — Đổi ngày/đêm</span>
+          <span><code>:gravity &lt;số&gt;</code> — Đổi trọng lực (mặc định 20)</span>
+          <span><code>:sm &lt;thông báo&gt;</code> — Thông báo biểu ngữ lớn</span>
+          <span><code>:shutdown</code> — Đóng cửa server</span>
+        </div>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px">
+        <b style="color:#ec4899">4. Giải trí & Troll (Fun & Troll Commands):</b>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;margin-top:6px">
+          <span><code>:fire &lt;tên&gt;</code> — Gắn lửa cháy người</span>
+          <span><code>:blind / :unblind &lt;tên&gt;</code> — Làm tối đen màn hình</span>
+          <span><code>:chips &lt;số xu&gt;</code> — Tự cấp thêm xu cờ bạc</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Broadcast Server Message Banner -->
+<div id="adminServerBanner" class="admin-server-banner hidden">
+  <div class="admin-banner-content">
+    <span style="font-size:26px">📢</span>
+    <span id="adminBannerText">THÔNG BÁO TỪ QUẢN TRỊ VIÊN</span>
   </div>
 </div>
 

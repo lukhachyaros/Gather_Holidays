@@ -30,6 +30,9 @@ import {
   buildBlackjackTable,
   buildSlotMachine,
   buildPlinkoBoard,
+  buildSecretPaperNote,
+  buildSecretPassage,
+  buildCasinoExitPortal,
   emojiTexture,
   geo,
   mat,
@@ -387,6 +390,18 @@ export class World {
         pk.rotation.y = Math.PI;
         this.group.add(pk);
         this.casinoObjs.push(pk);
+      } else if (h.type === 'secret_passage') {
+        const sp = buildSecretPassage(themeKey);
+        sp.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(sp);
+      } else if (h.type === 'secret_note') {
+        const sn = buildSecretPaperNote(h.code);
+        sn.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(sn);
+      } else if (h.type === 'casino_exit') {
+        const ce = buildCasinoExitPortal();
+        ce.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(ce);
       }
     }
 

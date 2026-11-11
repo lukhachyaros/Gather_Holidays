@@ -30,7 +30,7 @@ import {
   syncPlayback,
 } from './media.js';
 import { World, TILE } from './world.js';
-import { Avatar, loadCharacter, EMOTE_CLIP, hueFor } from './avatar.js';
+import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js';
 import { emojiSprite } from './props.js';
 import { RtcManager } from './rtc.js';
 import {
@@ -51,6 +51,9 @@ import {
   openSlotMachine,
   openPlinko,
   getChips,
+  addChips,
+  redeemCode,
+  VALID_CODES,
 } from './casino.js';
 
 let rtc = null;
@@ -286,9 +289,9 @@ const OFFICIAL_ROOMS = [
   { id: 'lau-dai-halloween', title: 'Lâu Đài Halloween', theme: 'halloween', official: true },
   { id: 'pho-hoa-ngay-tet', title: 'Phố Hoa Ngày Tết', theme: 'tet', official: true },
   { id: 'vuon-tinh-yeu-valentine', title: 'Vườn Tình Yêu Valentine', theme: 'valentine', official: true },
-  { id: 'sanh-casino-arcade-test', title: '🎰 Sòng Bài Casino & Arcade (Map Test)', theme: 'casino', official: true },
 ];
 const THEME_ICON = { christmas: '🎄', halloween: '🎃', tet: '🧧', valentine: '💝', casino: '🎰' };
+export const SECRET_CASINO_ROOM = 'mat-that-casino-hoang-gia';
 
 // ---------- State ----------
 let net,
@@ -785,8 +788,10 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
   $('dlgKicked').classList.add('hidden');
   $('btnCloseLobby').classList.remove('hidden');
 
+  const savedTitle = localStorage.getItem('gh_selected_title') || (isAdminUser(name) ? '👑 ADMIN' : '');
   me = {
     name,
+    title: savedTitle,
     hue: hueFor(name),
     x: 14.5,
     y: 18.5,
@@ -885,6 +890,7 @@ async function start() {
   me.y = sp[1] + (Math.random() - 0.5) * 0.6;
   me.av = new Avatar(null, {
     name: me.name,
+    title: me.title,
     hue: me.hue,
     costume: me.costume,
     pumpkinHat: me.pumpkinHat,
@@ -902,6 +908,8 @@ async function start() {
   updateStatusBadges();
   updateMediaDialog();
   updateLiveStats();
+  updateCasinoChipsUI();
+  $('btnAdminCmds').classList.toggle('hidden', !isAdminUser(me.name));
   broadcastMyRoomToLobby();
 
   if (!loopRunning) {
@@ -912,6 +920,7 @@ async function start() {
 
 const pubInfo = () => ({
   name: me.name,
+  title: me.title || '',
   hue: me.hue,
   x: me.x,
   y: me.y,
@@ -1080,6 +1089,7 @@ async function addOrUpdatePeer(id, d) {
   }
   Object.assign(p, {
     name: d.name || p.name || 'Khách',
+    title: d.title || p.title || '',
     hue: d.hue ?? hueFor(d.name || id),
     tx: d.x ?? p.x,
     ty: d.y ?? p.y,
@@ -1098,7 +1108,7 @@ async function addOrUpdatePeer(id, d) {
   broadcastMyRoomToLobby();
 
   if (p.av) {
-    p.av.setName(p.name);
+    p.av.setName(p.name, p.title);
     p.av.applyCostume(p.costume);
     p.av.setPumpkinHat(p.pumpkinHat);
     p.av.setHeldItem(p.heldItem);
@@ -1110,6 +1120,7 @@ async function addOrUpdatePeer(id, d) {
   if (!peers.has(id)) return;
   p.av = new Avatar(null, {
     name: p.name,
+    title: p.title,
     hue: p.hue,
     costume: p.costume,
     pumpkinHat: p.pumpkinHat,
@@ -1481,6 +1492,82 @@ function applyOp(op, senderId = null) {
       }
       break;
     }
+    case 'admin_sm': {
+      showAdminServerBanner(`📢 [ADMIN ${op.by}]: ${op.text}`);
+      logChat(`📢 ADMIN ${op.by}`, op.text, { isSystem: true });
+      break;
+    }
+    case 'admin_freeze': {
+      if (op.target === me.name || op.target === 'all') {
+        isFrozen = !!op.frozen;
+        toast(isFrozen ? '🧊 Bạn đã bị Admin đóng băng!' : '🔥 Bạn đã được giải phóng!');
+      }
+      break;
+    }
+    case 'admin_jail': {
+      if (op.target === me.name || op.target === 'all') {
+        isJailed = !!op.jailed;
+        if (isJailed) {
+          jailedPos = { x: me.x, y: me.y };
+          toast('⛓️ Bạn đã bị Admin nhốt vào lồng giam!');
+        } else {
+          jailedPos = null;
+          toast('🔓 Bạn đã được thả tự do khỏi lồng giam!');
+        }
+      }
+      break;
+    }
+    case 'admin_teleport': {
+      if (op.target === me.name || op.target === 'all') {
+        me.x = op.toX;
+        me.y = op.toY;
+        me.h = 0;
+        toast(`🌀 Bạn vừa bị Admin ${op.by} dịch chuyển tức thời!`);
+      }
+      break;
+    }
+    case 'admin_kill': {
+      if (op.target === me.name || op.target === 'all') {
+        me.x = 14.5;
+        me.y = 18.5;
+        me.h = 0;
+        toast(`💀 Bạn đã bị Admin ${op.by} hạ gục! Đang hồi sinh tại sảnh...`);
+      }
+      break;
+    }
+    case 'admin_respawn': {
+      if (op.target === me.name || op.target === 'all') {
+        me.x = 14.5;
+        me.y = 18.5;
+        me.h = 0;
+        toast('✨ Bạn đã được hồi sinh!');
+      }
+      break;
+    }
+    case 'admin_blind': {
+      if (op.target === me.name || op.target === 'all') {
+        if (op.blind) {
+          document.body.classList.add('blinded-screen');
+          toast('🕶️ Bạn đã bị Admin làm mù mắt tạm thời!');
+        } else {
+          document.body.classList.remove('blinded-screen');
+          toast('👀 Mắt bạn đã sáng trở lại!');
+        }
+      }
+      break;
+    }
+    case 'admin_size': {
+      const pEntry = findPeerByName(op.target);
+      if (pEntry && pEntry[1].av) {
+        pEntry[1].av.root.scale.set(op.scale, op.scale, op.scale);
+      }
+      break;
+    }
+    case 'admin_gravity': {
+      currentGravity = op.gravity;
+      toast(`🌍 Trọng lực thế giới đã thay đổi: ${currentGravity}`);
+      break;
+    }
     case 'mg_snowball_throw':
     case 'mg_cupid_shoot':
     case 'mg_tet_cannon':
@@ -1644,6 +1731,14 @@ function openChatHistory() {
 function sendChatMessage(text) {
   const t = (text || '').trim();
   if (!t || !me) return;
+  if (t.startsWith(':') || t.startsWith(';') || t.startsWith('/')) {
+    const handled = executeAdminCommand(t);
+    if (handled) return;
+  }
+  if (adminMuteList.has(me.name.toLowerCase())) {
+    toast('🔇 Bạn đã bị Admin cấm phát ngôn trong phòng!');
+    return;
+  }
   me.av?.say(t);
   logChat(me.name, t, { isMe: true, hue: me.hue });
   net?.send('chat', { t, hue: me.hue });
@@ -2859,6 +2954,18 @@ function triggerInteract(target = activeTarget) {
       case 'plinko':
         openPlinko();
         break;
+      case 'secret_passage':
+        playSfx('wishing_fountain', 'valentine');
+        enterSecretCasino();
+        break;
+      case 'casino_exit':
+        playSfx('pop');
+        exitSecretCasino();
+        break;
+      case 'secret_note':
+        playSfx('paper_rustle');
+        openSecretNote(h.code);
+        break;
     }
   }
 }
@@ -2889,6 +2996,16 @@ addEventListener('keydown', e => {
     toggleEmoteMenu();
     e.preventDefault();
   }
+  else if (k === 'c' || code === 'KeyC') {
+    openCodeDialog();
+    e.preventDefault();
+  }
+  else if (code === 'Semicolon' || e.key === ';') {
+    if (isAdminUser(me?.name) || (state && state.hostId === net?.selfId)) {
+      openAdminDialog();
+      e.preventDefault();
+    }
+  }
   else if ((k === 'k' || code === 'KeyK') && state?.mediaCurrent?.kind === 'web') scrollTv(450);
   else if ((k === 'i' || code === 'KeyI') && state?.mediaCurrent?.kind === 'web') scrollTv(-450);
   else if ((k === 'b' || code === 'KeyB') && state?.mediaCurrent?.vid && state.mediaCurrent.kind !== 'web') triggerBypassAd();
@@ -2909,12 +3026,13 @@ addEventListener('keydown', e => {
   else if (e.key === '8' || code === 'Digit8') { triggerEmoteByKey('kneel', '🧎'); e.preventDefault(); return; }
 
   if (e.key?.startsWith('Arrow') || code.startsWith('Arrow') || e.key === ' ' || code === 'Space') e.preventDefault();
-  if ((e.key === ' ' || code === 'Space') && me) {
+  if ((e.key === ' ' || code === 'Space') && me && !adminFlying && !isFrozen && !isJailed) {
+    const jumpV = adminJumpPower || JUMP_V;
     if (me.seatSlot) {
       leaveSeat(true);
-      me.vy = JUMP_V;
+      me.vy = jumpV;
     } else if (me.h <= getStandHeight(me.x, me.y) + 0.15) {
-      me.vy = JUMP_V;
+      me.vy = jumpV;
       me.loco = 'jump';
     }
   }
@@ -3364,74 +3482,90 @@ function loop(now) {
   }
 
   // 3. Player Locomotion & Sitting State
-  const k = keys;
-  const isUp = k.has('w') || k.has('KeyW') || k.has('ư') || k.has('arrowup') || k.has('ArrowUp');
-  const isDown = k.has('s') || k.has('KeyS') || k.has('arrowdown') || k.has('ArrowDown');
-  const isLeft = k.has('a') || k.has('KeyA') || k.has('arrowleft') || k.has('ArrowLeft');
-  const isRight = k.has('d') || k.has('KeyD') || k.has('arrowright') || k.has('ArrowRight');
-  const fwd = (isUp ? 1 : 0) - (isDown ? 1 : 0);
-  const str = (isRight ? 1 : 0) - (isLeft ? 1 : 0);
-  const running = k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight');
-  let dx = -Math.sin(yaw) * fwd + Math.cos(yaw) * str,
-    dz = -Math.cos(yaw) * fwd - Math.sin(yaw) * str;
-  const moving = !!(dx || dz);
+  if (isFrozen) {
+    me.loco = 'idle';
+  } else if (isJailed && jailedPos) {
+    me.x = jailedPos.x;
+    me.y = jailedPos.y;
+    me.loco = 'idle';
+  } else {
+    const k = keys;
+    const isUp = k.has('w') || k.has('KeyW') || k.has('ư') || k.has('arrowup') || k.has('ArrowUp');
+    const isDown = k.has('s') || k.has('KeyS') || k.has('arrowdown') || k.has('ArrowDown');
+    const isLeft = k.has('a') || k.has('KeyA') || k.has('arrowleft') || k.has('ArrowLeft');
+    const isRight = k.has('d') || k.has('KeyD') || k.has('arrowright') || k.has('ArrowRight');
+    const fwd = (isUp ? 1 : 0) - (isDown ? 1 : 0);
+    const str = (isRight ? 1 : 0) - (isLeft ? 1 : 0);
+    const running = k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight');
+    let dx = -Math.sin(yaw) * fwd + Math.cos(yaw) * str,
+      dz = -Math.cos(yaw) * fwd - Math.sin(yaw) * str;
+    const moving = !!(dx || dz);
 
-  if (moving && me.seatSlot) {
-    leaveSeat();
-  }
+    if (moving && me.seatSlot) {
+      leaveSeat();
+    }
 
-  if (moving && !me.seatSlot) {
-    const l = Math.hypot(dx, dz),
-      sp = (running ? RUN : WALK) * dt;
-    dx = (dx / l) * sp;
-    dz = (dz / l) * sp;
-    if (free(me.x + dx, me.y, me.h)) me.x += dx;
-    if (free(me.x, me.y + dz, me.h)) me.y += dz;
-    // Hard coordinate clamp against any glitching out of map
-    me.x = Math.max(0.15, Math.min(state.map.w - 1.15, me.x));
-    me.y = Math.max(0.15, Math.min(state.map.h - 1.15, me.y));
-  }
+    if (moving && !me.seatSlot) {
+      const l = Math.hypot(dx, dz),
+        sp = (running ? RUN : WALK) * dt * (adminSpeedMultiplier || 1.0);
+      dx = (dx / l) * sp;
+      dz = (dz / l) * sp;
+      if (adminNoclip || free(me.x + dx, me.y, me.h)) me.x += dx;
+      if (adminNoclip || free(me.x, me.y + dz, me.h)) me.y += dz;
+      // Hard coordinate clamp against any glitching out of map
+      me.x = Math.max(0.15, Math.min(state.map.w - 1.15, me.x));
+      me.y = Math.max(0.15, Math.min(state.map.h - 1.15, me.y));
+    }
 
-  // Auto-resolve any slight penetration with colliders so player never gets stuck against item tables or obstacles
-  if (!me.seatSlot && world?.features?.colliders) {
-    for (const c of world.features.colliders) {
-      const colH = c.r > 0.6 ? 1.05 : 0.85;
-      if (me.h >= colH - 0.15) continue; // Standing on top of object!
-      const d = Math.hypot(me.x - c.x, me.y - c.y);
-      const minD = c.r * 0.75 + RADIUS;
-      if (d < minD && d > 0.0001) {
-        const overlap = minD - d;
-        const pushFactor = Math.min(overlap, dt * 8);
-        const px = ((me.x - c.x) / d) * pushFactor;
-        const py = ((me.y - c.y) / d) * pushFactor;
-        if (!isSolid(tileAt(Math.floor(me.x + px + 0.5), Math.floor(me.y + py + 0.5)))) {
-          me.x += px;
-          me.y += py;
+    if (adminFlying) {
+      me.vy = 0;
+      if (k.has(' ') || k.has('Space')) me.h += 8 * dt;
+      else if (k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight')) me.h = Math.max(0, me.h - 8 * dt);
+    }
+
+    // Auto-resolve any slight penetration with colliders so player never gets stuck against item tables or obstacles
+    if (!adminNoclip && !me.seatSlot && world?.features?.colliders) {
+      for (const c of world.features.colliders) {
+        const colH = c.r > 0.6 ? 1.05 : 0.85;
+        if (me.h >= colH - 0.15) continue; // Standing on top of object!
+        const d = Math.hypot(me.x - c.x, me.y - c.y);
+        const minD = c.r * 0.75 + RADIUS;
+        if (d < minD && d > 0.0001) {
+          const overlap = minD - d;
+          const pushFactor = Math.min(overlap, dt * 8);
+          const px = ((me.x - c.x) / d) * pushFactor;
+          const py = ((me.y - c.y) / d) * pushFactor;
+          if (!isSolid(tileAt(Math.floor(me.x + px + 0.5), Math.floor(me.y + py + 0.5)))) {
+            me.x += px;
+            me.y += py;
+          }
         }
       }
     }
-  }
 
-  if (mode === 'fps') me.r = yaw + Math.PI;
-  else if (moving && !me.seatSlot) me.r = lerpAngle(me.r, Math.atan2(dx, dz), Math.min(1, dt * 14));
+    if (mode === 'fps') me.r = yaw + Math.PI;
+    else if (moving && !me.seatSlot) me.r = lerpAngle(me.r, Math.atan2(dx, dz), Math.min(1, dt * 14));
 
-  // Parkour & Vertical physics with stand-on-obstacle landing
-  const floorH = getStandHeight(me.x, me.y);
-  if (floorH === Infinity) {
-    me.x = Math.max(1, Math.min(state.map.w - 2, me.x));
-    me.y = Math.max(1, Math.min(state.map.h - 2, me.y));
-    me.h = 0;
-    me.vy = 0;
-  } else if (me.h > floorH || me.vy > 0) {
-    me.vy -= GRAVITY * dt;
-    me.h += me.vy * dt;
-    if (me.h <= floorH) {
-      me.h = floorH;
-      me.vy = 0;
+    // Parkour & Vertical physics with stand-on-obstacle landing
+    if (!adminFlying) {
+      const floorH = getStandHeight(me.x, me.y);
+      if (floorH === Infinity) {
+        me.x = Math.max(1, Math.min(state.map.w - 2, me.x));
+        me.y = Math.max(1, Math.min(state.map.h - 2, me.y));
+        me.h = 0;
+        me.vy = 0;
+      } else if (me.h > floorH || me.vy > 0) {
+        me.vy -= (currentGravity || GRAVITY) * dt;
+        me.h += me.vy * dt;
+        if (me.h <= floorH) {
+          me.h = floorH;
+          me.vy = 0;
+        }
+      } else if (me.h < floorH) {
+        me.h = floorH;
+        me.vy = 0;
+      }
     }
-  } else if (me.h < floorH) {
-    me.h = floorH;
-    me.vy = 0;
   }
 
   // Check Couple Sofa Pairing & Campfire Proximity
@@ -3673,3 +3807,556 @@ function updateCamera(dt = 0.016) {
   }
   updateScreen3D();
 }
+
+// ============================================================================
+// SECRET CASINO & HIDDEN CHAMBER PASSAGE
+// ============================================================================
+let lastRoomBeforeCasino = null;
+
+function enterSecretCasino() {
+  if (roomName === SECRET_CASINO_ROOM) {
+    toast('🎰 Bạn đang ở trong Mật Thất Casino rồi!');
+    return;
+  }
+  lastRoomBeforeCasino = {
+    id: roomName,
+    title: roomTitle,
+    theme: state?.theme || 'christmas',
+  };
+  toast('🌀 Bức màn bí mật hé mở... Đang dịch chuyển vào Mật Thất Casino Hoàng Gia!');
+  leaveSeat();
+  joinRoomConfig({
+    id: SECRET_CASINO_ROOM,
+    title: '🎰 Mật Thất Casino Hoàng Gia (Secret Speakeasy)',
+    theme: 'casino',
+    passHash: '',
+  });
+}
+
+function exitSecretCasino() {
+  const returnRoom = lastRoomBeforeCasino || {
+    id: 'quang-truong-noel',
+    title: 'Quảng Trường Giáng Sinh',
+    theme: 'christmas',
+  };
+  toast('🚪 Bạn đã bước qua cánh cửa cổ kính trở về thế giới bên trên!');
+  leaveSeat();
+  joinRoomConfig({
+    id: returnRoom.id,
+    title: returnRoom.title,
+    theme: returnRoom.theme,
+    passHash: '',
+  });
+}
+
+let activeFoundNoteCode = '';
+function openSecretNote(code) {
+  activeFoundNoteCode = code || 'BoKho';
+  const el = $('noteContentCode');
+  if (el) el.textContent = activeFoundNoteCode;
+  openDialog('dlgNote');
+}
+
+$('btnRedeemFoundCode').onclick = () => {
+  if (!activeFoundNoteCode) return;
+  const res = redeemCode(activeFoundNoteCode);
+  closeDialog('dlgNote');
+  if (res.ok) {
+    playSfx('jackpot_voice');
+    toast(`🎉 ${res.msg}`);
+    updateCasinoChipsUI();
+  } else {
+    toast(`⚠️ ${res.msg}`);
+  }
+};
+
+// ============================================================================
+// CASINO CHIPS & CODE REDEMPTION MODAL
+// ============================================================================
+function openCodeDialog() {
+  $('inSecretCode').value = '';
+  $('codeErr').classList.add('hidden');
+  $('codeSuccess').classList.add('hidden');
+  openDialog('dlgCode');
+  setTimeout(() => $('inSecretCode').focus(), 150);
+}
+
+function updateCasinoChipsUI() {
+  const chips = getChips();
+  const els = document.querySelectorAll('.casino-chip-count');
+  els.forEach(el => {
+    el.textContent = `$${chips.toLocaleString()}`;
+  });
+  const btnWallet = $('btnCasinoWallet');
+  if (btnWallet) {
+    btnWallet.classList.toggle('hidden', state?.theme !== 'casino');
+  }
+}
+
+$('btnEnterCode').onclick = openCodeDialog;
+$('btnCasinoWallet').onclick = openCodeDialog;
+
+$('btnSubmitCode').onclick = () => {
+  const code = $('inSecretCode').value.trim();
+  if (!code) {
+    $('codeErr').textContent = 'Vui lòng nhập mã code!';
+    $('codeErr').classList.remove('hidden');
+    $('codeSuccess').classList.add('hidden');
+    return;
+  }
+  const res = redeemCode(code);
+  if (res.ok) {
+    $('codeErr').classList.add('hidden');
+    $('codeSuccess').textContent = res.msg;
+    $('codeSuccess').classList.remove('hidden');
+    playSfx('jackpot_voice');
+    toast(`🎉 ${res.msg}`);
+    updateCasinoChipsUI();
+    setTimeout(() => closeDialog('dlgCode'), 1500);
+  } else {
+    $('codeSuccess').classList.add('hidden');
+    $('codeErr').textContent = res.msg;
+    $('codeErr').classList.remove('hidden');
+  }
+};
+
+$('inSecretCode').onkeydown = e => {
+  if (e.key === 'Enter') $('btnSubmitCode').click();
+};
+
+// ============================================================================
+// TITLES COLLECTION SYSTEM
+// ============================================================================
+const TITLE_LIST = [
+  {
+    id: 'admin',
+    name: '👑 ADMIN',
+    desc: 'Đặc quyền Tối cao dành riêng cho 3 Contributors dự án: chu0n6, trung, khoa pug (lukhachyaros)',
+    condition: (pName) => isAdminUser(pName),
+    lockMsg: 'Chỉ dành riêng cho 3 Contributors dự án (chu0n6, trung, khoa pug)!',
+  },
+  {
+    id: 'vuadoden',
+    name: '👑 Vua Đỏ Đen',
+    desc: 'Đạt danh hiệu huyền thoại khi trúng Jackpot / Thắng lớn nhất ở cả 5 trò chơi tại Casino!',
+    condition: () => {
+      try {
+        const history = JSON.parse(localStorage.getItem('gh_jackpot_wins') || '[]');
+        return ['roulette', 'duck_derby', 'blackjack', 'slot_machine', 'plinko'].every(k => history.includes(k));
+      } catch { return false; }
+    },
+    lockMsg: 'Cần trúng Jackpot ở cả 5 trò (Roulette, Duck Derby, Blackjack, Slot Machine, Plinko)!',
+  },
+  {
+    id: 'trieu_phu',
+    name: '💎 Dân Chơi Triệu Phú',
+    desc: 'Sở hữu từ 3,000 xu chips casino trở lên trong tài khoản!',
+    condition: () => getChips() >= 3000,
+    lockMsg: 'Cần tích lũy từ 3,000 xu chips casino!',
+  },
+  {
+    id: 'dai_hiep_xmas',
+    name: '🎄 Đại Hiệp Giáng Sinh',
+    desc: 'Hiệp sĩ tuyết trắng mang lại niềm vui cho mùa Noel',
+    condition: () => true,
+  },
+  {
+    id: 'chua_te_halloween',
+    name: '🎃 Chúa Tể Halloween',
+    desc: 'Bậc thầy bí ngô ma quái dũng cảm đối mặt Boss Ma Cà Rồng',
+    condition: () => true,
+  },
+  {
+    id: 'than_tai_tet',
+    name: '🧧 Thần Tài Gõ Cửa',
+    desc: 'Khai xuân đón lộc, phát pháo rền vang',
+    condition: () => true,
+  },
+  {
+    id: 'than_tinh_yeu',
+    name: '💝 Thần Tình Yêu Cupido',
+    desc: 'Sứ giả gắn kết những trái tim ngọt ngào',
+    condition: () => true,
+  },
+  {
+    id: 'tan_thu',
+    name: '🌟 Tân Thủ Đáng Yêu',
+    desc: 'Nhà thám hiểm mới bước chân vào thế giới lễ hội',
+    condition: () => true,
+  },
+  {
+    id: 'none',
+    name: 'Ẩn danh hiệu',
+    desc: 'Không hiển thị huy hiệu danh hiệu trên tên',
+    condition: () => true,
+  },
+];
+
+function openTitlesDialog() {
+  renderTitlesList();
+  openDialog('dlgTitles');
+}
+
+function renderTitlesList() {
+  const container = $('titlesList');
+  if (!container) return;
+  container.innerHTML = '';
+  const currentTitle = me?.title || localStorage.getItem('gh_selected_title') || '';
+
+  TITLE_LIST.forEach(t => {
+    const isUnlocked = t.condition(me?.name);
+    const isEquipped = (t.id === 'none' && !currentTitle) || currentTitle === t.name;
+    const card = document.createElement('div');
+    card.className = `title-select-card ${isEquipped ? 'active' : ''}`;
+    card.style.opacity = isUnlocked ? '1' : '0.6';
+
+    const color = t.id === 'admin' ? '#ef4444' : t.id === 'vuadoden' ? '#facc15' : '#38bdf8';
+    card.innerHTML = `
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="title-badge-preview" style="color:${color}">${t.name}</span>
+          ${isEquipped ? '<span style="font-size:11px;color:#22c55e;font-weight:700">✓ Đang mặc</span>' : ''}
+        </div>
+        <p style="margin:4px 0 0 0;font-size:11.5px;color:#94a3b8">${t.desc}</p>
+        ${!isUnlocked && t.lockMsg ? `<p style="margin:2px 0 0 0;font-size:11px;color:#f87171">🔒 ${t.lockMsg}</p>` : ''}
+      </div>
+      <div>
+        <button class="primary" style="padding:5px 12px;font-size:12px" ${!isUnlocked || isEquipped ? 'disabled' : ''}>
+          ${isEquipped ? 'Đang chọn' : isUnlocked ? 'Mặc' : 'Chưa mở'}
+        </button>
+      </div>
+    `;
+
+    card.querySelector('button').onclick = () => {
+      if (!isUnlocked) return;
+      selectTitle(t);
+    };
+
+    container.appendChild(card);
+  });
+}
+
+function selectTitle(titleItem) {
+  const chosenTitle = titleItem.id === 'none' ? '' : titleItem.name;
+  if (me) {
+    me.title = chosenTitle;
+    me.av?.setName(me.name, me.title);
+  }
+  localStorage.setItem('gh_selected_title', chosenTitle);
+  syncMyAppearance();
+  toast(`👑 Bạn đã trang bị danh hiệu: ${chosenTitle || 'Không'}`);
+  closeDialog('dlgTitles');
+}
+
+$('btnTitles').onclick = openTitlesDialog;
+
+// ============================================================================
+// ROBLOX ADMIN COMMANDS SYSTEM
+// ============================================================================
+let adminSpeedMultiplier = 1.0;
+let adminJumpPower = 8.2;
+let adminFlying = false;
+let adminNoclip = false;
+let adminGodMode = false;
+window.adminGodMode = false;
+let isFrozen = false;
+let isJailed = false;
+let jailedPos = null;
+let currentGravity = 20;
+const adminBanList = new Set();
+const adminMuteList = new Set();
+
+let bannerTimeout = null;
+function showAdminServerBanner(text) {
+  const banner = $('adminServerBanner');
+  const txt = $('adminBannerText');
+  if (!banner || !txt) return;
+  txt.textContent = text;
+  banner.classList.remove('hidden');
+  clearTimeout(bannerTimeout);
+  bannerTimeout = setTimeout(() => {
+    banner.classList.add('hidden');
+  }, 6500);
+}
+
+function findPeerByName(nameQuery) {
+  if (!nameQuery) return null;
+  const q = nameQuery.toLowerCase().trim();
+  for (const [id, p] of peers) {
+    if (p.name && p.name.toLowerCase().includes(q)) {
+      return [id, p];
+    }
+  }
+  return null;
+}
+
+function openAdminDialog() {
+  $('inAdminCmd').value = '';
+  openDialog('dlgAdmin');
+  setTimeout(() => $('inAdminCmd').focus(), 150);
+}
+
+$('btnAdminCmds').onclick = () => {
+  if (isAdminUser(me?.name) || (state && state.hostId === net?.selfId)) {
+    openAdminDialog();
+  } else {
+    toast('⛔ Bạn không có quyền Admin!');
+  }
+};
+
+$('btnRunAdminCmd').onclick = () => {
+  const cmd = $('inAdminCmd').value.trim();
+  if (cmd) {
+    executeAdminCommand(cmd);
+    $('inAdminCmd').value = '';
+  }
+};
+
+$('inAdminCmd').onkeydown = e => {
+  if (e.key === 'Enter') $('btnRunAdminCmd').click();
+};
+
+function executeAdminCommand(raw) {
+  let cmdStr = (raw || '').trim();
+  if (cmdStr.startsWith(':') || cmdStr.startsWith(';') || cmdStr.startsWith('/')) {
+    cmdStr = cmdStr.slice(1).trim();
+  }
+  if (!cmdStr) return false;
+
+  const parts = cmdStr.split(/\s+/);
+  const cmd = parts[0].toLowerCase();
+  const args = parts.slice(1);
+
+  // Check Admin permission
+  const isAdmin = isAdminUser(me?.name) || (state && state.hostId === net?.selfId);
+  if (!isAdmin) {
+    toast('⛔ Bạn không có quyền Admin! Lệnh này chỉ dành riêng cho: chu0n6, trung, khoa pug (lukhachyaros).');
+    return true;
+  }
+
+  switch (cmd) {
+    // === 1. PLAYER MANAGEMENT ===
+    case 'kick': {
+      const targetName = args[0];
+      if (!targetName) { toast('⚠️ Cú pháp: :kick <tên_người_chơi>'); return true; }
+      const pEntry = findPeerByName(targetName);
+      if (!pEntry) { toast(`⚠️ Không tìm thấy người chơi "${targetName}"`); return true; }
+      emitOp({ k: 'kick', targetId: pEntry[0], targetName: pEntry[1].name, byHost: net.selfId });
+      toast(`👢 Đã đuổi ${pEntry[1].name} ra khỏi phòng!`);
+      return true;
+    }
+    case 'ban': {
+      const targetName = args[0];
+      if (!targetName) { toast('⚠️ Cú pháp: :ban <tên_người_chơi>'); return true; }
+      const pEntry = findPeerByName(targetName);
+      if (pEntry) {
+        emitOp({ k: 'kick', targetId: pEntry[0], targetName: pEntry[1].name, byHost: net.selfId });
+        adminBanList.add(pEntry[1].name.toLowerCase());
+      } else {
+        adminBanList.add(targetName.toLowerCase());
+      }
+      toast(`🚫 Đã đưa "${targetName}" vào danh sách cấm tham gia!`);
+      return true;
+    }
+    case 'unban': {
+      const targetName = args[0];
+      if (targetName) adminBanList.delete(targetName.toLowerCase());
+      toast(`✅ Đã gỡ cấm cho "${targetName}"!`);
+      return true;
+    }
+    case 'mute': {
+      const targetName = args[0];
+      if (targetName) adminMuteList.add(targetName.toLowerCase());
+      toast(`🔇 Đã cấm chat người chơi "${targetName}"!`);
+      return true;
+    }
+    case 'unmute': {
+      const targetName = args[0];
+      if (targetName) adminMuteList.delete(targetName.toLowerCase());
+      toast(`🔊 Đã bỏ cấm chat người chơi "${targetName}"!`);
+      return true;
+    }
+    case 'jail': {
+      const targetName = args[0];
+      emitOp({ k: 'admin_jail', target: targetName || me.name, jailed: true, by: me.name });
+      toast(`⛓️ Đã nhốt lồng giam: ${targetName || me.name}!`);
+      return true;
+    }
+    case 'unjail': {
+      const targetName = args[0];
+      emitOp({ k: 'admin_jail', target: targetName || me.name, jailed: false, by: me.name });
+      toast(`🔓 Đã thả tự do: ${targetName || me.name}!`);
+      return true;
+    }
+    case 'freeze': {
+      const targetName = args[0];
+      emitOp({ k: 'admin_freeze', target: targetName || me.name, frozen: true, by: me.name });
+      toast(`🧊 Đã đóng băng: ${targetName || me.name}!`);
+      return true;
+    }
+    case 'thaw':
+    case 'unfreeze': {
+      const targetName = args[0];
+      emitOp({ k: 'admin_freeze', target: targetName || me.name, frozen: false, by: me.name });
+      toast(`🔥 Đã rã đông: ${targetName || me.name}!`);
+      return true;
+    }
+    case 'god': {
+      adminGodMode = true;
+      window.adminGodMode = true;
+      toast('🛡️ Bật chế độ Bất Tử (God Mode) - Máu luôn 100%!');
+      return true;
+    }
+    case 'ungod': {
+      adminGodMode = false;
+      window.adminGodMode = false;
+      toast('🛡️ Tắt chế độ Bất Tử (God Mode).');
+      return true;
+    }
+    case 'kill': {
+      const targetName = args[0];
+      emitOp({ k: 'admin_kill', target: targetName || me.name, by: me.name });
+      toast(`💀 Đã hạ gục: ${targetName || me.name}!`);
+      return true;
+    }
+    case 'respawn': {
+      const targetName = args[0];
+      emitOp({ k: 'admin_respawn', target: targetName || me.name, by: me.name });
+      toast(`✨ Đã hồi sinh: ${targetName || me.name}!`);
+      return true;
+    }
+    case 'bring': {
+      const targetName = args[0];
+      if (!targetName) { toast('⚠️ Cú pháp: :bring <tên_người_chơi>'); return true; }
+      emitOp({ k: 'admin_teleport', target: targetName, toX: me.x, toY: me.y, by: me.name });
+      toast(`🌀 Đang kéo ${targetName} đến chỗ bạn!`);
+      return true;
+    }
+    case 'to':
+    case 'goto': {
+      const targetName = args[0];
+      if (!targetName) { toast('⚠️ Cú pháp: :to <tên_người_chơi>'); return true; }
+      const pEntry = findPeerByName(targetName);
+      if (!pEntry) { toast(`⚠️ Không tìm thấy người chơi "${targetName}"`); return true; }
+      me.x = pEntry[1].x;
+      me.y = pEntry[1].y;
+      toast(`⚡ Đã dịch chuyển đến sau lưng ${pEntry[1].name}!`);
+      return true;
+    }
+
+    // === 2. CHARACTER & CUSTOMIZATION ===
+    case 'speed':
+    case 'ws': {
+      const val = parseFloat(args[0]) || 1;
+      adminSpeedMultiplier = Math.max(0.1, Math.min(10, val));
+      toast(`⚡ Tốc độ di chuyển đã đặt thành: ${adminSpeedMultiplier}x`);
+      return true;
+    }
+    case 'jp':
+    case 'jumppower': {
+      const val = parseFloat(args[0]) || 8.2;
+      adminJumpPower = Math.max(1, Math.min(25, val));
+      toast(`🦘 Lực nhảy đã đặt thành: ${adminJumpPower}`);
+      return true;
+    }
+    case 'fly': {
+      adminFlying = true;
+      toast('🦅 Bật chế độ Bay Tự Do! (Nhấn Space để bay lên, Shift để hạ xuống)');
+      return true;
+    }
+    case 'unfly': {
+      adminFlying = false;
+      toast('🦅 Tắt chế độ Bay.');
+      return true;
+    }
+    case 'noclip': {
+      adminNoclip = true;
+      toast('👻 Bật chế độ Noclip! Bạn có thể đi xuyên qua tất cả các bức tường.');
+      return true;
+    }
+    case 'clip': {
+      adminNoclip = false;
+      toast('🧱 Đã tắt Noclip - va chạm bình thường.');
+      return true;
+    }
+    case 'invisible':
+    case 'invis': {
+      if (me.av) me.av.root.visible = false;
+      toast('👤 Bạn đã trở nên tàng hình hoàn toàn!');
+      return true;
+    }
+    case 'visible':
+    case 'vis': {
+      if (me.av) me.av.root.visible = true;
+      toast('👤 Bạn đã hiện hình trở lại!');
+      return true;
+    }
+    case 'size': {
+      const s = parseFloat(args[0]) || 1;
+      const finalScale = Math.max(0.2, Math.min(6, s));
+      if (me.av) me.av.root.scale.set(finalScale, finalScale, finalScale);
+      emitOp({ k: 'admin_size', target: me.name, scale: finalScale });
+      toast(`📏 Đã chỉnh kích thước nhân vật: ${finalScale}x`);
+      return true;
+    }
+
+    // === 3. WORLD & ENVIRONMENT ===
+    case 'sm':
+    case 'm': {
+      const msg = args.join(' ');
+      if (!msg) { toast('⚠️ Cú pháp: :sm <nội dung thông báo>'); return true; }
+      emitOp({ k: 'admin_sm', text: msg, by: me.name });
+      return true;
+    }
+    case 'time': {
+      const t = args[0] || 'day';
+      world.setDayNightTime?.(t);
+      toast(`☀️ Đã chỉnh thời gian sang: ${t}`);
+      return true;
+    }
+    case 'gravity': {
+      const g = parseFloat(args[0]) || 20;
+      currentGravity = Math.max(0, Math.min(50, g));
+      emitOp({ k: 'admin_gravity', gravity: currentGravity });
+      toast(`🌍 Trọng lực đã đặt thành: ${currentGravity}`);
+      return true;
+    }
+    case 'shutdown': {
+      emitOp({ k: 'closeRoom', hostName: me.name });
+      toast('🛑 Đã tắt phòng!');
+      return true;
+    }
+
+    // === 4. FUN & TROLL ===
+    case 'chips': {
+      const num = parseInt(args[0], 10) || 1000;
+      addChips(num);
+      playSfx('jackpot_voice');
+      updateCasinoChipsUI();
+      toast(`🪙 Admin: Đã cấp thêm ${num.toLocaleString()} xu vào ví!`);
+      return true;
+    }
+    case 'fire': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_fire', target: targetName });
+      toast(`🔥 Đã đốt lửa người chơi ${targetName}!`);
+      return true;
+    }
+    case 'blind': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_blind', target: targetName, blind: true });
+      toast(`🕶️ Đã làm mù người chơi ${targetName}!`);
+      return true;
+    }
+    case 'unblind': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_blind', target: targetName, blind: false });
+      toast(`👀 Đã xóa mù người chơi ${targetName}!`);
+      return true;
+    }
+    default:
+      toast(`⚠️ Lệnh không xác định: :${cmd}. Mở [;] để xem hướng dẫn!`);
+      return false;
+  }
+}
+

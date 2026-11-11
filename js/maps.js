@@ -279,6 +279,39 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         colliders.push({ x: jx, y: jy, r: 0.28 });
       }
     });
+
+    // Secret Passage to Casino: Invisible frost wall at NW corner (x: 3.2, y: 3.5)
+    hotspots.push({
+      id: 'secret_passage_xmas',
+      type: 'secret_passage',
+      target: 'casino',
+      x: 3.2,
+      y: 3.5,
+      radius: 2.2,
+      prompt: '❄️ Bức Tường Băng Bí Ẩn · [E] Đi xuyên tường vào Mật Thất Casino',
+    });
+
+    // Secret Paper Notes (Code: Chu0n6, Raumania)
+    hotspots.push(
+      {
+        id: 'note_chu0n6_xmas',
+        type: 'secret_note',
+        code: 'Chu0n6',
+        x: 2.2,
+        y: 2.2,
+        radius: 1.6,
+        prompt: '📌 Mảnh Giấy Bí Mật · [E] Đọc mật mã nhận 500 xu',
+      },
+      {
+        id: 'note_raumania_xmas',
+        type: 'secret_note',
+        code: 'Raumania',
+        x: 11.2,
+        y: 4.8,
+        radius: 1.6,
+        prompt: '📌 Mảnh Giấy Bí Mật · [E] Đọc mật mã nhận 500 xu',
+      }
+    );
   } else if (themeKey === 'halloween') {
     // Centerpiece: Giant Carved Jack-O'-Lantern
     hotspots.push({
@@ -344,6 +377,39 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         ],
       });
     });
+
+    // Secret Passage to Casino: Hidden Crypt Trapdoor behind Giant Pumpkin (x: 14.5, y: 8.5)
+    hotspots.push({
+      id: 'secret_passage_halloween',
+      type: 'secret_passage',
+      target: 'casino',
+      x: 14.5,
+      y: 8.5,
+      radius: 2.2,
+      prompt: '⚰️ Quan Tài Hầm Ngầm Cổ · [E] Xoay quan tài mở Mật Thất Casino',
+    });
+
+    // Secret Paper Notes (Code: toilagay, BoKho)
+    hotspots.push(
+      {
+        id: 'note_gay_hw',
+        type: 'secret_note',
+        code: 'toilagay',
+        x: 14.5,
+        y: 12.8,
+        radius: 1.6,
+        prompt: '📌 Mảnh Giấy Bí Mật · [E] Đọc mật mã nhận 500 xu',
+      },
+      {
+        id: 'note_bokho_hw',
+        type: 'secret_note',
+        code: 'BoKho',
+        x: 18.5,
+        y: 16.5,
+        radius: 1.6,
+        prompt: '📌 Mảnh Giấy Bí Mật · [E] Đọc mật mã nhận 500 xu',
+      }
+    );
   } else if (themeKey === 'tet') {
     // Centerpiece: Giant Golden Apricot Blossom Tree (Cây Mai Đại Thụ)
     hotspots.push({
@@ -404,6 +470,38 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         ],
       });
     });
+    // Secret Passage to Casino: Imperial Screen behind Giant Mai Tree (x: 14.5, y: 8.8)
+    hotspots.push({
+      id: 'secret_passage_tet',
+      type: 'secret_passage',
+      target: 'casino',
+      x: 14.5,
+      y: 8.8,
+      radius: 2.2,
+      prompt: '🏮 Bức Bình Phong Kim Long · [E] Đọc mật chú mở cửa Mật Thất Casino',
+    });
+
+    // Secret Paper Notes (Code: Trung Legit, Chu0n6)
+    hotspots.push(
+      {
+        id: 'note_trung_tet',
+        type: 'secret_note',
+        code: 'Trung Legit',
+        x: 14.5,
+        y: 12.3,
+        radius: 1.6,
+        prompt: '📌 Mảnh Giấy Bí Mật · [E] Đọc mật mã nhận 500 xu',
+      },
+      {
+        id: 'note_chu0n6_tet',
+        type: 'secret_note',
+        code: 'Chu0n6',
+        x: 22.5,
+        y: 14.8,
+        radius: 1.6,
+        prompt: '📌 Mảnh Giấy Bí Mật · [E] Đọc mật mã nhận 500 xu',
+      }
+    );
   } else if (themeKey === 'valentine') {
     // Centerpiece: a glowing heart tree where visitors can compose love notes.
     hotspots.push({
@@ -458,6 +556,39 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         ],
       });
     });
+
+    // Secret Passage to Casino: Behind East Wishing Fountain (x: 23.5, y: 14.5)
+    hotspots.push({
+      id: 'secret_passage_valentine',
+      type: 'secret_passage',
+      target: 'casino',
+      x: 23.5,
+      y: 14.5,
+      radius: 2.2,
+      prompt: '🌹 Thác Hoa Hồng Bí Ẩn · [E] Trượt qua thác nước xuống hầm Casino',
+    });
+
+    // Secret Paper Notes (Code: BoKho, Raumania)
+    hotspots.push(
+      {
+        id: 'note_bokho_val',
+        type: 'secret_note',
+        code: 'BoKho',
+        x: 6.5,
+        y: 14.8,
+        radius: 1.6,
+        prompt: '📌 Mảnh Giấy Bí Mật · [E] Đọc mật mã nhận 500 xu',
+      },
+      {
+        id: 'note_raumania_val',
+        type: 'secret_note',
+        code: 'Raumania',
+        x: 9.5,
+        y: 9.8,
+        radius: 1.6,
+        prompt: '📌 Mảnh Giấy Bí Mật · [E] Đọc mật mã nhận 500 xu',
+      }
+    );
   } else if (themeKey === 'casino') {
     // 1. Roulette Table (West Plaza, x=7.0, y=11.5)
     hotspots.push({
@@ -547,6 +678,16 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
           { id: cs.id + '_R', sofaId: cs.id, x: cs.x + 0.24, y: cs.y, rot: Math.PI, lean: 1 },
         ],
       });
+    });
+
+    // Secret Exit Door (South, x: 14.5, y: 19.5)
+    hotspots.push({
+      id: 'casino_exit_door',
+      type: 'casino_exit',
+      x: 14.5,
+      y: 19.5,
+      radius: 2.2,
+      prompt: '🚪 Cửa Thoát Hiểm Bí Mật · [E] Trở về thế giới bên trên',
     });
   }
 
