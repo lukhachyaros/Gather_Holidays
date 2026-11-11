@@ -32,7 +32,7 @@ import {
 } from './props.js';
 
 export const TILE = 2; // meters per grid tile
-export const WALL_H = 2.6;
+export const WALL_H = 1.6; // parkour-friendly wall height
 const DARK = new Set(['halloween', 'tet', 'christmas', 'valentine']);
 
 const rnd = seed => {

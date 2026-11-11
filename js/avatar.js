@@ -421,12 +421,13 @@ export class Avatar {
     this.base = s === 'run' ? 'Running' : s === 'walk' ? 'Walking' : s === 'sit' || s === 'couple_sit' ? 'Sitting' : 'Idle';
   }
 
-  playEmote(clipKey) {
+  playEmote(clipKey, hold = true) {
     const clip = EMOTE_CLIP[clipKey] || clipKey || 'wave';
     const dur = EMOTE_DURATION[clip] || 2500;
     this.emote = clip;
+    this.emoteHold = !!hold;
     this.emoteStart = performance.now();
-    this.emoteUntil = this.emoteStart + dur;
+    this.emoteUntil = hold ? Infinity : (this.emoteStart + dur);
     this.buildEmoteProp(clip);
   }
 
@@ -444,9 +445,10 @@ export class Avatar {
       this.speakingBadge.scale.set(s, s, 1);
     }
 
-    // Cancel emote if expired or started walking/running/jumping
-    if (this.emote && (now > this.emoteUntil || (this.base !== 'Idle' && this.base !== 'Sitting') || this.jumping)) {
+    // Cancel emote if non-held emote expired or player started walking/running/jumping
+    if (this.emote && ((!this.emoteHold && now > this.emoteUntil) || (this.base !== 'Idle' && this.base !== 'Sitting') || this.jumping)) {
       this.emote = null;
+      this.emoteHold = false;
       this.emotePropMount.clear();
     }
 
