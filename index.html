@@ -1,4 +1,4 @@
-<!doctype html>
+git<!doctype html>
 <html lang="vi">
 <head>
 <meta charset="utf-8">
@@ -45,6 +45,9 @@
           <span>👤 Tên của bạn</span>
           <input id="inName" maxlength="16" placeholder="Nhập tên hiển thị…">
         </label>
+        <button id="btnOpenCustomizeFromLobby" class="btn-customize-lobby" title="Tùy chỉnh màu da, đầu, tóc, khuôn mặt, áo quần 3D & 2D trước khi vào phòng">
+          🎨 Tùy Chỉnh Avatar
+        </button>
         <a href="admin.html" class="icon-chip" style="display:flex;align-items:center;gap:4px;text-decoration:none;font-size:12px;color:#38bdf8;padding:8px 12px;border:1px solid rgba(56,189,248,0.3);border-radius:8px;" title="Khu vực Admin Builder & Model Studio">🛠 Admin Studio</a>
         <button id="btnCloseLobby" class="hidden" title="Quay lại phòng đang chơi">✕ Đóng</button>
       </div>
@@ -139,6 +142,10 @@
     <button id="btnLobby" class="drawer-item" title="Mở Sảnh chờ (Danh sách phòng & Đổi phòng)">
       <span class="item-icon">🏠</span>
       <span class="item-label">Sảnh Chờ & Danh Sách Phòng</span>
+    </button>
+    <button id="btnDrawerCustomize" class="drawer-item" title="Tùy chỉnh Avatar & Trang phục (Màu da, Đầu, Tóc, Quần áo 3D & 2D)">
+      <span class="item-icon">🎨</span>
+      <span class="item-label">Tùy Chỉnh Avatar</span>
     </button>
     <button id="btnShareScreen" class="drawer-item" title="Chia sẻ màn hình máy tính lên TV lớn (Phím P)">
       <span class="item-icon">🖥️</span>
@@ -968,6 +975,87 @@
     <button id="btnMobileInteract" class="mobile-btn interact-btn" title="Tương tác [E]">✋</button>
     <button id="btnMobileAction" class="mobile-btn action-btn" title="Minigame [G]">🎯</button>
     <button id="btnMobileEmote" class="mobile-btn emote-btn" title="Emote [F]">🎭</button>
+  </div>
+</div>
+
+<!-- DIALOG 16: Roblox-Style Avatar Customization & Inventory Modal -->
+<div id="dlgCustomizeAvatar" class="overlay hidden">
+  <div class="panel customize-panel">
+    <div class="customize-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:28px">🎨</span>
+        <div>
+          <h2 style="margin:0;font-size:18px;color:#f8fafc">Tùy Chỉnh Avatar (Locker & Inventory)</h2>
+          <p class="sub" style="margin:0;font-size:12px;color:#94a3b8">Đổi màu da từng bộ phận, kiểu đầu, tóc, khuôn mặt 2D và khoác lên người trang phục 3D & 2D.</p>
+        </div>
+      </div>
+      <button class="custom-close-btn" data-custom-close title="Đóng">✕</button>
+    </div>
+
+    <div class="customize-body-grid">
+      <!-- Left Column: 3D Live Interactive Viewport -->
+      <div class="customize-preview-col">
+        <div class="preview-canvas-wrap">
+          <canvas id="avatarPreviewCanvas"></canvas>
+          <div class="preview-badge-hint">Kéo chuột để xoay 360°</div>
+        </div>
+        <div class="preview-toolbar">
+          <div class="preview-rot-btns">
+            <button id="btnPreviewRotLeft" class="icon-chip" title="Xoay trái">↺</button>
+            <button id="btnPreviewAutoRot" class="icon-chip active" title="Tự động xoay">🔄 Tự Xoay</button>
+            <button id="btnPreviewRotRight" class="icon-chip" title="Xoay phải">↻</button>
+          </div>
+          <div class="preview-pose-chips">
+            <button class="filter-chip" data-preview-emote="wave" title="Vẫy tay">👋 Vẫy tay</button>
+            <button class="filter-chip" data-preview-emote="cheer_jump" title="Nhảy ăn mừng">🕺 Nhảy</button>
+            <button class="filter-chip" data-preview-emote="flex" title="Khoe cơ bắp">💪 Gồng</button>
+            <button class="filter-chip" data-preview-emote="dab" title="Dab">😎 Dab</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Tabs & Customization Items -->
+      <div class="customize-controls-col">
+        <!-- Main Tabs: Body (A) & Clothing (B) -->
+        <div class="custom-main-tabs">
+          <button id="tabMainBody" class="custom-main-tab active">
+            <span>👤 A. Cơ Thể & Khuôn Mặt (Body)</span>
+          </button>
+          <button id="tabMainClothing" class="custom-main-tab">
+            <span>👕 B. Trang Phục (Clothing)</span>
+          </button>
+        </div>
+
+        <!-- Sub Tabs for Body -->
+        <div id="subTabsBody" class="custom-sub-tabs">
+          <button class="custom-sub-tab active" data-body-tab="skin">🎨 Màu Da (Skin)</button>
+          <button class="custom-sub-tab" data-body-tab="heads">👦 Đầu & Mặt (Heads & Faces)</button>
+          <button class="custom-sub-tab" data-body-tab="hair">💇 Tóc (Hair)</button>
+          <button class="custom-sub-tab" data-body-tab="scale">📏 Khung Cơ Thể (Scale)</button>
+        </div>
+
+        <!-- Sub Tabs for Clothing -->
+        <div id="subTabsClothing" class="custom-sub-tabs hidden">
+          <button class="custom-sub-tab active" data-clothing-tab="layered">🧥 Layered 3D (Trang phục 3D co giãn)</button>
+          <button class="custom-sub-tab" data-clothing-tab="classic">🎴 Classic 2D (Trang phục dán truyền thống)</button>
+        </div>
+
+        <!-- Tab Content Dynamic Container -->
+        <div id="customizeTabContent" class="customize-tab-content"></div>
+
+        <!-- Action Footer -->
+        <div class="customize-footer">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="btnRandomCustomize" class="warn" title="Phối đồ ngẫu nhiên">🎲 Ngẫu Nhiên</button>
+            <button id="btnResetCustomize" class="icon-chip" title="Khôi phục mặc định">🔄 Mặc Định</button>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button data-custom-close>Hủy</button>
+            <button id="btnSaveCustomize" class="primary" style="font-weight:700">💾 Khoác Lên Người & Lưu</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 

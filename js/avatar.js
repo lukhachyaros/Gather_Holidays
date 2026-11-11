@@ -99,6 +99,536 @@ export function isAdminUser(name) {
   );
 }
 
+// ============================================================================
+// PROCEDURAL CANVAS TEXTURES FOR CLASSIC FACES & CLOTHING
+// ============================================================================
+
+const faceTexCache = new Map();
+export function getFaceTexture(key) {
+  if (faceTexCache.has(key)) return faceTexCache.get(key);
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 256, 256);
+
+  if (key === 'smile') {
+    // Classic Roblox Smile (2006)
+    ctx.fillStyle = '#111827';
+    ctx.beginPath();
+    ctx.arc(80, 95, 14, 0, Math.PI * 2);
+    ctx.arc(176, 95, 14, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 14;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(128, 130, 50, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.stroke();
+  } else if (key === 'man') {
+    // Roblox Man Face 😎
+    ctx.fillStyle = '#111827';
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 9;
+    ctx.lineCap = 'round';
+    // Sharp masculine brows
+    ctx.beginPath();
+    ctx.moveTo(45, 75);
+    ctx.lineTo(105, 60);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(151, 60);
+    ctx.lineTo(211, 75);
+    ctx.stroke();
+
+    // Seductive eyes with white sparkle
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.ellipse(78, 100, 24, 11, 0.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(178, 100, 24, 11, -0.1, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(84, 98, 4.5, 0, Math.PI * 2);
+    ctx.arc(184, 98, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Half smirking mouth
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(142, 142, 38, 0.05 * Math.PI, 0.72 * Math.PI);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(182, 144);
+    ctx.lineTo(194, 134);
+    ctx.stroke();
+
+    // Chiseled chin
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(128, 205, 14, 0.2 * Math.PI, 0.8 * Math.PI);
+    ctx.stroke();
+  } else if (key === 'troll') {
+    // Troll Face
+    ctx.fillStyle = '#111827';
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    // Forehead wrinkles
+    ctx.beginPath();
+    ctx.arc(128, 65, 42, 1.1 * Math.PI, 1.9 * Math.PI);
+    ctx.stroke();
+
+    // Eyes
+    ctx.beginPath();
+    ctx.arc(80, 95, 11, 0, Math.PI * 2);
+    ctx.arc(176, 95, 11, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Wide grin
+    ctx.beginPath();
+    ctx.arc(128, 132, 66, 0.1 * Math.PI, 0.9 * Math.PI);
+    ctx.lineTo(60, 142);
+    ctx.closePath();
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.lineWidth = 3.5;
+    for (let x = 80; x <= 176; x += 16) {
+      ctx.beginPath();
+      ctx.moveTo(x, 138);
+      ctx.lineTo(x, 172);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(68, 154);
+    ctx.lineTo(188, 154);
+    ctx.stroke();
+  } else if (key === 'chills') {
+    // Winning Smile (Chills)
+    ctx.fillStyle = '#111827';
+    ctx.beginPath();
+    ctx.arc(76, 90, 15, 0, Math.PI * 2);
+    ctx.arc(180, 90, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(80, 88, 4, 0, Math.PI * 2);
+    ctx.arc(184, 88, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Open teeth grin
+    ctx.beginPath();
+    ctx.arc(128, 125, 54, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.closePath();
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 9;
+    ctx.stroke();
+
+    ctx.lineWidth = 3.5;
+    for (let x = 94; x <= 162; x += 17) {
+      ctx.beginPath();
+      ctx.moveTo(x, 130);
+      ctx.lineTo(x, 160);
+      ctx.stroke();
+    }
+  } else if (key === 'joy') {
+    // Super Happy Face ^ ^
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 11;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(78, 105, 24, 1.15 * Math.PI, 1.85 * Math.PI);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(178, 105, 24, 1.15 * Math.PI, 1.85 * Math.PI);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(128, 130, 48, 0.12 * Math.PI, 0.88 * Math.PI);
+    ctx.closePath();
+    ctx.fillStyle = '#991b1b';
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#f43f5e';
+    ctx.beginPath();
+    ctx.arc(128, 160, 24, 0.8 * Math.PI, 0.2 * Math.PI);
+    ctx.fill();
+
+    ctx.fillStyle = '#fb7185';
+    ctx.beginPath();
+    ctx.ellipse(48, 130, 16, 10, 0, 0, Math.PI * 2);
+    ctx.ellipse(208, 130, 16, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (key === 'checkit') {
+    // Check It
+    ctx.fillStyle = '#111827';
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(50, 68);
+    ctx.lineTo(105, 52);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(78, 92, 14, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.moveTo(156, 92);
+    ctx.lineTo(178, 102);
+    ctx.lineTo(202, 90);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(138, 136, 42, 0.1 * Math.PI, 0.76 * Math.PI);
+    ctx.stroke();
+  } else if (key === 'silly') {
+    // Silly Tongue :P
+    ctx.fillStyle = '#111827';
+    ctx.beginPath();
+    ctx.arc(75, 90, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(181, 94, 9, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(128, 132, 38, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.closePath();
+    ctx.fillStyle = '#7f1d1d';
+    ctx.fill();
+
+    ctx.fillStyle = '#f43f5e';
+    ctx.beginPath();
+    ctx.ellipse(140, 164, 18, 26, 0.15, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(128, 132, 38, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.stroke();
+  } else if (key === 'sinister') {
+    // Sinister Grin
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(50, 65);
+    ctx.lineTo(105, 88);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(206, 65);
+    ctx.lineTo(151, 88);
+    ctx.stroke();
+
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.moveTo(58, 98);
+    ctx.lineTo(98, 105);
+    ctx.lineTo(65, 114);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(198, 98);
+    ctx.lineTo(158, 105);
+    ctx.lineTo(191, 114);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(128, 138, 48, 0.12 * Math.PI, 0.88 * Math.PI);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  faceTexCache.set(key, tex);
+  return tex;
+}
+
+const tshirtTexCache = new Map();
+export function getTshirtDecalTexture(key) {
+  if (tshirtTexCache.has(key)) return tshirtTexCache.get(key);
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 256, 256);
+
+  if (key === 'roblox_logo') {
+    // Classic Roblox Red "R" tilt logo
+    ctx.save();
+    ctx.translate(128, 128);
+    ctx.rotate(-0.16);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.beginPath();
+    ctx.roundRect(-86, -86, 172, 172, 28);
+    ctx.fill();
+
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.roundRect(-78, -78, 156, 156, 24);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.roundRect(-24, -24, 48, 48, 8);
+    ctx.fill();
+    ctx.restore();
+  } else if (key === 'doge') {
+    // Doge Meme
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.arc(128, 128, 80, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(60, 80);
+    ctx.lineTo(80, 25);
+    ctx.lineTo(105, 65);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(196, 80);
+    ctx.lineTo(176, 25);
+    ctx.lineTo(151, 65);
+    ctx.fill();
+
+    ctx.fillStyle = '#fef3c7';
+    ctx.beginPath();
+    ctx.ellipse(128, 142, 38, 28, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#111827';
+    ctx.beginPath();
+    ctx.ellipse(128, 130, 14, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(95, 110, 9, 0, Math.PI * 2);
+    ctx.arc(161, 110, 9, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (key === 'flame_heart') {
+    // Flame Heart
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath();
+    ctx.moveTo(128, 20);
+    ctx.quadraticCurveTo(80, 80, 90, 140);
+    ctx.quadraticCurveTo(128, 170, 166, 140);
+    ctx.quadraticCurveTo(176, 80, 128, 20);
+    ctx.fill();
+
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.moveTo(128, 90);
+    ctx.bezierCurveTo(128, 60, 68, 60, 68, 105);
+    ctx.bezierCurveTo(68, 140, 128, 185, 128, 210);
+    ctx.bezierCurveTo(128, 185, 188, 140, 188, 105);
+    ctx.bezierCurveTo(188, 60, 128, 60, 128, 90);
+    ctx.fill();
+  } else if (key === 'supreme') {
+    // Supreme box
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.roundRect(18, 92, 220, 72, 10);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'italic bold 40px Futura, Arial Black, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Supreme', 128, 128);
+  } else if (key === 'pikachu') {
+    // Pikachu face
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.roundRect(28, 28, 200, 200, 36);
+    ctx.fill();
+
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(65, 145, 22, 0, Math.PI * 2);
+    ctx.arc(191, 145, 22, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#111827';
+    ctx.beginPath();
+    ctx.arc(78, 105, 16, 0, Math.PI * 2);
+    ctx.arc(178, 105, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(82, 101, 6, 0, Math.PI * 2);
+    ctx.arc(182, 101, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(114, 138, 14, 0, 0.9 * Math.PI);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(142, 138, 14, 0.1 * Math.PI, Math.PI);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  tshirtTexCache.set(key, tex);
+  return tex;
+}
+
+const shirtTexCache = new Map();
+export function getClassicShirtTexture(key) {
+  if (shirtTexCache.has(key)) return shirtTexCache.get(key);
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+
+  if (key === 'noob_shirt') {
+    ctx.fillStyle = '#0d69ac';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillStyle = '#f5cd30';
+    ctx.beginPath();
+    ctx.arc(128, 0, 50, 0, Math.PI);
+    ctx.fill();
+  } else if (key === 'tuxedo') {
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(0, 0, 256, 256);
+    // White shirt V-neck
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.moveTo(60, 0);
+    ctx.lineTo(196, 0);
+    ctx.lineTo(128, 140);
+    ctx.closePath();
+    ctx.fill();
+
+    // Red bow tie
+    ctx.fillStyle = '#b91c1c';
+    ctx.beginPath();
+    ctx.moveTo(128, 30);
+    ctx.lineTo(95, 15);
+    ctx.lineTo(95, 45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(128, 30);
+    ctx.lineTo(161, 15);
+    ctx.lineTo(161, 45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(128, 30, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Gold buttons
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.arc(128, 70, 5, 0, Math.PI * 2);
+    ctx.arc(128, 100, 5, 0, Math.PI * 2);
+    ctx.arc(128, 175, 6, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (key === 'striped_polo') {
+    ctx.fillStyle = '#ffedd5';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillStyle = '#f97316';
+    for (let y = 0; y < 256; y += 40) {
+      ctx.fillRect(0, y, 256, 20);
+    }
+  } else if (key === 'cyber_neon') {
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.strokeStyle = '#06b6d4';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(40, 20);
+    ctx.lineTo(100, 100);
+    ctx.lineTo(100, 200);
+    ctx.lineTo(160, 240);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#a855f7';
+    ctx.beginPath();
+    ctx.moveTo(216, 20);
+    ctx.lineTo(156, 100);
+    ctx.lineTo(156, 200);
+    ctx.stroke();
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath();
+    ctx.arc(100, 100, 8, 0, Math.PI * 2);
+    ctx.arc(156, 100, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  shirtTexCache.set(key, tex);
+  return tex;
+}
+
+const pantsTexCache = new Map();
+export function getClassicPantsTexture(key) {
+  if (pantsTexCache.has(key)) return pantsTexCache.get(key);
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+
+  if (key === 'noob_pants') {
+    ctx.fillStyle = '#5b9c37';
+    ctx.fillRect(0, 0, 256, 256);
+  } else if (key === 'ripped_jeans') {
+    ctx.fillStyle = '#1d4ed8';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(30, 20, 60, 50);
+    ctx.strokeRect(166, 20, 60, 50);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(40, 140, 45, 12);
+    ctx.fillRect(170, 140, 45, 12);
+  } else if (key === 'black_slacks') {
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.strokeStyle = '#3f3f46';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(64, 0);
+    ctx.lineTo(64, 256);
+    ctx.moveTo(192, 0);
+    ctx.lineTo(192, 256);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  pantsTexCache.set(key, tex);
+  return tex;
+}
+
 export class Avatar {
   constructor(_unused, { name, hue = 200, costume = 'default', pumpkinHat = null }) {
     this.root = new THREE.Group();
@@ -112,6 +642,9 @@ export class Avatar {
     this.nametagStyle = null;
     this.limbState = { head: true, leftArm: true, rightArm: true, legs: true };
     this.legoBricks = [];
+    this.customConfig = null;
+    this.blinkTimer = 2.0;
+    this.isBlinking = false;
 
     this.body = new THREE.Group();
     this.root.add(this.body);
@@ -153,6 +686,14 @@ export class Avatar {
     this.shirtMesh = part(this.torso, G.box(), mat('#3b82f6'), [0, 0.28, 0], [0.46, 0.54, 0.25]);
     this.pelvisMesh = part(this.hips, G.box(), mat('#2b3a4a'), [0, -0.04, 0], [0.44, 0.16, 0.24]);
 
+    // Classic 2D T-Shirt Decal Mount on Chest
+    const tDecalGeo = new THREE.PlaneGeometry(0.24, 0.24);
+    const tDecalMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.99, side: THREE.DoubleSide });
+    this.tshirtDecal = new THREE.Mesh(tDecalGeo, tDecalMat);
+    this.tshirtDecal.position.set(0, 0.28, 0.128);
+    this.tshirtDecal.visible = false;
+    this.torso.add(this.tshirtDecal);
+
     // Costume extra container on torso (cape, ribs, tattered strips)
     this.torsoExtras = new THREE.Group();
     this.torso.add(this.torsoExtras);
@@ -171,16 +712,24 @@ export class Avatar {
     this.headGroup.position.set(0, 0.58, 0);
     this.torso.add(this.headGroup);
 
-    // Face / Head
+    // Face / Head (supports classic boxy or sphere)
     this.headMesh = part(this.headGroup, G.sph(), mat('#ffdbb5'), [0, 0.2, 0], [0.42, 0.44, 0.42]);
     // Eyes
     this.leftEye = part(this.headGroup, G.sph(), mat('#111827'), [-0.085, 0.22, 0.19], [0.055, 0.065, 0.04]);
     this.rightEye = part(this.headGroup, G.sph(), mat('#111827'), [0.085, 0.22, 0.19], [0.055, 0.065, 0.04]);
     // Blush cheeks
-    part(this.headGroup, G.sph(), mat('#ff8fa3'), [-0.13, 0.16, 0.18], [0.055, 0.035, 0.03]);
-    part(this.headGroup, G.sph(), mat('#ff8fa3'), [0.13, 0.16, 0.18], [0.055, 0.035, 0.03]);
+    this.leftCheek = part(this.headGroup, G.sph(), mat('#ff8fa3'), [-0.13, 0.16, 0.18], [0.055, 0.035, 0.03]);
+    this.rightCheek = part(this.headGroup, G.sph(), mat('#ff8fa3'), [0.13, 0.16, 0.18], [0.055, 0.035, 0.03]);
     // Smile mouth
     this.mouthMesh = part(this.headGroup, G.box(), mat('#7f1d1d'), [0, 0.12, 0.2], [0.09, 0.025, 0.03]);
+
+    // Classic 2D Face Decal Mount on Head Front
+    const fDecalGeo = new THREE.PlaneGeometry(0.34, 0.34);
+    const fDecalMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.99, side: THREE.DoubleSide });
+    this.faceDecal = new THREE.Mesh(fDecalGeo, fDecalMat);
+    this.faceDecal.position.set(0, 0.2, 0.222);
+    this.faceDecal.visible = false;
+    this.headGroup.add(this.faceDecal);
 
     // Hair & Head Costume Extras
     this.hairGroup = new THREE.Group();
@@ -239,6 +788,323 @@ export class Avatar {
     this.hips.add(this.rightLeg);
     this.rightThigh = part(this.rightLeg, G.cyl(), mat('#2b3a4a'), [0, -0.28, 0], [0.16, 0.56, 0.16]);
     this.rightShoe = part(this.rightLeg, G.box(), mat('#1f242d'), [0, -0.62, 0.04], [0.17, 0.14, 0.26]);
+
+    // Layered 3D Clothing Containers (scaled automatically with body bones)
+    this.layeredClothing = {
+      torso: new THREE.Group(),
+      leftArm: new THREE.Group(),
+      rightArm: new THREE.Group(),
+      hips: new THREE.Group(),
+      leftLeg: new THREE.Group(),
+      rightLeg: new THREE.Group(),
+    };
+    this.torso.add(this.layeredClothing.torso);
+    this.leftArm.add(this.layeredClothing.leftArm);
+    this.rightArm.add(this.layeredClothing.rightArm);
+    this.hips.add(this.layeredClothing.hips);
+    this.leftLeg.add(this.layeredClothing.leftLeg);
+    this.rightLeg.add(this.layeredClothing.rightLeg);
+  }
+
+// ============================================================================
+// HAIR & LAYERED CLOTHING 3D BUILDERS
+// ============================================================================
+
+export function buildAvatarHair(hairGroup, style, color) {
+  hairGroup.clear();
+  const m = mat(color, { roughness: 0.45 });
+  const mGloss = mat(color, { roughness: 0.25 });
+
+  if (style === 'classic_part') {
+    // Classic plastic molded hair with part
+    part(hairGroup, G.sph(), mGloss, [0, 0.25, -0.02], [0.45, 0.38, 0.45]);
+    part(hairGroup, G.box(), mGloss, [0.06, 0.34, 0.14], [0.36, 0.13, 0.16], [0.18, 0, -0.08]);
+    part(hairGroup, G.box(), mGloss, [-0.14, 0.31, 0.13], [0.16, 0.12, 0.15], [0.15, 0, 0.12]);
+  } else if (style === 'spiky') {
+    // Anime spiky hair
+    part(hairGroup, G.sph(), m, [0, 0.24, 0], [0.44, 0.36, 0.44]);
+    part(hairGroup, G.cone(), m, [0, 0.52, 0], [0.15, 0.34, 0.15]);
+    part(hairGroup, G.cone(), m, [-0.14, 0.48, 0.05], [0.13, 0.30, 0.13], [0.2, 0, 0.35]);
+    part(hairGroup, G.cone(), m, [0.14, 0.48, 0.05], [0.13, 0.30, 0.13], [-0.2, 0, -0.35]);
+    part(hairGroup, G.cone(), m, [0, 0.46, -0.15], [0.13, 0.28, 0.13], [-0.35, 0, 0]);
+    part(hairGroup, G.cone(), m, [0, 0.42, 0.16], [0.12, 0.24, 0.12], [0.38, 0, 0]);
+    part(hairGroup, G.cone(), m, [-0.16, 0.36, 0.14], [0.10, 0.22, 0.10], [0.3, 0, 0.4]);
+    part(hairGroup, G.cone(), m, [0.16, 0.36, 0.14], [0.10, 0.22, 0.10], [0.3, 0, -0.4]);
+  } else if (style === 'boy_messy') {
+    // Messy boy fringe
+    part(hairGroup, G.sph(), m, [0, 0.25, -0.01], [0.45, 0.37, 0.45]);
+    part(hairGroup, G.box(), m, [-0.05, 0.33, 0.15], [0.28, 0.13, 0.15], [0.25, 0.1, -0.15]);
+    part(hairGroup, G.box(), m, [0.12, 0.32, 0.14], [0.22, 0.12, 0.14], [0.22, -0.1, 0.18]);
+    part(hairGroup, G.box(), m, [-0.15, 0.24, 0.12], [0.12, 0.18, 0.12], [0.1, 0, 0.25]);
+    part(hairGroup, G.box(), m, [0.15, 0.24, 0.12], [0.12, 0.18, 0.12], [0.1, 0, -0.25]);
+  } else if (style === 'ponytail') {
+    // Ponytail
+    part(hairGroup, G.sph(), m, [0, 0.25, -0.01], [0.45, 0.38, 0.45]);
+    part(hairGroup, G.box(), m, [0, 0.33, 0.13], [0.34, 0.12, 0.16], [0.2, 0, 0]);
+    part(hairGroup, G.torus(), mat('#ef4444'), [0, 0.34, -0.22], [0.22, 0.22, 0.22], [Math.PI / 4, 0, 0]);
+    part(hairGroup, G.cone(), m, [0, 0.26, -0.36], [0.15, 0.48, 0.15], [-Math.PI / 3.5, 0, 0]);
+    part(hairGroup, G.cone(), m, [0, 0.08, -0.44], [0.12, 0.38, 0.12], [-Math.PI / 3, 0, 0]);
+  } else if (style === 'layered_curls') {
+    // 3D Layered bouncy curls
+    part(hairGroup, G.sph(), m, [0, 0.25, -0.02], [0.44, 0.38, 0.44]);
+    const curlAngles = [-1.4, -0.9, -0.4, 0, 0.4, 0.9, 1.4];
+    curlAngles.forEach((a) => {
+      const rx = Math.sin(a) * 0.21;
+      const rz = Math.cos(a) * 0.20;
+      part(hairGroup, G.sph(), m, [rx, 0.36, rz], [0.16, 0.16, 0.16]);
+      part(hairGroup, G.sph(), m, [rx * 1.15, 0.25, rz * 1.15], [0.18, 0.18, 0.18]);
+      part(hairGroup, G.sph(), m, [rx * 1.25, 0.14, rz * 1.25], [0.17, 0.17, 0.17]);
+    });
+  } else if (style === 'layered_waves') {
+    // 3D Layered long flowing waves
+    part(hairGroup, G.sph(), m, [0, 0.25, -0.02], [0.45, 0.38, 0.45]);
+    part(hairGroup, G.box(), m, [0, 0.34, 0.14], [0.38, 0.12, 0.16], [0.2, 0, 0]);
+    part(hairGroup, G.cyl(), m, [-0.22, 0.12, 0.06], [0.14, 0.42, 0.14], [0.2, 0, -0.15]);
+    part(hairGroup, G.cyl(), m, [0.22, 0.12, 0.06], [0.14, 0.42, 0.14], [0.2, 0, 0.15]);
+    part(hairGroup, G.cyl(), m, [-0.22, -0.10, 0.08], [0.12, 0.36, 0.12], [0.1, 0, 0.05]);
+    part(hairGroup, G.cyl(), m, [0.22, -0.10, 0.08], [0.12, 0.36, 0.12], [0.1, 0, -0.05]);
+    part(hairGroup, G.box(), m, [0, 0.08, -0.21], [0.42, 0.52, 0.12], [-0.08, 0, 0]);
+  } else if (style === 'layered_cyber') {
+    // Cyberpunk layered two-tone hair
+    const mNeon = mat('#06b6d4', { emissive: '#06b6d4', emissiveIntensity: 0.35, roughness: 0.3 });
+    part(hairGroup, G.sph(), m, [0, 0.25, -0.02], [0.45, 0.38, 0.45]);
+    part(hairGroup, G.box(), m, [-0.10, 0.34, 0.15], [0.24, 0.13, 0.15], [0.22, 0.1, -0.2]);
+    part(hairGroup, G.box(), mNeon, [0.12, 0.33, 0.16], [0.16, 0.14, 0.14], [0.24, -0.1, 0.18]);
+    part(hairGroup, G.box(), mNeon, [-0.21, 0.22, 0.11], [0.08, 0.24, 0.11], [0.1, 0, 0.25]);
+    part(hairGroup, G.cone(), mNeon, [0.15, 0.48, 0.02], [0.11, 0.26, 0.11], [-0.1, 0, -0.3]);
+  }
+}
+
+export function buildAvatarLayeredClothing(layered, cfg = {}) {
+  // 1. Jackets
+  if (cfg.jacket === 'leather_jacket') {
+    const lMat = mat('#18181b', { roughness: 0.28, metalness: 0.2 });
+    const silverMat = mat('#94a3b8', { metalness: 0.8, roughness: 0.2 });
+    part(layered.torso, G.box(), lMat, [0, 0.28, 0.015], [0.49, 0.55, 0.27]);
+    part(layered.torso, G.box(), silverMat, [-0.16, 0.34, 0.14], [0.11, 0.22, 0.04], [0, 0, 0.18]);
+    part(layered.torso, G.box(), silverMat, [0.16, 0.34, 0.14], [0.11, 0.22, 0.04], [0, 0, -0.18]);
+    part(layered.torso, G.box(), silverMat, [0.03, 0.24, 0.142], [0.03, 0.32, 0.02], [0, 0, 0.12]);
+    part(layered.torso, G.box(), silverMat, [-0.22, 0.53, 0], [0.12, 0.03, 0.14]);
+    part(layered.torso, G.box(), silverMat, [0.22, 0.53, 0], [0.12, 0.03, 0.14]);
+    part(layered.leftArm, G.cyl(), lMat, [0, -0.15, 0], [0.165, 0.32, 0.165]);
+    part(layered.rightArm, G.cyl(), lMat, [0, -0.15, 0], [0.165, 0.32, 0.165]);
+  } else if (cfg.jacket === 'bomber_jacket') {
+    const bMat = mat('#991b1b', { roughness: 0.5 });
+    const ribMat = mat('#f8fafc', { roughness: 0.7 });
+    part(layered.torso, G.box(), bMat, [0, 0.30, 0.015], [0.51, 0.50, 0.29]);
+    part(layered.torso, G.box(), ribMat, [0, 0.04, 0.01], [0.48, 0.08, 0.27]);
+    part(layered.torso, G.box(), ribMat, [0, 0.54, 0], [0.38, 0.06, 0.24]);
+    part(layered.leftArm, G.cyl(), ribMat, [0, -0.15, 0], [0.165, 0.32, 0.165]);
+    part(layered.rightArm, G.cyl(), ribMat, [0, -0.15, 0], [0.165, 0.32, 0.165]);
+  } else if (cfg.jacket === 'winter_parka') {
+    const pMat = mat('#1e3a8a', { roughness: 0.6 });
+    const furMat = mat('#f8fafc', { roughness: 0.95 });
+    part(layered.torso, G.box(), pMat, [0, 0.28, 0.02], [0.52, 0.58, 0.30]);
+    part(layered.torso, G.box(), mat('#172554'), [0, 0.38, 0.025], [0.525, 0.04, 0.305]);
+    part(layered.torso, G.box(), mat('#172554'), [0, 0.22, 0.025], [0.525, 0.04, 0.305]);
+    part(layered.torso, G.sph(), furMat, [0, 0.56, -0.04], [0.46, 0.18, 0.36]);
+    part(layered.leftArm, G.cyl(), pMat, [0, -0.15, 0], [0.17, 0.32, 0.17]);
+    part(layered.rightArm, G.cyl(), pMat, [0, -0.15, 0], [0.17, 0.32, 0.17]);
+  }
+
+  // 2. Sweaters
+  if (cfg.sweater === 'xmas_sweater') {
+    const sMat = mat('#b91c1c', { roughness: 0.85 });
+    const wMat = mat('#fef08a', { roughness: 0.8 });
+    part(layered.torso, G.box(), sMat, [0, 0.28, 0.01], [0.48, 0.54, 0.26]);
+    part(layered.torso, G.box(), wMat, [0, 0.30, 0.133], [0.14, 0.14, 0.02]);
+    part(layered.torso, G.box(), wMat, [-0.14, 0.30, 0.133], [0.08, 0.08, 0.02]);
+    part(layered.torso, G.box(), wMat, [0.14, 0.30, 0.133], [0.08, 0.08, 0.02]);
+  } else if (cfg.sweater === 'turtleneck') {
+    const tMat = mat('#f5f5f4', { roughness: 0.75 });
+    part(layered.torso, G.box(), tMat, [0, 0.28, 0.01], [0.48, 0.54, 0.26]);
+    part(layered.torso, G.cyl(), tMat, [0, 0.56, 0], [0.26, 0.14, 0.26]);
+  }
+
+  // 3. Shirts 3D
+  if (cfg.shirt3d === 'hoodie_3d') {
+    const hMat = mat('#475569', { roughness: 0.7 });
+    part(layered.torso, G.box(), hMat, [0, 0.28, 0.01], [0.485, 0.545, 0.265]);
+    part(layered.torso, G.box(), hMat, [0, 0.12, 0.14], [0.32, 0.14, 0.04]);
+    part(layered.torso, G.sph(), hMat, [0, 0.52, -0.12], [0.34, 0.24, 0.22]);
+  } else if (cfg.shirt3d === 'denim_vest') {
+    const dMat = mat('#1d4ed8', { roughness: 0.65 });
+    const brassMat = mat('#f59e0b', { metalness: 0.7, roughness: 0.3 });
+    part(layered.torso, G.box(), dMat, [0, 0.28, 0.015], [0.48, 0.52, 0.265]);
+    for (let i = 0; i < 3; i++) {
+      part(layered.torso, G.sph(), brassMat, [0, 0.16 + i * 0.12, 0.14], [0.03, 0.03, 0.03]);
+    }
+  }
+
+  // 4. Pants 3D
+  if (cfg.pants3d === 'cargo_pants') {
+    const cMat = mat('#3f3f46', { roughness: 0.8 });
+    part(layered.leftLeg, G.box(), cMat, [-0.10, -0.24, 0], [0.07, 0.18, 0.15]);
+    part(layered.leftLeg, G.box(), mat('#27272a'), [-0.105, -0.16, 0], [0.065, 0.04, 0.14]);
+    part(layered.rightLeg, G.box(), cMat, [0.10, -0.24, 0], [0.07, 0.18, 0.15]);
+    part(layered.rightLeg, G.box(), mat('#27272a'), [0.105, -0.16, 0], [0.065, 0.04, 0.14]);
+  } else if (cfg.pants3d === 'baggy_jeans') {
+    const jMat = mat('#2563eb', { roughness: 0.7 });
+    part(layered.leftLeg, G.cyl(), jMat, [0, -0.32, 0], [0.19, 0.54, 0.19]);
+    part(layered.rightLeg, G.cyl(), jMat, [0, -0.32, 0], [0.19, 0.54, 0.19]);
+  }
+
+  // 5. Skirts
+  if (cfg.skirt === 'pleated_skirt') {
+    const sMat = mat('#1e293b', { roughness: 0.75 });
+    part(layered.hips, G.cone(), sMat, [0, -0.16, 0], [0.55, 0.28, 0.42], [Math.PI, 0, 0]);
+  } else if (cfg.skirt === 'princess_dress') {
+    const dMat = mat('#f472b6', { roughness: 0.5, metalness: 0.1 });
+    part(layered.hips, G.cone(), dMat, [0, -0.34, 0], [0.72, 0.64, 0.58], [Math.PI, 0, 0]);
+    part(layered.hips, G.torus(), mat('#ffffff'), [0, -0.06, 0], [0.38, 0.38, 0.04], [Math.PI / 2, 0, 0]);
+  }
+
+  // 6. Shoes 3D
+  if (cfg.shoes3d === 'sneakers_chunky') {
+    const wMat = mat('#ffffff', { roughness: 0.4 });
+    const cMat = mat('#06b6d4', { roughness: 0.5 });
+    part(layered.leftLeg, G.box(), wMat, [0, -0.66, 0.05], [0.20, 0.09, 0.30]);
+    part(layered.leftLeg, G.box(), cMat, [0, -0.61, 0.04], [0.18, 0.08, 0.26]);
+    part(layered.rightLeg, G.box(), wMat, [0, -0.66, 0.05], [0.20, 0.09, 0.30]);
+    part(layered.rightLeg, G.box(), cMat, [0, -0.61, 0.04], [0.18, 0.08, 0.26]);
+  } else if (cfg.shoes3d === 'combat_boots') {
+    const bMat = mat('#0f172a', { roughness: 0.3, metalness: 0.2 });
+    part(layered.leftLeg, G.box(), bMat, [0, -0.63, 0.05], [0.19, 0.16, 0.28]);
+    part(layered.leftLeg, G.cyl(), bMat, [0, -0.48, 0], [0.175, 0.18, 0.175]);
+    part(layered.rightLeg, G.box(), bMat, [0, -0.63, 0.05], [0.19, 0.16, 0.28]);
+    part(layered.rightLeg, G.cyl(), bMat, [0, -0.48, 0], [0.175, 0.18, 0.175]);
+  } else if (cfg.shoes3d === 'classic_slipon') {
+    const sMat = mat('#f8fafc', { roughness: 0.6 });
+    part(layered.leftLeg, G.box(), sMat, [0, -0.63, 0.04], [0.18, 0.12, 0.27]);
+    part(layered.rightLeg, G.box(), sMat, [0, -0.63, 0.04], [0.18, 0.12, 0.27]);
+  }
+}
+
+  applyCustomization(cfg) {
+    if (!cfg) return;
+    this.customConfig = cfg;
+
+    // A. Skin colors for individual limbs & body
+    const sHead = cfg.skin?.head || cfg.skin?.all || '#f5cd30';
+    const sTorso = cfg.skin?.torso || cfg.skin?.all || '#0d69ac';
+    const sLArm = cfg.skin?.leftArm || cfg.skin?.all || '#f5cd30';
+    const sRArm = cfg.skin?.rightArm || cfg.skin?.all || '#f5cd30';
+    const sLLeg = cfg.skin?.leftLeg || cfg.skin?.all || '#5b9c37';
+    const sRLeg = cfg.skin?.rightLeg || cfg.skin?.all || '#5b9c37';
+
+    this.headMesh.material = mat(sHead);
+    this.leftForearm.material = mat(sLArm);
+    this.leftHand.material = mat(sLArm);
+    this.rightForearm.material = mat(sRArm);
+    this.rightHand.material = mat(sRArm);
+
+    this.shirtMesh.material = mat(sTorso);
+    this.leftSleeve.material = mat(sLArm);
+    this.rightSleeve.material = mat(sRArm);
+
+    this.pelvisMesh.material = mat(sLLeg);
+    this.leftThigh.material = mat(sLLeg);
+    this.rightThigh.material = mat(sRLeg);
+
+    // B. Head Type (Classic Boxy vs Round / Dynamic)
+    const hType = cfg.headType || 'classic';
+    if (hType === 'classic') {
+      this.headMesh.geometry = G.box();
+      this.headMesh.scale.set(0.42, 0.42, 0.42);
+      this.faceDecal.position.z = 0.218;
+    } else {
+      this.headMesh.geometry = G.sph();
+      this.headMesh.scale.set(0.42, 0.44, 0.42);
+      this.faceDecal.position.z = 0.222;
+    }
+
+    // C. Classic 2D Faces vs 3D Eyes
+    const faceKey = cfg.classicFace || 'smile';
+    if (faceKey && faceKey !== 'default') {
+      const fTex = getFaceTexture(faceKey);
+      this.faceDecal.material.map = fTex;
+      this.faceDecal.material.needsUpdate = true;
+      this.faceDecal.visible = true;
+      this.leftEye.visible = false;
+      this.rightEye.visible = false;
+      if (this.leftCheek) this.leftCheek.visible = false;
+      if (this.rightCheek) this.rightCheek.visible = false;
+      this.mouthMesh.visible = false;
+    } else {
+      this.faceDecal.visible = false;
+      this.leftEye.visible = true;
+      this.rightEye.visible = true;
+      if (this.leftCheek) this.leftCheek.visible = true;
+      if (this.rightCheek) this.rightCheek.visible = true;
+      this.mouthMesh.visible = true;
+    }
+
+    // D. Hair
+    const hStyle = cfg.hairStyle || 'classic_part';
+    const hColor = cfg.hairColor || '#543310';
+    if (hStyle && hStyle !== 'none') {
+      buildAvatarHair(this.hairGroup, hStyle, hColor);
+    } else {
+      this.hairGroup.clear();
+    }
+
+    // E. Body Scaling & Proportions
+    const sc = cfg.bodyScale || { height: 1.0, width: 1.0, depth: 1.0, head: 1.0 };
+    const h = sc.height || 1.0;
+    const w = sc.width || 1.0;
+    const d = sc.depth || 1.0;
+    const hd = sc.head || 1.0;
+
+    this.torso.scale.set(w, h, d);
+    this.headGroup.scale.set(hd, hd, hd);
+    this.leftArm.scale.set(w * 0.95, h, d);
+    this.rightArm.scale.set(w * 0.95, h, d);
+    this.leftLeg.scale.set(w * 0.95, h, d);
+    this.rightLeg.scale.set(w * 0.95, h, d);
+
+    this.leftArm.position.x = -0.3 * w;
+    this.rightArm.position.x = 0.3 * w;
+    this.leftLeg.position.x = -0.13 * w;
+    this.rightLeg.position.x = 0.13 * w;
+
+    // F. Layered Clothing 3D
+    this.layeredClothing.torso.clear();
+    this.layeredClothing.leftArm.clear();
+    this.layeredClothing.rightArm.clear();
+    this.layeredClothing.hips.clear();
+    this.layeredClothing.leftLeg.clear();
+    this.layeredClothing.rightLeg.clear();
+    if (cfg.layered) {
+      buildAvatarLayeredClothing(this.layeredClothing, cfg.layered);
+    }
+
+    // G. Classic 2D Clothing
+    if (cfg.classic?.shirt && cfg.classic.shirt !== 'none') {
+      const sTex = getClassicShirtTexture(cfg.classic.shirt);
+      const sMat = new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.65 });
+      this.shirtMesh.material = sMat;
+      this.leftSleeve.material = sMat;
+      this.rightSleeve.material = sMat;
+    }
+    if (cfg.classic?.pants && cfg.classic.pants !== 'none') {
+      const pTex = getClassicPantsTexture(cfg.classic.pants);
+      const pMat = new THREE.MeshStandardMaterial({ map: pTex, roughness: 0.7 });
+      this.pelvisMesh.material = pMat;
+      this.leftThigh.material = pMat;
+      this.rightThigh.material = pMat;
+    }
+    if (cfg.classic?.tshirt && cfg.classic.tshirt !== 'none') {
+      const tTex = getTshirtDecalTexture(cfg.classic.tshirt);
+      this.tshirtDecal.material.map = tTex;
+      this.tshirtDecal.material.needsUpdate = true;
+      this.tshirtDecal.visible = true;
+    } else {
+      this.tshirtDecal.visible = false;
+    }
+
+    // Accessories & Auras if present
+    if (cfg.accessory) this.setAccessory(cfg.accessory);
+    if (cfg.aura) this.setAura(cfg.aura);
   }
 
   applyCostume(costumeKey = 'default') {
@@ -689,6 +1555,28 @@ export class Avatar {
 
     if (this.splatGroup.visible && now > this.splatUntil) {
       this.splatGroup.visible = false;
+    }
+
+    // Dynamic Head Blinking & Breathing Expressions
+    if (this.customConfig?.headType === 'dynamic' && this.leftEye?.visible) {
+      this.blinkTimer = (this.blinkTimer || 2.5) - dt;
+      if (this.blinkTimer <= 0) {
+        this.isBlinking = true;
+        this.blinkTimer = 2.4 + Math.random() * 3.2;
+      }
+      if (this.isBlinking) {
+        this.leftEye.scale.y = 0.01;
+        this.rightEye.scale.y = 0.01;
+        if (Math.abs(this.blinkTimer - 2.3) > 0.14) {
+          this.isBlinking = false;
+        }
+      } else {
+        this.leftEye.scale.y = 0.065;
+        this.rightEye.scale.y = 0.065;
+      }
+      if (this.mouthMesh) {
+        this.mouthMesh.scale.x = 0.09 + Math.sin(t * 2.2) * 0.012;
+      }
     }
 
     if (this.speakingBadge && this.speakingBadge.visible) {

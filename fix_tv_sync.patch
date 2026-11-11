@@ -1,0 +1,606 @@
+diff --git a/css/style.css b/css/style.css
+index 5413151..5798031 100644
+--- a/css/style.css
++++ b/css/style.css
+@@ -209,4 +209,9 @@
+ .tvb-bar input{flex:1;min-width:0}
+ .tvb-hint{font-size:11.5px;color:#94a3b8;padding:5px 12px;background:#0b1220;line-height:1.45}
+ #tvbFrame{flex:1;width:100%;border:0;background:#fff}
++
++.media-playback-bar{display:flex;align-items:center;gap:8px;background:rgba(15,23,42,.85);border:1px solid rgba(56,189,248,.25);border-radius:10px;padding:8px 12px;margin:8px 0;width:100%;box-sizing:border-box}
++.media-playback-bar input[type=range]{flex:1;accent-color:#38bdf8;cursor:pointer;height:6px}
++.media-playback-bar input[type=range]:disabled{opacity:.4;cursor:not-allowed}
++.media-time{font-family:monospace;font-size:12px;color:#94a3b8;min-width:85px;text-align:right;white-space:nowrap}
+ 
+diff --git a/index.html b/index.html
+index 7837095..b78e1d5 100644
+--- a/index.html
++++ b/index.html
+@@ -265,6 +265,12 @@
+       <button id="mediaAdd" class="info">➕ Thêm vào hàng chờ</button>
+     </div>
+     <div id="nowPlayingBox" class="queue-now"></div>
++    <div id="mediaPlaybackBar" class="media-playback-bar hidden">
++      <button id="mediaPlayPause" class="primary" title="Tạm dừng hoặc tiếp tục phát">⏸ Tạm dừng</button>
++      <button id="mediaStop" class="warn" title="Dừng và tắt màn hình TV">⏹ Dừng TV</button>
++      <input type="range" id="mediaSeek" min="0" max="100" value="0" step="1" title="Tua thời gian video">
++      <span id="mediaTime" class="media-time">00:00 / 00:00</span>
++    </div>
+     <div class="row">
+       <button id="mediaScrollDown" class="info hidden" title="Cuộn trang web xuống để đưa video ra giữa màn hình TV">🔽 Cuộn xuống Video (K)</button>
+       <button id="mediaFullscreen" class="primary hidden" title="Mở trang web toàn màn hình để dễ xem và bấm">🖥️ Mở to toàn màn hình</button>
+diff --git a/js/game.js b/js/game.js
+index d82aa0b..0623ae4 100644
+--- a/js/game.js
++++ b/js/game.js
+@@ -21,6 +21,13 @@ import {
+   stopMedia,
+   classifyMediaInput,
+   normalizeWebUrl,
++  getCurrentTime,
++  getDuration,
++  isPlayerPlaying,
++  playVideo,
++  pauseVideo,
++  seekPlayer,
++  syncPlayback,
+ } from './media.js';
+ import { World, TILE } from './world.js';
+ import { Avatar, loadCharacter, EMOTE_CLIP, hueFor } from './avatar.js';
+@@ -554,7 +561,7 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
+   $('roomInfo').textContent = `📍 ${roomTitle}`;
+   updateLiveStats();
+ 
+-  initPlayer('yt', onMediaEnded);
++  initPlayer('yt', onMediaEnded, onPlayerStateChanged);
+ 
+   // Wait briefly for existing room state from peers/MQTT; otherwise initialize fresh room state as Host
+   joinTimer = setTimeout(() => {
+@@ -866,6 +873,14 @@ const handlers = {
+         return;
+       }
+       net.send('hello', pubInfo(), id);
++      if (state?.mediaCurrent?.vid && canControlTV(net.selfId)) {
++        const curT = getCurrentTime();
++        if (curT != null && curT > 0) {
++          state.mediaCurrent.t = curT;
++          state.mediaCurrent.at = Date.now();
++          state.mediaCurrent.playing = isPlayerPlaying();
++        }
++      }
+       net.send('state', state, id);
+     }
+   },
+@@ -1117,6 +1132,54 @@ function applyOp(op, senderId = null) {
+       else toast('⏹ Đã phát hết danh sách chờ video');
+       break;
+     }
++    case 'mediaPlayPause': {
++      if (senderId && !canControlTV(senderId)) return;
++      if (!state.mediaCurrent || state.mediaCurrent.id !== op.id) return;
++      state.mediaCurrent.playing = op.playing;
++      state.mediaCurrent.t = op.t;
++      state.mediaCurrent.at = op.at || Date.now();
++      if (senderId !== net?.selfId) {
++        if (op.playing) playVideo();
++        else pauseVideo();
++        syncPlayback(state.mediaCurrent);
++      }
++      updateMediaDialog();
++      toast(op.playing ? `▶ ${op.byName || 'Người điều khiển'} đã tiếp tục phát video` : `⏸ ${op.byName || 'Người điều khiển'} đã tạm dừng video`);
++      break;
++    }
++    case 'mediaSeek': {
++      if (senderId && !canControlTV(senderId)) return;
++      if (!state.mediaCurrent || state.mediaCurrent.id !== op.id) return;
++      state.mediaCurrent.t = op.t;
++      state.mediaCurrent.playing = op.playing;
++      state.mediaCurrent.at = op.at || Date.now();
++      if (senderId !== net?.selfId) {
++        seekPlayer(op.t);
++        syncPlayback(state.mediaCurrent);
++      }
++      updateMediaProgressUI();
++      break;
++    }
++    case 'mediaSync': {
++      if (senderId && !canControlTV(senderId)) return;
++      if (!state.mediaCurrent || state.mediaCurrent.id !== op.id) return;
++      state.mediaCurrent.t = op.t;
++      state.mediaCurrent.playing = op.playing;
++      state.mediaCurrent.at = op.at || Date.now();
++      if (senderId !== net?.selfId) {
++        syncPlayback(state.mediaCurrent);
++      }
++      updateMediaProgressUI();
++      break;
++    }
++    case 'mediaStop': {
++      if (senderId && !canControlTV(senderId)) return;
++      state.mediaCurrent = null;
++      stopMedia();
++      updateMediaDialog();
++      toast(`⏹ ${op.byName || 'Người điều khiển'} đã tắt màn hình TV`);
++      break;
++    }
+     case 'tvScroll': {
+       if (state?.mediaCurrent?.kind === 'web') {
+         const box = $('mediaBox');
+@@ -1274,22 +1337,111 @@ const escHtml = t =>
+   String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+ const mediaLabel = item => (item.kind === 'web' ? '🌐 ' + (item.title || item.url) : 'Video YouTube ' + item.vid);
+ 
+-// Who may change / skip what is on the TV: the Host, whoever added the current item, anyone when TV is idle,
+-// or anyone when the person who added it already left the room.
++// Controller callback when YouTube player state changes on the local machine
++function onPlayerStateChanged(newState, time) {
++  if (!state?.mediaCurrent?.vid || state.mediaCurrent.kind === 'web') return;
++  if (!canControlTV(net?.selfId)) return;
++  const isPlaying = newState === 'PLAYING';
++  if (state.mediaCurrent.playing !== isPlaying) {
++    state.mediaCurrent.playing = isPlaying;
++    state.mediaCurrent.t = time;
++    state.mediaCurrent.at = Date.now();
++    emitOp({
++      k: 'mediaPlayPause',
++      id: state.mediaCurrent.id,
++      playing: isPlaying,
++      t: time,
++      byName: me.name,
++    });
++  }
++}
++
++// Strictly verify who has permission to control the TV:
++// ONLY the person who uploaded / added the current video is allowed to control it!
++// Fallback: If the owner left the room, allow the Host or remaining players so TV is not locked.
+ function canControlTV(userId = net?.selfId) {
+   if (!state) return false;
+   const cur = state.mediaCurrent;
+-  if (!cur || !cur.vid) return true;
+-  if (userId && userId === state.hostId) return true;
++  if (!cur || (!cur.vid && !cur.url)) return true; // TV is idle: anyone can play
+   const ownerId = cur.addedBy;
+-  return ownerId === userId || (!!ownerId && ownerId !== net?.selfId && !peers.has(ownerId));
++  if (!ownerId) return true;
++
++  // If the person who added this video is still present in the room:
++  // ONLY they are allowed to control it!
++  const isOwnerPresent = ownerId === net?.selfId || peers.has(ownerId);
++  if (isOwnerPresent) {
++    return ownerId === userId;
++  }
++
++  // If the original owner has left the room:
++  if (userId && userId === state.hostId) return true;
++  return true;
+ }
+ 
+ function canSkipCurrentMedia() {
+-  if (!state?.mediaCurrent?.vid) return false;
++  if (!state?.mediaCurrent?.vid && !state?.mediaCurrent?.url) return false;
+   return canControlTV(net?.selfId);
+ }
+ 
++function formatMediaTime(sec) {
++  sec = Math.max(0, Math.floor(sec || 0));
++  const m = Math.floor(sec / 60);
++  const s = sec % 60;
++  return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
++}
++
++let isUserDraggingSeek = false;
++
++function updateMediaProgressUI() {
++  const cur = state?.mediaCurrent;
++  const bar = $('mediaPlaybackBar');
++  if (!bar) return;
++  if (!cur || !cur.vid || cur.kind === 'web') {
++    bar.classList.add('hidden');
++    return;
++  }
++  bar.classList.remove('hidden');
++
++  const canCtrl = canControlTV(net?.selfId);
++  $('mediaPlayPause').disabled = !canCtrl;
++  $('mediaStop').disabled = !canCtrl;
++  $('mediaSeek').disabled = !canCtrl;
++  $('mediaPlayPause').textContent = isPlayerPlaying() ? '⏸ Tạm dừng' : '▶ Tiếp tục';
++
++  if (!isUserDraggingSeek) {
++    const curTime = getCurrentTime();
++    const duration = getDuration() || 100;
++    $('mediaSeek').max = Math.floor(duration);
++    $('mediaSeek').value = Math.floor(curTime);
++    $('mediaTime').textContent = `${formatMediaTime(curTime)} / ${formatMediaTime(duration)}`;
++  }
++}
++
++setInterval(() => {
++  if (state?.mediaCurrent?.vid && !$('dlgMedia').classList.contains('hidden')) {
++    updateMediaProgressUI();
++  }
++}, 500);
++
++// Heartbeat sync loop: controller broadcasts video position & play status to all peers
++setInterval(() => {
++  if (!net?.selfId || !state?.mediaCurrent?.vid || state.mediaCurrent.kind === 'web') return;
++  if (!canControlTV(net.selfId)) return;
++  const curTime = getCurrentTime();
++  const isPl = isPlayerPlaying();
++  state.mediaCurrent.t = curTime;
++  state.mediaCurrent.playing = isPl;
++  state.mediaCurrent.at = Date.now();
++  net.send('op', {
++    k: 'mediaSync',
++    id: state.mediaCurrent.id,
++    vid: state.mediaCurrent.vid,
++    t: curTime,
++    playing: isPl,
++    at: Date.now(),
++  });
++}, 1500);
++
+ function updateMediaDialog() {
+   if (!state) return;
+   const q = state.mediaQueue || [];
+@@ -1297,11 +1449,12 @@ function updateMediaDialog() {
+   $('queueCount').textContent = (cur?.vid ? 1 : 0) + q.length;
+ 
+   const nowBox = $('nowPlayingBox');
+-  if (cur && cur.vid) {
++  if (cur && (cur.vid || cur.url)) {
+     const isMine = cur.addedBy === net?.selfId;
+-    const perm = canSkipCurrentMedia()
+-      ? '<span style="color:#4ade80">(Bạn có quyền Skip / thay đổi TV)</span>'
+-      : '<span style="color:#fbbf24">(Chỉ người thêm hoặc Chủ phòng được Skip)</span>';
++    const canCtrl = canControlTV(net?.selfId);
++    const perm = canCtrl
++      ? '<br><span style="color:#4ade80">👑 <b>Bạn đang điều khiển màn hình này</b> (Tạm dừng, tua, skip, tắt)</span>'
++      : `<br><span style="color:#fbbf24">🔒 <b>Đang xem đồng bộ với ${escHtml(cur.addedByName)}</b> (Chỉ người thêm video mới được điều khiển)</span>`;
+     nowBox.innerHTML =
+       '<b>▶ Đang chiếu trên màn hình lớn:</b> ' +
+       escHtml(mediaLabel(cur)) +
+@@ -1315,8 +1468,11 @@ function updateMediaDialog() {
+     nowBox.innerHTML = '<i>TV đang trống. Dán link YouTube hoặc một trang web rồi bấm “Phát ngay”!</i>';
+   }
+ 
++  const canCtrl = canControlTV(net?.selfId);
+   $('mediaSkip').disabled = !canSkipCurrentMedia();
++  $('mediaBypassAd').disabled = !canCtrl;
+   $('mediaBypassAd').classList.toggle('hidden', !!cur && cur.kind === 'web');
++  updateMediaProgressUI();
+   updateStatusBadges();
+ 
+   const qBox = $('queueList');
+@@ -1335,7 +1491,7 @@ function updateMediaDialog() {
+ }
+ 
+ function onMediaEnded(finishedMedia) {
+-  // Only someone allowed to control the TV triggers the auto-advance op
++  // Only the person allowed to control the TV triggers the auto-advance op
+   if (!state?.mediaCurrent || state.mediaCurrent.id !== finishedMedia?.id) return;
+   if (state.mediaCurrent.kind === 'web') return;
+   if (canSkipCurrentMedia()) {
+@@ -1344,6 +1500,9 @@ function onMediaEnded(finishedMedia) {
+ }
+ 
+ function triggerBypassAd() {
++  if (!canControlTV(net?.selfId)) {
++    return toast(`⚠️ Chỉ ${state.mediaCurrent?.addedByName || 'người thêm video'} mới có quyền điều khiển TV.`);
++  }
+   if (bypassAdNow()) {
+     toast('⚡ Đã bỏ qua quảng cáo YouTube & đồng bộ lại thời gian phát!');
+   } else {
+@@ -1368,12 +1527,12 @@ function castToTV(rawInput, { forceQueue = false } = {}) {
+   if (!item) return false;
+   if (!checkCooldown()) return false;
+   const cur = state?.mediaCurrent;
+-  if (!forceQueue && cur?.vid) {
++  if (!forceQueue && (cur?.vid || cur?.url)) {
+     if (canControlTV(net.selfId)) {
+       emitOp({ k: 'mediaPlayNow', item });
+     } else {
+       emitOp({ k: 'mediaQueue+', item });
+-      toast('📋 TV đang được người khác điều khiển — đã xếp nội dung của bạn vào hàng chờ.');
++      toast(`📋 TV đang do ${cur.addedByName || 'người khác'} điều khiển — đã xếp video của bạn vào hàng chờ.`);
+     }
+   } else {
+     emitOp({ k: 'mediaQueue+', item });
+@@ -1397,6 +1556,60 @@ $('tileYoutube').onclick = () => {
+   $('mediaUrl').focus();
+ };
+ 
++// Controls for media playback bar (Play/Pause, Stop, Seek)
++$('mediaPlayPause').onclick = () => {
++  if (!canControlTV(net?.selfId)) {
++    return toast(`⚠️ Chỉ ${state.mediaCurrent?.addedByName || 'người thêm video'} mới có quyền điều khiển màn hình!`);
++  }
++  if (!state.mediaCurrent?.vid) return;
++  const nextPlaying = !isPlayerPlaying();
++  const curT = getCurrentTime();
++  if (nextPlaying) playVideo();
++  else pauseVideo();
++  state.mediaCurrent.playing = nextPlaying;
++  state.mediaCurrent.t = curT;
++  state.mediaCurrent.at = Date.now();
++  emitOp({
++    k: 'mediaPlayPause',
++    id: state.mediaCurrent.id,
++    playing: nextPlaying,
++    t: curT,
++    byName: me.name,
++  });
++};
++
++$('mediaStop').onclick = () => {
++  if (!canControlTV(net?.selfId)) {
++    return toast(`⚠️ Chỉ ${state.mediaCurrent?.addedByName || 'người thêm video'} mới có quyền tắt màn hình!`);
++  }
++  emitOp({ k: 'mediaStop', byName: me.name });
++};
++
++$('mediaSeek').addEventListener('mousedown', () => { isUserDraggingSeek = true; });
++$('mediaSeek').addEventListener('touchstart', () => { isUserDraggingSeek = true; }, { passive: true });
++$('mediaSeek').addEventListener('input', e => {
++  const target = parseFloat(e.target.value);
++  const duration = getDuration() || 100;
++  $('mediaTime').textContent = `${formatMediaTime(target)} / ${formatMediaTime(duration)}`;
++});
++$('mediaSeek').addEventListener('change', e => {
++  isUserDraggingSeek = false;
++  if (!canControlTV(net?.selfId)) return;
++  const target = parseFloat(e.target.value);
++  seekPlayer(target);
++  if (state?.mediaCurrent) {
++    state.mediaCurrent.t = target;
++    state.mediaCurrent.at = Date.now();
++    emitOp({
++      k: 'mediaSeek',
++      id: state.mediaCurrent.id,
++      t: target,
++      playing: isPlayerPlaying(),
++      byName: me.name,
++    });
++  }
++});
++
+ // ---- Fullscreen TV Browser (remote): browse privately, then cast the page to the shared TV ----
+ function openTvBrowser(startUrl = '') {
+   const cur = state?.mediaCurrent;
+@@ -1443,7 +1656,7 @@ $('btnQuickBypassAd').onclick = () => triggerBypassAd();
+ 
+ $('mediaSkip').onclick = () => {
+   if (!canSkipCurrentMedia()) {
+-    return toast('⚠️ Chỉ người thêm nội dung đang chiếu hoặc Chủ phòng mới có quyền Skip!');
++    return toast(`⚠️ Chỉ ${state.mediaCurrent?.addedByName || 'người thêm nội dung'} mới có quyền Skip!`);
+   }
+   if (!checkCooldown()) return;
+   emitOp({ k: 'mediaNext' });
+@@ -1451,7 +1664,7 @@ $('mediaSkip').onclick = () => {
+ 
+ $('mediaMute').onclick = () => {
+   const m = toggleMute();
+-  toast(m ? '🔇 Đã tắt tiếng TV' : '🔊 Đã bật tiếng TV');
++  toast(m ? '🔇 Đã tắt tiếng TV (chỉ trên máy bạn)' : '🔊 Đã bật tiếng TV (chỉ trên máy bạn)');
+ };
+ $('mediaReload').onclick = () => {
+   forceReloadVideo();
+@@ -1459,11 +1672,14 @@ $('mediaReload').onclick = () => {
+ };
+ $('mediaHide').onclick = () => {
+   const h = toggleVideoHidden();
+-  toast(h ? '📺 Đã ẩn video trên màn hình lớn' : '📺 Đã hiện video trên màn hình lớn');
++  toast(h ? '📺 Đã ẩn video trên màn hình lớn (chỉ trên máy bạn)' : '📺 Đã hiện video trên màn hình lớn (chỉ trên máy bạn)');
+ };
+ 
+ let lastTvScrollSync = 0;
+ function scrollTv(deltaY) {
++  if (!canControlTV(net?.selfId)) {
++    return toast(`⚠️ Chỉ ${state.mediaCurrent?.addedByName || 'người thêm'} mới có quyền cuộn màn hình TV.`);
++  }
+   const box = $('mediaBox');
+   if (!box || state?.mediaCurrent?.kind !== 'web') return;
+   const nextY = Math.max(0, box.scrollTop + deltaY);
+@@ -1475,6 +1691,7 @@ function scrollTv(deltaY) {
+   }
+ }
+ function scrollTvToTop() {
++  if (!canControlTV(net?.selfId)) return;
+   const box = $('mediaBox');
+   if (!box) return;
+   box.scrollTo({ top: 0, behavior: 'smooth' });
+@@ -1486,6 +1703,7 @@ $('mediaBox')?.addEventListener(
+   'wheel',
+   e => {
+     if (state?.mediaCurrent?.kind === 'web') {
++      if (!canControlTV(net?.selfId)) return;
+       e.preventDefault();
+       scrollTv(e.deltaY * 1.5);
+     }
+@@ -2417,7 +2635,8 @@ function updateScreen3D() {
+ 
+   box.style.display = showHole ? 'block' : 'none';
+   const isLocked = !!document.pointerLockElement;
+-  box.style.pointerEvents = showHole && !isLocked ? 'auto' : 'none';
++  const canCtrl = canControlTV(net?.selfId);
++  box.style.pointerEvents = showHole && !isLocked && canCtrl ? 'auto' : 'none';
+ 
+   if (!showHole) return;
+ 
+diff --git a/js/media.js b/js/media.js
+index 55ac671..3b2ff16 100644
+--- a/js/media.js
++++ b/js/media.js
+@@ -5,6 +5,7 @@ let player = null,
+   current = null,
+   loadedKey = '',
+   endedCb = null,
++  stateChangeCb = null,
+   userHidden = false,
+   isMuted = false,
+   lastAdBypassAt = 0,
+@@ -140,8 +141,9 @@ export function bypassAdNow() {
+   }
+ }
+ 
+-export function initPlayer(containerId, onTrackEnded) {
++export function initPlayer(containerId, onTrackEnded, onStateChange) {
+   endedCb = onTrackEnded;
++  stateChangeCb = onStateChange;
+   // Create the YouTube iframe only once (re-creating it on every room join left a zombie player playing audio)
+   if (initStarted) return;
+   initStarted = true;
+@@ -187,6 +189,10 @@ function create(id) {
+         checkAndBypassInjectedAd();
+         if (e.data === S.ENDED) {
+           endedCb?.(current);
++        } else if (e.data === S.PLAYING) {
++          stateChangeCb?.('PLAYING', player.getCurrentTime?.() || 0);
++        } else if (e.data === S.PAUSED) {
++          stateChangeCb?.('PAUSED', player.getCurrentTime?.() || 0);
+         } else if (e.data === S.CUED && current?.playing && current.kind !== 'web') {
+           player.playVideo?.();
+         }
+@@ -257,15 +263,22 @@ export function apply(media, force = false) {
+   }
+ 
+   const key = `${media.id || ''}:${media.vid}`;
+-  // Prevent duplicate loadVideoById / seekTo calls that stall YouTube buffering!
++  // Prevent duplicate loadVideoById calls, but ensure playback state and time are aligned!
+   if (!force && key === loadedKey) {
+     const st = player.getPlayerState?.();
+     const S = window.YT?.PlayerState;
+-    if (media.playing && st === S?.PAUSED) {
++    if (media.playing && (st === S?.PAUSED || st === S?.CUED)) {
+       player.playVideo?.();
+-    } else if (!media.playing && st === S?.PLAYING) {
++    } else if (!media.playing && (st === S?.PLAYING || st === S?.BUFFERING)) {
+       player.pauseVideo?.();
+     }
++    const curTime = player.getCurrentTime?.() || 0;
++    const elapsed = media.playing && media.at ? Math.max(0, (Date.now() - media.at) / 1000) : 0;
++    const target = (media.t || 0) + elapsed;
++    const diff = Math.abs(curTime - target);
++    if (diff > (media.playing ? 1.8 : 0.8)) {
++      player.seekTo?.(target, true);
++    }
+     return;
+   }
+ 
+@@ -273,13 +286,20 @@ export function apply(media, force = false) {
+   const elapsed = media.playing && media.at ? Math.max(0, (Date.now() - media.at) / 1000) : 0;
+   // Start at >= 1s instead of 0s to bypass YouTube's 0:00 pre-roll ad trigger!
+   const rawStart = elapsed < 4 ? (media.t || 1) : (media.t || 0) + elapsed;
+-  const startSeconds = Math.max(1, Math.floor(rawStart));
++  const startSeconds = Math.max(0.5, Math.floor(rawStart));
+ 
+   try {
+     player.loadVideoById({
+       videoId: media.vid,
+       startSeconds,
+     });
++    if (!media.playing) {
++      setTimeout(() => {
++        try {
++          player.pauseVideo?.();
++        } catch {}
++      }, 400);
++    }
+     player.unMute?.();
+     player.setVolume?.(90);
+     // Autoplay fallback: if browser blocks unmuted autoplay after 1.2s, play muted first then unmute on click
+@@ -289,7 +309,7 @@ export function apply(media, force = false) {
+       if (st === -1 || st === 5) {
+         player.mute?.();
+         isMuted = true;
+-        player.playVideo?.();
++        if (current.playing) player.playVideo?.();
+       }
+     }, 1200);
+   } catch (e) {
+@@ -311,3 +331,85 @@ addEventListener(
+   },
+   { passive: true }
+ );
++
++export function getCurrentTime() {
++  if (!ready || !player || !player.getCurrentTime) return 0;
++  try {
++    return player.getCurrentTime() || 0;
++  } catch {
++    return 0;
++  }
++}
++
++export function getDuration() {
++  if (!ready || !player || !player.getDuration) return 0;
++  try {
++    return player.getDuration() || 0;
++  } catch {
++    return 0;
++  }
++}
++
++export function isPlayerPlaying() {
++  if (!ready || !player || !player.getPlayerState) return false;
++  try {
++    const s = player.getPlayerState();
++    return s === 1 || s === 3;
++  } catch {
++    return false;
++  }
++}
++
++export function playVideo() {
++  if (!ready || !player || !player.playVideo) return;
++  try {
++    player.playVideo();
++  } catch {}
++}
++
++export function pauseVideo() {
++  if (!ready || !player || !player.pauseVideo) return;
++  try {
++    player.pauseVideo();
++  } catch {}
++}
++
++export function seekPlayer(seconds) {
++  if (!ready || !player || !player.seekTo) return;
++  try {
++    player.seekTo(Math.max(0, seconds), true);
++  } catch {}
++}
++
++export function syncPlayback(media) {
++  if (!ready || !player || !media || !media.vid || media.kind === 'web') return;
++  const key = `${media.id || ''}:${media.vid}`;
++  if (key !== loadedKey) {
++    apply(media);
++    return;
++  }
++  try {
++    const st = player.getPlayerState?.();
++    const S = window.YT?.PlayerState;
++    const curTime = player.getCurrentTime?.() || 0;
++
++    if (!media.playing) {
++      if (st === S?.PLAYING || st === S?.BUFFERING) {
++        player.pauseVideo?.();
++      }
++      if (Math.abs(curTime - (media.t || 0)) > 0.8) {
++        player.seekTo?.(media.t || 0, true);
++      }
++    } else {
++      if (st === S?.PAUSED || st === S?.CUED) {
++        player.playVideo?.();
++      }
++      const elapsed = media.at ? Math.max(0, (Date.now() - media.at) / 1000) : 0;
++      const targetTime = (media.t || 0) + elapsed;
++      if (Math.abs(curTime - targetTime) > 1.8) {
++        player.seekTo?.(targetTime, true);
++      }
++    }
++  } catch {}
++}

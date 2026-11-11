@@ -63,7 +63,13 @@ import {
   equipShopItem,
   unequipShopItem,
 } from './casino.js';
+import {
+  AvatarCustomizerModal,
+  loadSavedAvatarConfig,
+  saveAvatarConfig,
+} from './customizer.js';
 
+let customizerModal = null;
 let rtc = null;
 let minigames = null;
 
