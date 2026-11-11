@@ -47,6 +47,11 @@ export class MinigameManager {
     // Tet Golden Dragon State
     this.dragon = null;
 
+    // Cache elements for safe zone check
+    this.lastInSafe = null;
+    this.badgeEl = null;
+    this.speechLayerEl = null;
+
     // Shared raycaster for 3D cursor & crosshair aiming
     this.raycaster = new THREE.Raycaster();
     this.mouseNdc = new THREE.Vector2(0, 0);
@@ -702,13 +707,16 @@ export class MinigameManager {
     const now = performance.now();
     const me = this.getMe();
 
-    // 1. Safe Zone Detection (Auto-hide speech bubbles in Safe Zone & update indicator)
+    // 1. Safe Zone Detection (Auto-hide speech bubbles in Safe Zone & update indicator only when state changes)
     if (me) {
       const inSafe = isInSafeZone(me.x, me.y) || !!me.seatSlot;
-      const badge = document.getElementById('safeZoneBadge');
-      if (badge) badge.classList.toggle('hidden', !inSafe);
-      const speechLayer = document.getElementById('speechLayer');
-      if (speechLayer) speechLayer.classList.toggle('safe-hidden', inSafe);
+      if (inSafe !== this.lastInSafe) {
+        this.lastInSafe = inSafe;
+        if (!this.badgeEl) this.badgeEl = document.getElementById('safeZoneBadge');
+        if (this.badgeEl) this.badgeEl.classList.toggle('hidden', !inSafe);
+        if (!this.speechLayerEl) this.speechLayerEl = document.getElementById('speechLayer');
+        if (this.speechLayerEl) this.speechLayerEl.classList.toggle('safe-hidden', inSafe);
+      }
     }
 
     // 2. Halloween Vampire AI

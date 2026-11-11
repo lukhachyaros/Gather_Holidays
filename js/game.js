@@ -878,6 +878,11 @@ $('btnJoin').onclick = () => {
 };
 
 function leaveCurrentRoom() {
+  loopRunning = false;
+  if (rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
   if (!net) return;
   const oldRoom = roomName;
   const wasAlone = peers.size === 0;
@@ -1076,7 +1081,8 @@ async function start() {
 
   if (!loopRunning) {
     loopRunning = true;
-    requestAnimationFrame(loop);
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(loop);
   }
 }
 
@@ -3852,21 +3858,25 @@ const free = (x, y, currentH = 0) => {
 
 let last = performance.now(),
   lastSend = 0,
-  sent = {};
+  sent = {},
+  rafId = null;
 
 let lastInteractCheck = 0,
   lastSeatLabelCheck = 0,
   lastWorldSync = 0,
-  lastRtcCheck = 0;
+  lastRtcCheck = 0,
+  lastCampfireCheck = 0,
+  cooldownBadgeEl = null;
 
 function loop(now) {
   if (isKicked || !me?.started || !state) {
     loopRunning = false;
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
     return;
   }
-
-  // Always schedule next frame first so animation loop never dies from temporary glitches
-  requestAnimationFrame(loop);
 
   try {
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -3883,14 +3893,14 @@ function loop(now) {
     }
 
     // 2. Update Cooldown Badge on HUD
-    const cb = $('cooldownBadge');
-    if (cb) {
-      if (now < cooldownUntil) {
-        cb.textContent = `⏳ Hồi chiêu: ${((cooldownUntil - now) / 1000).toFixed(1)}s`;
-        cb.classList.remove('hidden');
-      } else {
-        cb.classList.add('hidden');
+    if (now < cooldownUntil) {
+      if (!cooldownBadgeEl) cooldownBadgeEl = $('cooldownBadge');
+      if (cooldownBadgeEl) {
+        cooldownBadgeEl.textContent = `⏳ Hồi chiêu: ${((cooldownUntil - now) / 1000).toFixed(1)}s`;
+        cooldownBadgeEl.classList.remove('hidden');
       }
+    } else if (cooldownBadgeEl && !cooldownBadgeEl.classList.contains('hidden')) {
+      cooldownBadgeEl.classList.add('hidden');
     }
 
     // 3. Player Locomotion & Sitting State
@@ -4008,12 +4018,15 @@ function loop(now) {
       me.loco = isAirborne ? 'jump' : moving ? (running ? 'run' : 'walk') : 'idle';
     }
 
-    // Show/hide campfire action bar when sitting on campfire log or standing near campfire
-    const nearCampfire =
-      state.theme === 'christmas' &&
-      (me.seatSlot?.campfire ||
-        world?.features?.hotspots?.some(h => h.type === 'campfire' && Math.hypot(h.x - me.x, h.y - me.y) <= h.radius));
-    $('campfireBar')?.classList.toggle('hidden', !nearCampfire);
+    // Show/hide campfire action bar when sitting on campfire log or standing near campfire (throttled ~5Hz)
+    if (now - lastCampfireCheck > 200) {
+      lastCampfireCheck = now;
+      const nearCampfire =
+        state.theme === 'christmas' &&
+        (me.seatSlot?.campfire ||
+          world?.features?.hotspots?.some(h => h.type === 'campfire' && Math.hypot(h.x - me.x, h.y - me.y) <= h.radius));
+      $('campfireBar')?.classList.toggle('hidden', !nearCampfire);
+    }
 
     // Update my 3D Avatar
     const av = me.av;
@@ -4106,7 +4119,8 @@ function loop(now) {
     console.error('Lỗi game loop:', err);
   }
 
-  requestAnimationFrame(loop);
+  // Schedule next frame exactly once
+  rafId = requestAnimationFrame(loop);
 }
 
 function updateFloaters() {
