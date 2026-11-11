@@ -154,6 +154,9 @@ function createMqttClient(brokerUrl, { onConnect, onMessage }) {
   connectWs();
 
   return {
+    isConnected() {
+      return connected;
+    },
     subscribe(topic) {
       subs.add(topic);
       if (connected) sendSubscribe(topic);
@@ -235,6 +238,10 @@ class MqttBus {
   onMessage(fn) {
     this.handlers.add(fn);
     return () => this.handlers.delete(fn);
+  }
+
+  isAnyConnected() {
+    return this.clients.some(c => c.isConnected());
   }
 }
 
@@ -423,6 +430,10 @@ export async function connectLobby(handlers = {}) {
     },
     getRooms() {
       return [...rooms.values()];
+    },
+    getConnectionStatus() {
+      const isOnline = bus ? bus.isAnyConnected() : true;
+      return { isOnline, roomCount: rooms.size };
     },
     destroy() {
       clearInterval(cleanupTimer);

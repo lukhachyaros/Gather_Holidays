@@ -24,8 +24,24 @@ git<!doctype html>
     <div class="splash-sub">Không Gian Lễ Hội Đa Người Chơi 3D Trực Tuyến</div>
     <div class="splash-bar-container"><div id="splashProgressBar" class="splash-bar"></div></div>
     <div id="splashStatusText" class="splash-status">Đang nạp không gian lễ hội...</div>
+    <div class="splash-skip-hint" style="margin-top:14px;font-size:11px;color:rgba(255,255,255,0.45);cursor:pointer">👆 Chạm hoặc click để vào sảnh ngay</div>
   </div>
 </div>
+<script>
+  (function() {
+    var s = document.getElementById('gameSplashScreen');
+    if (!s) return;
+    function dismiss() {
+      if (s && !s.classList.contains('fade-out')) {
+        s.classList.add('fade-out');
+        setTimeout(function() { if (s && s.parentNode) s.parentNode.removeChild(s); }, 700);
+      }
+    }
+    s.addEventListener('click', dismiss);
+    s.addEventListener('touchstart', dismiss, { passive: true });
+    setTimeout(dismiss, 1800);
+  })();
+</script>
 
 <!-- Builder Tools HUD -->
 <div id="btoolsHud" class="btools-hud hidden">🧱 BUILDER MODE: Click để ĐẶT khối 3D | Alt+Click khối để XÓA</div>
@@ -70,7 +86,7 @@ git<!doctype html>
         <div class="lobby-bar">
           <div class="lobby-bar-title">
             <span>🌐 Phòng đang sẵn có</span>
-            <span id="lobbyOnlineBadge" class="live-dot">● Trực tuyến</span>
+            <span id="lobbyOnlineBadge" class="live-dot online" title="Bấm để kiểm tra trạng thái máy chủ MQTT và làm mới">● Trực tuyến</span>
           </div>
           <div class="lobby-filters">
             <button class="filter-chip active" data-filter="all">Tất cả</button>
@@ -241,6 +257,19 @@ git<!doctype html>
     <div class="vampire-scare-face">🧛🩸</div>
     <div class="jumpscare-title">BÁ TƯỚC MA CÀ RỒNG ĐÃ VỒ ĐƯỢC BẠN!</div>
     <div class="jumpscare-hint">Chạy vào Vùng Ghế Ngồi TV để an toàn nhé!</div>
+  </div>
+</div>
+
+<!-- Dragon Flight Mount HUD (Timer, Ring Quest & Controls) -->
+<div id="dragonFlightHud" class="dragon-flight-hud hidden">
+  <div class="flight-hud-top">
+    <span class="flight-title">🐉 CƯỠI RỒNG THẦN PHIÊU DU</span>
+    <span id="dragonFlightTimeText" class="flight-timer-badge">30s</span>
+  </div>
+  <div id="dragonFlightQuestProgress" class="flight-quest-text">🎯 Vòng bay: 0 / 5</div>
+  <div class="flight-controls-hint">
+    <span>🕹️ <b>W/S</b>: Tốc độ · <b>A/D</b>: Lượn trái/phải · <b>Space</b>: Bay lên · <b>Shift</b>: Hạ thấp</span>
+    <button id="btnExitDragonFlight" class="flight-exit-btn">🛑 Xuống Rồng</button>
   </div>
 </div>
 
@@ -489,7 +518,108 @@ git<!doctype html>
   </div>
 </div>
 
-<!-- DIALOG 6: Tet Lucky Money (Bao Li Xi) -->
+<!-- DIALOG: Sacred Shrine of Phuc Loc Tho -->
+<div id="dlgPhucLocTho" class="overlay hidden">
+  <div class="panel phuc-loc-tho-panel">
+    <h2>🏮 Điện Thờ Tam Đa Phúc - Lộc - Thọ</h2>
+    <p class="sub">Thành tâm chiêm bái trước Tam Vị Thần đầu xuân để cầu nguyện an khang, tài lộc dồi dào và trường thọ!</p>
+    
+    <div class="plt-cards-grid">
+      <div class="plt-card" id="btnPltIncense">
+        <div class="plt-card-icon">🕯️</div>
+        <div class="plt-card-info">
+          <div class="plt-card-title">Thắp Hương Cầu An</div>
+          <div class="plt-card-desc">Thành kính dâng hương trầm thơm ngát, xua tan u ám, đón khí lành bình an.</div>
+        </div>
+        <button class="primary sm-btn">Dâng Hương</button>
+      </div>
+
+      <div class="plt-card" id="btnPltBow">
+        <div class="plt-card-icon">🙇‍♂️</div>
+        <div class="plt-card-info">
+          <div class="plt-card-title">Lạy Tam Vị Thần Cầu May</div>
+          <div class="plt-card-desc">Cúi đầu kính lạy trước Tam Thần, nhận lời chúc đại cát và tiền mừng tuổi (Xu).</div>
+        </div>
+        <button class="warn sm-btn">Lạy Cầu May</button>
+      </div>
+
+      <div class="plt-card" id="btnPltChant">
+        <div class="plt-card-icon">📿</div>
+        <div class="plt-card-info">
+          <div class="plt-card-title">Ngồi Tịnh Tâm Đọc Kinh</div>
+          <div class="plt-card-desc">Ngồi trên đệm hương sen tụng kinh niệm chú, tâm tịnh trí sáng, vạn sự hanh thông.</div>
+        </div>
+        <button class="info sm-btn">Đọc Kinh</button>
+      </div>
+    </div>
+
+    <div id="pltBlessingResult" class="plt-result-box hidden">
+      <div class="plt-result-title" id="pltResultTitle">✨ Lời Chúc Phúc Thần Linh</div>
+      <div class="plt-result-msg" id="pltResultMsg">...</div>
+    </div>
+
+    <div class="row">
+      <button data-close>Rời Điện Thờ</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG: Dragon Summoning Altar & Flight Quest -->
+<div id="dlgDragonAltar" class="overlay hidden">
+  <div class="panel dragon-altar-panel">
+    <h2>🐉 Đài Triệu Hồi Rồng Thần — Cưỡi Rồng & Thử Thách</h2>
+    <p class="sub">Triệu hồi Rồng Thần tinh thể bay lượn trên bầu trời đêm Tết (30 giây) và tham gia thử thách bay xuyên vòng tròn để mở khóa các Skin Rồng rực rỡ!</p>
+
+    <div class="row">
+      <button id="btnStartFreeDragonRide" class="primary" style="flex:1;padding:12px;font-size:14px;font-weight:700">
+        🚀 Cưỡi Rồng Tự Do (Bay Lượn 30s)
+      </button>
+    </div>
+
+    <h3 style="margin-top:10px">🎯 Thử Thách Bay Xuyên Vòng Tròn (Mở Khóa Skin Rồng)</h3>
+    <div id="dragonQuestList" class="dragon-quest-list"></div>
+
+    <h3 style="margin-top:10px">🎨 Chọn Skin Rồng Đang Trang Bị</h3>
+    <div id="dragonSkinGrid" class="dragon-skin-grid"></div>
+
+    <div class="row" style="margin-top:8px">
+      <button data-close>Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG: Apricot Tree Lucky Money Rhythm Game -->
+<div id="dlgLixiRhythm" class="overlay hidden">
+  <div class="panel lixi-rhythm-panel">
+    <h2>🧧 Cây Mai Đại Thụ — Canh Nhịp Hái Lộc Lì Xì</h2>
+    <div id="lixiEventNotice" class="lixi-event-notice">
+      <span>⏰ Sự Kiện Hái Lộc: Mở mỗi 15 phút một lần trong 5 phút!</span>
+      <b id="lixiEventTimerText" class="lixi-timer-badge">⏳ Còn 04:30</b>
+    </div>
+
+    <!-- Retro Rhythm Timing Track -->
+    <div class="rhythm-game-area">
+      <div class="rhythm-track-container" id="rhythmTrackContainer">
+        <div id="rhythmSweetSpot" class="rhythm-sweet-spot"></div>
+        <div id="rhythmNeedle" class="rhythm-needle"></div>
+      </div>
+      <div class="rhythm-hint">Canh đúng lúc kim chạy vào vạch màu xanh rồi bấm DỪNG!</div>
+      <button id="btnStopRhythmNeedle" class="rhythm-stop-btn">🎯 DỪNG LẠI! (Phím Space)</button>
+    </div>
+
+    <div id="lixiRhythmResult" class="lixi-box hidden">
+      <div class="lixi-title" id="lixiRhythmTitle">🧧 Bao Lì Xì May Mắn</div>
+      <div class="lixi-detail" id="lixiRhythmDetail">Chúc mừng bạn!</div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <button id="btnTryAnotherLixi" class="primary hidden">🔄 Thử Hái Lại Lần Nữa</button>
+      <button data-close>Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- Backward compatibility for existing dlgLixi -->
 <div id="dlgLixi" class="overlay hidden">
   <div class="panel lixi-panel">
     <h2>🧧 Hái Lộc Đầu Xuân — Cây Mai Đại Thụ</h2>

@@ -481,6 +481,316 @@ export function buildFirecrackerTable() {
 }
 
 // ============================================================================
+// SACRED SHRINE OF THE 3 STAR GODS: PHÚC - LỘC - THỌ (TAM ĐA TÀI LỘC)
+// ============================================================================
+export function buildPhucLocThoShrine() {
+  const g = new THREE.Group();
+
+  // 1. Temple Pavilion Base & Stone Terrace
+  part(g, G.box(), mat('#780000'), [0, 0.2, 0], [4.4, 0.4, 3.4]);
+  part(g, G.box(), mat('#ffd166', { metalness: 0.35 }), [0, 0.42, 0], [4.5, 0.06, 3.5]);
+
+  // Red lacquered temple pillars (4 corners)
+  const pillarMat = mat('#9b111e');
+  const goldMat = mat('#facc15', { metalness: 0.4, roughness: 0.25 });
+  [-1.9, 1.9].forEach(px => {
+    [-1.4, 1.4].forEach(pz => {
+      part(g, G.cyl(), pillarMat, [px, 1.6, pz], [0.18, 2.4, 0.18]);
+      part(g, G.cyl(), goldMat, [px, 2.82, pz], [0.24, 0.1, 0.24]);
+    });
+  });
+
+  // Oriental Pagoda Roof with sweeping eaves
+  const roofMat = mat('#b91c1c');
+  part(g, G.box(), roofMat, [0, 3.05, 0], [4.8, 0.22, 3.8]);
+  part(g, G.box(), goldMat, [0, 3.22, 0], [4.2, 0.14, 3.2]);
+  part(g, G.box(), roofMat, [0, 3.42, 0], [3.2, 0.28, 2.2]);
+  // Roof ridge golden ornament
+  part(g, G.box(), goldMat, [0, 3.62, 0], [1.8, 0.15, 0.3]);
+
+  // Altar Table (Bàn thờ gỗ sơn son thếp vàng)
+  const altarWood = mat('#450a0a');
+  part(g, G.box(), altarWood, [0, 0.8, -0.3], [3.8, 0.72, 1.4]);
+  part(g, G.box(), mat('#dc2626'), [0, 1.18, -0.3], [3.9, 0.08, 1.48]);
+  part(g, G.box(), goldMat, [0, 1.18, 0.44], [3.9, 0.12, 0.04]);
+
+  // --------------------------------------------------------------------------
+  // 2. THE THREE DEITIES: PHÚC - LỘC - THỌ (Distinct Models & Nametags)
+  // --------------------------------------------------------------------------
+
+  // --- STATUE 1: ÔNG PHÚC (Left: x = -1.25) ---
+  // Robe: Crimson silk (#dc2626) with golden cloud trim. Holding a happy baby boy!
+  const phucGroup = new THREE.Group();
+  phucGroup.position.set(-1.25, 1.22, -0.35);
+
+  // Lotus base
+  part(phucGroup, G.cyl(), goldMat, [0, 0.08, 0], [0.55, 0.15, 0.55]);
+  // Robe body
+  part(phucGroup, G.cyl(), mat('#dc2626'), [0, 0.65, 0], [0.45, 1.0, 0.45]);
+  part(phucGroup, G.box(), goldMat, [0, 0.65, 0.22], [0.15, 0.95, 0.03]);
+  // Head & benevolence smile
+  part(phucGroup, G.sph(), mat('#fed7aa'), [0, 1.3, 0], [0.26, 0.28, 0.26]);
+  part(phucGroup, G.cyl(), mat('#991b1b'), [0, 1.5, 0], [0.28, 0.16, 0.28]); // Red mandarin hat
+  // Black goatee
+  part(phucGroup, G.cone(), mat('#1f2937'), [0, 1.14, 0.22], [0.08, 0.22, 0.08], [0.3, 0, 0]);
+
+  // Baby in Ông Phúc's arms (Em bé khôi ngô may mắn)
+  const babyGroup = new THREE.Group();
+  babyGroup.position.set(0.18, 0.82, 0.26);
+  babyGroup.rotation.z = -0.35;
+  part(babyGroup, G.cyl(), mat('#10b981'), [0, 0.18, 0], [0.16, 0.36, 0.16]); // Green swaddle
+  part(babyGroup, G.sph(), mat('#fed7aa'), [0, 0.42, 0], [0.13, 0.13, 0.13]); // Baby head
+  part(babyGroup, G.cone(), goldMat, [0, 0.54, 0], [0.1, 0.14, 0.1], [-0.2, 0, 0]); // Yellow cap
+  phucGroup.add(babyGroup);
+
+  // Nametag Ông Phúc
+  const lblPhuc = labelSprite('✨ ÔNG PHÚC ✨\n(Phúc Tinh Cao Chiếu)', 'rgba(185,28,28,0.92)', '#fef08a', 0.34);
+  lblPhuc.position.set(0, 1.88, 0);
+  phucGroup.add(lblPhuc);
+  g.add(phucGroup);
+
+  // --- STATUE 2: ÔNG LỘC (Center: x = 0, Slightly Taller) ---
+  // Robe: Emerald Jade (#059669) with gold embroidery. Wearing winged official hat & holding Ruyi Scepter!
+  const locGroup = new THREE.Group();
+  locGroup.position.set(0, 1.22, -0.35);
+
+  // Lotus base
+  part(locGroup, G.cyl(), goldMat, [0, 0.08, 0], [0.58, 0.15, 0.58]);
+  // Imperial green robe
+  part(locGroup, G.cyl(), mat('#059669'), [0, 0.72, 0], [0.48, 1.12, 0.48]);
+  part(locGroup, G.box(), goldMat, [0, 0.72, 0.24], [0.18, 1.05, 0.03]); // Gold central sash
+  // Head
+  part(locGroup, G.sph(), mat('#fed7aa'), [0, 1.42, 0], [0.27, 0.29, 0.27]);
+  // Imperial Minister Hat with 2 Side Wing Flaps (Mũ Cánh Chuồn)
+  part(locGroup, G.box(), mat('#0f172a'), [0, 1.62, 0], [0.42, 0.22, 0.36]);
+  part(locGroup, G.box(), goldMat, [0, 1.74, 0], [0.16, 0.08, 0.16]);
+  [-0.42, 0.42].forEach(wx => {
+    part(locGroup, G.box(), mat('#0f172a'), [wx, 1.62, 0], [0.48, 0.06, 0.12]);
+    part(locGroup, G.box(), goldMat, [wx > 0 ? wx + 0.24 : wx - 0.24, 1.62, 0], [0.06, 0.08, 0.14]);
+  });
+  // Long black beard
+  part(locGroup, G.cone(), mat('#0f172a'), [0, 1.22, 0.23], [0.1, 0.32, 0.08], [0.2, 0, 0]);
+
+  // Ngọc Như Ý (Golden & Jade Ruyi Scepter in hands)
+  const ruyiGroup = new THREE.Group();
+  ruyiGroup.position.set(0, 0.88, 0.32);
+  ruyiGroup.rotation.z = 0.5;
+  part(ruyiGroup, G.cyl(), mat('#10b981', { roughness: 0.2 }), [0, 0, 0], [0.04, 0.65, 0.04]);
+  part(ruyiGroup, G.sph(), goldMat, [0, 0.35, 0], [0.12, 0.1, 0.08]); // Cloud head
+  part(ruyiGroup, G.cone(), mat('#dc2626'), [0, -0.36, 0], [0.06, 0.18, 0.06]); // Red tassel
+  locGroup.add(ruyiGroup);
+
+  // Nametag Ông Lộc
+  const lblLoc = labelSprite('💰 ÔNG LỘC 💰\n(Lộc Tấn Vinh Hoa)', 'rgba(5,150,105,0.92)', '#fef08a', 0.36);
+  lblLoc.position.set(0, 2.02, 0);
+  locGroup.add(lblLoc);
+  g.add(locGroup);
+
+  // --- STATUE 3: ÔNG THỌ (Right: x = 1.25) ---
+  // High elongated cranial forehead, flowing long white beard, dragon staff with wine gourd & celestial peach!
+  const thoGroup = new THREE.Group();
+  thoGroup.position.set(1.25, 1.22, -0.35);
+
+  // Lotus base
+  part(thoGroup, G.cyl(), goldMat, [0, 0.08, 0], [0.55, 0.15, 0.55]);
+  // Yellow/Amber Longevity robe
+  part(thoGroup, G.cyl(), mat('#d97706'), [0, 0.65, 0], [0.45, 1.0, 0.45]);
+  part(thoGroup, G.box(), goldMat, [0, 0.65, 0.22], [0.15, 0.95, 0.03]);
+
+  // Face & Prominent Elongated Cranial Dome (Trán Dô Trường Thọ)
+  part(thoGroup, G.sph(), mat('#fed7aa'), [0, 1.26, 0], [0.26, 0.26, 0.26]);
+  part(thoGroup, G.sph(), mat('#fed7aa'), [0, 1.48, 0.04], [0.22, 0.34, 0.22]); // High bald forehead
+
+  // Long flowing white beard & white eyebrows
+  part(thoGroup, G.cone(), mat('#f8fafc'), [0, 1.08, 0.22], [0.14, 0.48, 0.1], [0.25, 0, 0]);
+  [-0.1, 0.1].forEach(ex => {
+    part(thoGroup, G.box(), mat('#ffffff'), [ex, 1.34, 0.22], [0.09, 0.03, 0.03]);
+  });
+
+  // Right Hand: Dragon Head Staff with Wine Gourd (Gậy đầu rồng buộc Hồ Lô Tiên)
+  const staffGroup = new THREE.Group();
+  staffGroup.position.set(-0.36, 0.72, 0.18);
+  part(staffGroup, G.cyl(), mat('#78350f'), [0, 0.35, 0], [0.04, 1.55, 0.04]); // Staff pole
+  part(staffGroup, G.cone(), goldMat, [0, 1.15, 0.06], [0.1, 0.2, 0.1], [0.6, 0, 0]); // Dragon head crook
+  // Hanging Wine Gourd (Hồ Lô Tiên)
+  part(staffGroup, G.sph(), mat('#b45309'), [0.08, 0.95, 0.04], [0.08, 0.09, 0.08]);
+  part(staffGroup, G.sph(), mat('#b45309'), [0.08, 0.82, 0.04], [0.11, 0.12, 0.11]);
+  staffGroup.rotation.z = -0.08;
+  thoGroup.add(staffGroup);
+
+  // Left Hand: Celestial Peach of Immortality (Quả Đào Tiên)
+  const peachGroup = new THREE.Group();
+  peachGroup.position.set(0.24, 0.82, 0.25);
+  part(peachGroup, G.sph(), mat('#fb7185'), [0, 0, 0], [0.11, 0.13, 0.11]);
+  part(peachGroup, G.cone(), mat('#f43f5e'), [0, 0.12, 0], [0.06, 0.1, 0.06]); // Peach tip
+  part(peachGroup, G.box(), mat('#22c55e'), [-0.08, -0.05, 0], [0.08, 0.03, 0.08]); // Green peach leaf
+  thoGroup.add(peachGroup);
+
+  // Nametag Ông Thọ
+  const lblTho = labelSprite('🍑 ÔNG THỌ 🍑\n(Thọ Tỷ Nam Sơn)', 'rgba(217,119,6,0.92)', '#fef08a', 0.34);
+  lblTho.position.set(0, 1.88, 0);
+  thoGroup.add(lblTho);
+  g.add(thoGroup);
+
+  // --------------------------------------------------------------------------
+  // 3. ALTAR OFFERINGS: INCENSE BURNER, FRUITS, CANDLES & SMOKE
+  // --------------------------------------------------------------------------
+  // Bronze Incense Burner (Lư hương đồng)
+  const burnerGroup = new THREE.Group();
+  burnerGroup.position.set(0, 1.25, 0.18);
+  part(burnerGroup, G.cyl(), goldMat, [0, 0.12, 0], [0.26, 0.22, 0.26]);
+  part(burnerGroup, G.sph(), goldMat, [0, 0.05, 0], [0.28, 0.14, 0.28]);
+  // 3 Incense sticks with glowing burning tips
+  [-0.06, 0, 0.06].forEach((ix, idx) => {
+    part(burnerGroup, G.cyl(), mat('#b91c1c'), [ix, 0.36, (idx % 2) * 0.03], [0.015, 0.35, 0.015]);
+    part(burnerGroup, G.sph(), mat('#ff4500', { emissive: '#ff4500', emissiveIntensity: 2.2 }), [ix, 0.54, (idx % 2) * 0.03], [0.02, 0.02, 0.02]);
+  });
+  g.add(burnerGroup);
+
+  // 5-Fruit Tray (Mâm Ngũ Quả May Mắn)
+  const fruitTray = new THREE.Group();
+  fruitTray.position.set(-0.75, 1.25, 0.18);
+  part(fruitTray, G.cyl(), goldMat, [0, 0.03, 0], [0.32, 0.05, 0.32]); // Platter
+  part(fruitTray, G.sph(), mat('#15803d'), [0, 0.15, 0], [0.16, 0.14, 0.16]); // Watermelon
+  part(fruitTray, G.sph(), mat('#facc15'), [0.12, 0.1, 0.08], [0.08, 0.08, 0.08]); // Mango
+  part(fruitTray, G.sph(), mat('#ea580c'), [-0.12, 0.1, -0.06], [0.08, 0.08, 0.08]); // Orange
+  part(fruitTray, G.sph(), mat('#e11d48'), [0.06, 0.12, -0.1], [0.07, 0.07, 0.07]); // Dragonfruit
+  g.add(fruitTray);
+
+  // Stacks of Gold Ingots (Thỏi vàng nén thần tài)
+  const goldTray = new THREE.Group();
+  goldTray.position.set(0.75, 1.25, 0.18);
+  part(goldTray, G.cyl(), goldMat, [0, 0.03, 0], [0.28, 0.05, 0.28]);
+  [-0.06, 0.06].forEach(gx => {
+    part(goldTray, G.box(), goldMat, [gx, 0.08, 0], [0.12, 0.06, 0.08]);
+  });
+  part(goldTray, G.box(), goldMat, [0, 0.14, 0], [0.1, 0.05, 0.07]);
+  g.add(goldTray);
+
+  // 2 Red Temple Candles
+  [-1.4, 1.4].forEach(cx => {
+    part(g, G.cyl(), mat('#991b1b'), [cx, 1.35, 0.18], [0.06, 0.3, 0.06]);
+    const flame = part(g, G.cone(), mat('#ffedd5', { emissive: '#f97316', emissiveIntensity: 2.5 }), [cx, 1.54, 0.18], [0.035, 0.1, 0.035]);
+    const flameLight = new THREE.PointLight('#f97316', 1.8, 4);
+    flameLight.position.set(cx, 1.55, 0.18);
+    g.add(flameLight);
+  });
+
+  // 3 Silk Prayer Cushions in front of Altar (Đệm quỳ lạy hoa sen)
+  [-1.0, 0, 1.0].forEach(kx => {
+    part(g, G.cyl(), mat('#b91c1c'), [kx, 0.12, 1.35], [0.42, 0.15, 0.42]);
+    part(g, G.cyl(), goldMat, [kx, 0.18, 1.35], [0.34, 0.03, 0.34]);
+  });
+
+  // Hanging Lanterns on eaves
+  [-2.2, 2.2].forEach(lx => {
+    const lantern = part(g, G.cyl(), mat('#dc2626', { emissive: '#b91c1c', emissiveIntensity: 0.5 }), [lx, 2.7, 1.5], [0.24, 0.45, 0.24]);
+    part(g, G.cone(), goldMat, [lx, 2.45, 1.5], [0.08, 0.18, 0.08]);
+  });
+
+  // Grand Signboard above temple entrance
+  const mainLabel = labelSprite(
+    '🏮 ĐIỆN THỜ TAM ĐA PHÚC - LỘC - THỌ 🏮\n[E] Chiêm Bái: Thắp Hương · Lạy Cầu May · Ngồi Đọc Kinh',
+    'rgba(153,27,27,0.95)',
+    '#fef08a',
+    0.46
+  );
+  mainLabel.position.set(0, 3.8, 0.3);
+  g.add(mainLabel);
+
+  return g;
+}
+
+// ============================================================================
+// DRAGON SUMMONING ALTAR (ĐÀI TRIỆU HỒI KIM LONG & CƯỠI RỒNG BAY)
+// ============================================================================
+export function buildDragonAltar() {
+  const g = new THREE.Group();
+
+  // Octagonal Dragon Dais (Đài đá rồng chạm trổ hoa văn)
+  const stoneMat = mat('#1e293b', { roughness: 0.5 });
+  const goldTrim = mat('#facc15', { metalness: 0.5, roughness: 0.25 });
+  part(g, G.cyl(), stoneMat, [0, 0.18, 0], [2.1, 0.36, 2.1]);
+  part(g, G.cyl(), goldTrim, [0, 0.38, 0], [2.2, 0.06, 2.2]);
+
+  // Inner Rune Circle (Vòng tròn ấn phù triệu hồi)
+  part(g, G.cyl(), mat('#b91c1c'), [0, 0.42, 0], [1.75, 0.04, 1.75]);
+  part(g, G.cyl(), goldTrim, [0, 0.45, 0], [1.4, 0.03, 1.4]);
+
+  // 4 Golden Dragon Guardian Pillars
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const px = Math.cos(a) * 1.5;
+    const pz = Math.sin(a) * 1.5;
+    part(g, G.cyl(), stoneMat, [px, 0.85, pz], [0.16, 1.1, 0.16]);
+    part(g, G.sph(), goldTrim, [px, 1.45, pz], [0.18, 0.18, 0.18]);
+  }
+
+  // Floating Mystic Dragon Pearl above central pedestal
+  part(g, G.cyl(), goldTrim, [0, 0.65, 0], [0.45, 0.45, 0.45]);
+  const pearlMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0xfacc15,
+    emissiveIntensity: 2.5,
+    roughness: 0.1,
+    metalness: 0.2,
+  });
+  const floatingPearl = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), pearlMat);
+  floatingPearl.position.set(0, 1.35, 0);
+  g.add(floatingPearl);
+
+  const pearlLight = new THREE.PointLight('#facc15', 3.5, 10);
+  pearlLight.position.set(0, 1.35, 0);
+  g.add(pearlLight);
+
+  const lbl = labelSprite(
+    '🐉 ĐÀI TRIỆU HỒI RỒNG THẦN 🐉\n[E] Triệu Hồi Cưỡi Rồng (30s) · Thử Thách Vòng Bay Mở Khóa Skin',
+    'rgba(180,83,9,0.92)',
+    '#fde047',
+    0.44
+  );
+  lbl.position.set(0, 2.3, 0);
+  g.add(lbl);
+
+  return g;
+}
+
+// ============================================================================
+// AERIAL HOOP RING FOR DRAGON FLIGHT QUEST (VÒNG BAY LƠ LỬNG)
+// ============================================================================
+export function buildAerialRing(color = '#facc15', radius = 2.8) {
+  const g = new THREE.Group();
+  const ringMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(color),
+    emissive: new THREE.Color(color),
+    emissiveIntensity: 1.8,
+    roughness: 0.2,
+    metalness: 0.3,
+  });
+  // Torus ring
+  const torus = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.22, 12, 36), ringMat);
+  g.add(torus);
+
+  // Soft glowing center portal aura
+  const auraMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(color),
+    transparent: true,
+    opacity: 0.28,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const portalDisk = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.94, 28), auraMat);
+  g.add(portalDisk);
+
+  // Point light for illumination in night sky
+  const light = new THREE.PointLight(color, 2.5, radius * 3.5);
+  g.add(light);
+
+  g.userData.radius = radius;
+  return g;
+}
+
+// ============================================================================
  // VALENTINE CENTERPIECES: HEART TREE, WISHING FOUNTAIN & ROSE ARCH
  // ============================================================================
 function valentineHeartGeometry() {

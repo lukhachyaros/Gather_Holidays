@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { playSfx } from './audio.js';
+import { buildAerialRing } from './props.js';
 
 const TILE = 2;
 
@@ -14,6 +15,107 @@ const TILE = 2;
 export function isInSafeZone(x, y) {
   return x >= 9.0 && x <= 20.0 && y >= 1.5 && y <= 8.2;
 }
+
+// ----------------------------------------------------------------------------
+// DRAGON SKINS (PALETTES MATCHING CRYSTAL ARTICULATED DRAGONS)
+// ----------------------------------------------------------------------------
+export const DRAGON_SKINS = {
+  gold: {
+    id: 'gold',
+    name: 'Hoàng Long (Kim Tinh)',
+    color: 0xfacc15,
+    darkColor: 0xca8a04,
+    accent: 0xdc2626,
+    emissive: 0xfacc15,
+    desc: 'Rồng Vàng Hoàng Gia quyền uy tối thượng (Mặc định)',
+  },
+  jade: {
+    id: 'jade',
+    name: 'Bích Long (Ngọc Lục Bảo)',
+    color: 0x10b981,
+    darkColor: 0x047857,
+    accent: 0xfde047,
+    emissive: 0x10b981,
+    desc: 'Rồng Ngọc Bích mang lại tài lộc và sinh khí dồi dào',
+  },
+  ice: {
+    id: 'ice',
+    name: 'Băng Long (Hàn Tinh Thể)',
+    color: 0x06b6d4,
+    darkColor: 0x0891b2,
+    accent: 0xffffff,
+    emissive: 0x22d3ee,
+    desc: 'Rồng Băng Giá tinh khiết toát khí lạnh buốt huyền ảo',
+  },
+  amethyst: {
+    id: 'amethyst',
+    name: 'Tử Long (Thạch Anh Tím)',
+    color: 0x9333ea,
+    darkColor: 0x6b21a8,
+    accent: 0xf43f5e,
+    emissive: 0xa855f7,
+    desc: 'Rồng Tím Thần Bí mang năng lượng vũ trụ siêu phàm',
+  },
+  ruby: {
+    id: 'ruby',
+    name: 'Hỏa Long (Hỏa Diệm Hoàng Kim)',
+    color: 0xef4444,
+    darkColor: 0xb91c1c,
+    accent: 0xfacc15,
+    emissive: 0xf97316,
+    desc: 'Rồng Lửa Rực Cháy thiêu rụi tà ma, ngập tràn phúc khí',
+  },
+  sapphire: {
+    id: 'sapphire',
+    name: 'Hải Long Thần (Lam Tinh Tối Thượng)',
+    color: 0x2563eb,
+    darkColor: 0x1e40af,
+    accent: 0x38bdf8,
+    emissive: 0x60a5fa,
+    desc: 'Rồng Biển Thần Thoại thấu hiểu càn khôn quyền năng vô song',
+  },
+};
+
+// ----------------------------------------------------------------------------
+// AERIAL RING FLIGHT QUEST CHALLENGES
+// ----------------------------------------------------------------------------
+export const FLIGHT_QUESTS = [
+  {
+    stage: 1,
+    ringCount: 5,
+    targetSkin: 'jade',
+    title: 'Thử Thách 1: Lướt Gió Xuân (5 Vòng Tròn)',
+    desc: 'Bay qua 5 vòng tròn cơ bản để mở khóa skin Bích Long (Ngọc Lục Bảo)!',
+  },
+  {
+    stage: 2,
+    ringCount: 8,
+    targetSkin: 'ice',
+    title: 'Thử Thách 2: Hàn Băng Vút Cao (8 Vòng Tròn)',
+    desc: 'Bay qua 8 vòng tròn trên cao mây gió mở khóa skin Băng Long (Hàn Tinh Thể)!',
+  },
+  {
+    stage: 3,
+    ringCount: 10,
+    targetSkin: 'amethyst',
+    title: 'Thử Thách 3: Tử Vân Uốn Lượn (10 Vòng Tròn)',
+    desc: 'Bay qua 10 vòng tròn uốn lượn liên hoàn mở khóa skin Tử Long (Thạch Anh Tím)!',
+  },
+  {
+    stage: 4,
+    ringCount: 12,
+    targetSkin: 'ruby',
+    title: 'Thử Thách 4: Hỏa Diệm Xuyên Tán (12 Vòng Tròn)',
+    desc: 'Bay qua 12 vòng tròn rực lửa xuyên qua tán Mai & Đền Thờ mở khóa skin Hỏa Long!',
+  },
+  {
+    stage: 5,
+    ringCount: 15,
+    targetSkin: 'sapphire',
+    title: 'Thử Thách 5: Vũ Trụ Lam Tinh (15 Vòng Tròn)',
+    desc: 'Bay qua 15 vòng tròn tối thượng với tốc độ cao mở khóa skin Hải Long Thần!',
+  },
+];
 
 export class MinigameManager {
   constructor(scene, camera, getMe, getPeers, emitOp, toast, floaters) {
@@ -44,8 +146,25 @@ export class MinigameManager {
     this.nextVampireCheck = performance.now() + 10000;
     this.isBeingJumpscared = false;
 
-    // Tet Golden Dragon State
+    // Tet Crystal Dragon State & Flight Mount
     this.dragon = null;
+    this.currentDragonSkin = localStorage.getItem('gh_dragon_active_skin') || 'gold';
+    try {
+      this.unlockedDragonSkins = JSON.parse(localStorage.getItem('gh_unlocked_dragon_skins') || '["gold"]');
+    } catch (_) {
+      this.unlockedDragonSkins = ['gold'];
+    }
+    this.isRidingDragon = false;
+    this.dragonFlightTimer = 0;
+    this.dragonSpeed = 18.0;
+    this.dragonYaw = 0;
+    this.dragonPitch = 0;
+    this.dragonRoll = 0;
+    this.dragonVelocity = new THREE.Vector3();
+    this.activeQuest = null;
+    this.flightRings = [];
+    this.ringsCollected = 0;
+    this.dragonKeys = { forward: false, backward: false, left: false, right: false, up: false, down: false };
 
     // Cache elements for safe zone check
     this.lastInSafe = null;
@@ -547,176 +666,435 @@ export class MinigameManager {
   }
 
   // --------------------------------------------------------------------------
-  // TET: MYTHICAL GOLDEN DRAGON (KIM LONG) ARTICULATION - MATCHING IMAGE 2
+  // TET: ARTICULATED CRYSTAL GEM DRAGON (MATCHING CRYSTAL DRAGON PHOTO)
   // --------------------------------------------------------------------------
-  spawnGoldenDragon() {
+  setDragonSkin(skinKey) {
+    if (!DRAGON_SKINS[skinKey]) return;
+    this.currentDragonSkin = skinKey;
+    localStorage.setItem('gh_dragon_active_skin', skinKey);
+    if (this.theme === 'tet') {
+      this.spawnGoldenDragon(skinKey);
+    }
+  }
+
+  getUnlockedDragonSkins() {
+    return this.unlockedDragonSkins;
+  }
+
+  spawnGoldenDragon(skinKey = null) {
+    if (this.dragon?.group) {
+      this.group.remove(this.dragon.group);
+      this.dragon = null;
+    }
+
+    const key = skinKey || this.currentDragonSkin || 'gold';
+    const skin = DRAGON_SKINS[key] || DRAGON_SKINS.gold;
+
     this.dragonGroup = new THREE.Group();
     this.group.add(this.dragonGroup);
 
-    // Color palette based directly on image_2.png:
-    // Bright Mai Flower Yellow (#facc15 / #fde047), Fiery Crimson (#dc2626 / #ef4444)
-    const brightGoldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3, metalness: 0.25 });
-    const maiYellowMat = new THREE.MeshStandardMaterial({ color: 0xfde047, roughness: 0.25, metalness: 0.2 });
-    const darkGoldMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.35, metalness: 0.3 });
-    const crimsonMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.35, metalness: 0.2 });
-    const darkCrimsonMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.4, metalness: 0.25 });
-    const blackMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
-    const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const fangMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
-
-    // Majestic Dragon Head (Origami Low-Poly Style from image_2.png)
-    const head = new THREE.Group();
-
-    // Central Snout & Diamond Facets (Mũi & Mặt Vàng Hoa Mai)
-    const snoutCore = new THREE.Mesh(new THREE.ConeGeometry(0.85, 2.2, 4), brightGoldMat);
-    snoutCore.rotation.y = Math.PI / 4;
-    snoutCore.rotation.x = Math.PI / 2.2;
-    snoutCore.position.set(0, 0, 0.6);
-    head.add(snoutCore);
-
-    // Cheek facets (2 má vàng hoa mai đa giác)
-    [-0.55, 0.55].forEach(cx => {
-      const cheek = new THREE.Mesh(new THREE.ConeGeometry(0.65, 1.6, 4), maiYellowMat);
-      cheek.position.set(cx, 0.15, 0.4);
-      cheek.rotation.z = cx > 0 ? -0.4 : 0.4;
-      cheek.rotation.x = Math.PI / 2.3;
-      head.add(cheek);
+    // Faceted Crystal Materials (Glossy, faceted gem reflections like 3D-printed dragon in photo)
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: skin.color,
+      roughness: 0.16,
+      metalness: 0.42,
+      flatShading: true,
+      emissive: skin.emissive,
+      emissiveIntensity: 0.22,
+    });
+    const darkMat = new THREE.MeshStandardMaterial({
+      color: skin.darkColor,
+      roughness: 0.24,
+      metalness: 0.45,
+      flatShading: true,
+    });
+    const accentMat = new THREE.MeshStandardMaterial({
+      color: skin.accent,
+      roughness: 0.14,
+      metalness: 0.32,
+      flatShading: true,
+      emissive: skin.accent,
+      emissiveIntensity: 0.38,
+    });
+    const eyeMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: skin.accent,
+      emissiveIntensity: 3.2,
+      roughness: 0.1,
+    });
+    const clawMat = new THREE.MeshStandardMaterial({
+      color: 0xf8fafc,
+      roughness: 0.18,
+      metalness: 0.5,
+      flatShading: true,
     });
 
-    // Chin / Lower Jaw (Cằm dưới vàng viền đỏ)
-    const chin = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 4), darkGoldMat);
-    chin.position.set(0, -0.65, 0.6);
-    chin.rotation.x = Math.PI / 2.1;
-    head.add(chin);
+    // 1. Majestic Crystalline Dragon Head
+    const head = new THREE.Group();
 
-    // Black Nostril Diamonds (2 lỗ mũi hình thoi đen)
+    // Central Faceted Snout
+    const snout = new THREE.Mesh(new THREE.ConeGeometry(0.82, 2.3, 5), bodyMat);
+    snout.rotation.x = Math.PI / 2.2;
+    snout.position.set(0, 0, 0.65);
+    head.add(snout);
+
+    // Lower Jaw with Diamond Chin
+    const lowerJaw = new THREE.Mesh(new THREE.ConeGeometry(0.58, 1.35, 4), darkMat);
+    lowerJaw.position.set(0, -0.62, 0.62);
+    lowerJaw.rotation.x = Math.PI / 2.05;
+    head.add(lowerJaw);
+
+    // Nostril facets
     [-0.22, 0.22].forEach(nx => {
-      const nostril = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.3, 4), blackMat);
-      nostril.position.set(nx, 0.08, 1.45);
+      const nostril = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.32, 4), darkMat);
+      nostril.position.set(nx, 0.1, 1.5);
       nostril.rotation.x = Math.PI / 2;
       head.add(nostril);
     });
 
-    // Intense Stylized Diamond Eyes (Đôi mắt hình thoi viền đỏ đồng tử đen)
-    [-0.52, 0.52].forEach(ex => {
-      const eyeSocket = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.6, 4), crimsonMat);
-      eyeSocket.position.set(ex, 0.45, 0.65);
-      eyeSocket.rotation.z = ex > 0 ? -0.5 : 0.5;
-      eyeSocket.rotation.x = Math.PI / 2.2;
+    // Crystalline Brow Ridges & Glowing Gem Eyes
+    [-0.5, 0.5].forEach(ex => {
+      const brow = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.85, 4), accentMat);
+      brow.position.set(ex, 0.48, 0.7);
+      brow.rotation.z = ex > 0 ? -0.45 : 0.45;
+      brow.rotation.x = Math.PI / 2.2;
+      head.add(brow);
 
-      const eyePupil = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.4, 4), blackMat);
-      eyePupil.position.set(ex > 0 ? 0.05 : -0.05, 0.05, 0.12);
-      eyeSocket.add(eyePupil);
-
-      head.add(eyeSocket);
+      const eye = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16, 0), eyeMat);
+      eye.position.set(ex > 0 ? ex - 0.08 : ex + 0.08, 0.36, 0.82);
+      head.add(eye);
     });
 
-    // Central Forehead Crest Spikes (Chỏm sừng trung tâm màu đỏ giữa trán)
-    const centerHorn = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.4, 4), crimsonMat);
-    centerHorn.position.set(0, 1.25, 0.1);
-    centerHorn.rotation.x = -0.3;
-    head.add(centerHorn);
-
-    // Two Majestic Curved Crimson Horns (Đôi sừng rồng đỏ uốn lượn vút cao như ảnh 2)
+    // Crystalline Antlers / Back-Swept Horns (matching image)
     [-0.65, 0.65].forEach(hx => {
-      const mainHorn = new THREE.Mesh(new THREE.ConeGeometry(0.26, 1.9, 5), crimsonMat);
-      mainHorn.position.set(hx, 1.45, -0.15);
-      mainHorn.rotation.x = -0.45;
+      const mainHorn = new THREE.Mesh(new THREE.ConeGeometry(0.28, 2.6, 5), accentMat);
+      mainHorn.position.set(hx, 1.45, -0.2);
+      mainHorn.rotation.x = -0.58;
       mainHorn.rotation.z = hx > 0 ? 0.45 : -0.45;
 
-      // Horn tip sharp branch
-      const tipBranch = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1.1, 4), darkCrimsonMat);
-      tipBranch.position.set(hx > 0 ? 0.25 : -0.25, 0.75, 0.1);
-      tipBranch.rotation.z = hx > 0 ? 0.65 : -0.65;
-      mainHorn.add(tipBranch);
+      // Horn branch spike
+      const branch = new THREE.Mesh(new THREE.ConeGeometry(0.18, 1.4, 4), darkMat);
+      branch.position.set(hx > 0 ? 0.26 : -0.26, 0.95, 0.1);
+      branch.rotation.z = hx > 0 ? 0.6 : -0.6;
+      mainHorn.add(branch);
 
       head.add(mainHorn);
     });
 
-    // Red Side Spikes & Flaring Mane (Các gai nhọn bờm đỏ xòe 2 bên má y hệt ảnh 2)
+    // Central Forehead Crystal Spike
+    const centerSpike = new THREE.Mesh(new THREE.ConeGeometry(0.26, 1.7, 4), accentMat);
+    centerSpike.position.set(0, 1.25, 0.12);
+    centerSpike.rotation.x = -0.38;
+    head.add(centerSpike);
+
+    // Cheek Crystal Flanges (3 tiers of spikes on each side like articulated dragon)
     [-1, 1].forEach(side => {
       [
-        { y: 0.85, z: 0.1, len: 1.1, rotZ: 0.8 },
-        { y: 0.45, z: 0.2, len: 1.3, rotZ: 1.2 },
-        { y: 0.05, z: 0.3, len: 0.9, rotZ: 1.5 },
+        { y: 0.88, z: 0.12, len: 1.25, rotZ: 0.85 },
+        { y: 0.45, z: 0.28, len: 1.45, rotZ: 1.2 },
+        { y: 0.05, z: 0.42, len: 1.1, rotZ: 1.5 },
       ].forEach(sp => {
-        const maneSpike = new THREE.Mesh(new THREE.ConeGeometry(0.2, sp.len, 4), crimsonMat);
-        maneSpike.position.set(side * 0.9, sp.y, sp.z);
-        maneSpike.rotation.z = side * -sp.rotZ;
-        maneSpike.rotation.x = -0.2;
-        head.add(maneSpike);
+        const cheekSpike = new THREE.Mesh(new THREE.ConeGeometry(0.22, sp.len, 4), accentMat);
+        cheekSpike.position.set(side * 0.92, sp.y, sp.z);
+        cheekSpike.rotation.z = side * -sp.rotZ;
+        cheekSpike.rotation.x = -0.28;
+        head.add(cheekSpike);
       });
+
+      // Flowing Crystal Whiskers
+      const whisker = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.02, 1.8, 5), accentMat);
+      whisker.position.set(side * 0.58, -0.32, 1.1);
+      whisker.rotation.x = Math.PI / 2.2;
+      whisker.rotation.z = side * -0.55;
+      head.add(whisker);
     });
 
-    // Long Flowing Red Whiskers (Đôi râu rồng đỏ dài uốn lượn mềm mại từ mép)
-    [-0.55, 0.55].forEach(wx => {
-      const whiskerBase = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.03, 1.6, 6), crimsonMat);
-      whiskerBase.position.set(wx, -0.35, 1.05);
-      whiskerBase.rotation.x = Math.PI / 2.3;
-      whiskerBase.rotation.z = wx > 0 ? -0.55 : 0.55;
-
-      const whiskerCurl = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.015, 1.2, 5), crimsonMat);
-      whiskerCurl.position.set(wx > 0 ? 0.25 : -0.25, -0.7, 0.2);
-      whiskerCurl.rotation.z = wx > 0 ? 0.7 : -0.7;
-      whiskerBase.add(whiskerCurl);
-
-      head.add(whiskerBase);
+    // Ivory/Crystal Fangs
+    [-0.36, 0.36].forEach(fx => {
+      const fang = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.48, 4), clawMat);
+      fang.position.set(fx, -0.42, 1.15);
+      fang.rotation.x = Math.PI;
+      head.add(fang);
     });
 
-    // Ivory Fangs (Răng nanh trắng ngà)
-    [-0.38, 0.38].forEach(fx => {
-      const fangUpper = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.45, 4), fangMat);
-      fangUpper.position.set(fx, -0.4, 1.1);
-      fangUpper.rotation.x = Math.PI;
-      head.add(fangUpper);
-    });
+    // Mount point on dragon's neck for player riding
+    const mountPoint = new THREE.Object3D();
+    mountPoint.position.set(0, 0.95, -0.65);
+    head.add(mountPoint);
 
     this.dragonGroup.add(head);
 
-    // Orbiting Glowing Dragon Pearl (Dạ Minh Châu hộ thân)
+    // 2. Orbiting Glowing Crystal Pearl (Dạ Minh Châu hộ thân)
     const pearlGroup = new THREE.Group();
-    const pearlMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      emissive: 0x38bdf8,
-      emissiveIntensity: 2.2,
-      roughness: 0.1,
-    });
-    const pearl = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 16), pearlMat);
-    const pearlLight = new THREE.PointLight(0x38bdf8, 3.8, 14);
+    const pearl = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 16, 16),
+      new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: skin.accent,
+        emissiveIntensity: 2.8,
+        roughness: 0.1,
+        metalness: 0.2,
+      })
+    );
+    const pearlLight = new THREE.PointLight(skin.accent, 4.0, 16);
     pearlGroup.add(pearl, pearlLight);
     this.dragonGroup.add(pearlGroup);
 
-    // 14 Majestic Body Segments (Thân rồng vàng tươi hoa mai xen kẽ vây lưng đỏ)
+    // 3. 16 Articulated Crystal Body Segments (Matching multi-jointed crystal dragon)
     const bodySegments = [];
-    for (let i = 0; i < 14; i++) {
+    const legs = [];
+
+    for (let i = 0; i < 16; i++) {
       const segGroup = new THREE.Group();
-      const radius = Math.max(0.42, 1.18 - i * 0.055);
-      const segMesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 12), i % 2 === 0 ? brightGoldMat : maiYellowMat);
+      const radius = Math.max(0.38, 1.22 - i * 0.054);
+
+      // Faceted diamond torso segment
+      const segMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius, radius * 0.88, 1.35, 5),
+        i % 2 === 0 ? bodyMat : darkMat
+      );
+      segMesh.rotation.x = Math.PI / 2;
       segGroup.add(segMesh);
 
-      // Dorsal spine fin (Vây lưng đỏ rực)
-      const spine = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.38, radius * 1.2, 4), crimsonMat);
-      spine.position.set(0, radius * 0.95, 0);
-      segGroup.add(spine);
+      // Dorsal Crystal Spikes (2 layered spikes pointing backward)
+      const dorsalSpike1 = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.38, radius * 1.6, 4), accentMat);
+      dorsalSpike1.position.set(0, radius * 1.05, 0.15);
+      dorsalSpike1.rotation.x = -0.45;
+      segGroup.add(dorsalSpike1);
+
+      const dorsalSpike2 = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.28, radius * 1.25, 4), darkMat);
+      dorsalSpike2.position.set(0, radius * 0.95, -0.35);
+      dorsalSpike2.rotation.x = -0.65;
+      segGroup.add(dorsalSpike2);
+
+      // Lateral Crystal Flank Spikes (Left & Right scales pointing outward & back)
+      [-1, 1].forEach(side => {
+        const flankSpike = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.26, radius * 1.25, 4), accentMat);
+        flankSpike.position.set(side * radius * 0.92, 0.1, -0.15);
+        flankSpike.rotation.z = side * -1.25;
+        flankSpike.rotation.x = -0.32;
+        segGroup.add(flankSpike);
+      });
+
+      // 4 Articulated Legs on Segments 3 and 10
+      if (i === 3 || i === 10) {
+        [-1, 1].forEach(side => {
+          const legGroup = new THREE.Group();
+          legGroup.position.set(side * (radius + 0.35), -radius * 0.3, 0);
+
+          // Thigh
+          const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.18, 0.85, 5), bodyMat);
+          thigh.rotation.z = side * -0.65;
+          thigh.position.set(side * 0.25, -0.25, 0);
+          legGroup.add(thigh);
+
+          // Shin
+          const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.12, 0.85, 5), darkMat);
+          shin.position.set(side * 0.48, -0.75, 0.1);
+          shin.rotation.z = side * 0.35;
+          legGroup.add(shin);
+
+          // 3 Sharp Claws
+          [-0.12, 0, 0.12].forEach((cx, cIdx) => {
+            const claw = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.42, 4), clawMat);
+            claw.position.set(side * 0.52 + cx, -1.15, 0.25);
+            claw.rotation.x = Math.PI / 2.3;
+            legGroup.add(claw);
+          });
+
+          segGroup.add(legGroup);
+          legs.push(legGroup);
+        });
+      }
 
       segGroup.position.set(0, 0, -(i + 1) * 1.35);
       this.dragonGroup.add(segGroup);
       bodySegments.push(segGroup);
     }
 
-    // Dragon Tail Flukes (Đuôi rồng xòe quạt đỏ vàng lộng lẫy)
-    const tailFluke = new THREE.Mesh(new THREE.ConeGeometry(0.95, 1.9, 4), crimsonMat);
-    tailFluke.position.set(0, 0, -1.2);
-    tailFluke.rotation.x = -Math.PI / 2;
-    bodySegments[bodySegments.length - 1].add(tailFluke);
+    // 4. Crystal Tail Fan (Cụm Pha Lê Đuôi Rồng Xòe Quạt Lộng Lẫy)
+    const tailFan = new THREE.Group();
+    for (let f = -3; f <= 3; f++) {
+      const a = (f / 3) * 0.65;
+      const tSpike = new THREE.Mesh(new THREE.ConeGeometry(0.22, 2.1 - Math.abs(f) * 0.22, 4), accentMat);
+      tSpike.position.set(Math.sin(a) * 0.85, 0, -1.2 - Math.cos(a) * 0.4);
+      tSpike.rotation.x = -Math.PI / 2.1;
+      tSpike.rotation.y = a;
+      tailFan.add(tSpike);
+    }
+    bodySegments[bodySegments.length - 1].add(tailFan);
 
     this.dragon = {
       group: this.dragonGroup,
       head,
+      mountPoint,
       pearlGroup,
       bodySegments,
+      legs,
+      tailFan,
+      skinKey: skin.id,
       glowUntil: 0,
     };
+  }
+
+  // --------------------------------------------------------------------------
+  // DRAGON MOUNT & FLIGHT CONTROLS (30S FLIGHT MODE)
+  // --------------------------------------------------------------------------
+  startDragonRide(questStage = 0) {
+    if (!this.dragon?.group) {
+      this.spawnGoldenDragon();
+    }
+    const me = this.getMe();
+    if (!me) return;
+
+    this.isRidingDragon = true;
+    this.dragonFlightTimer = 30.0;
+    this.dragonSpeed = 18.0;
+    this.dragonYaw = this.camera?.rotation?.y || 0;
+    this.dragonPitch = 0;
+    this.dragonRoll = 0;
+    this.dragonVelocity.set(0, 0, 0);
+
+    // Position dragon right at player's location
+    this.dragon.group.position.set(me.x * TILE, 3.8, me.y * TILE);
+
+    // Show Flight HUD
+    const hud = document.getElementById('dragonFlightHud');
+    if (hud) {
+      hud.classList.remove('hidden');
+      const timeTxt = hud.querySelector('#dragonFlightTimeText');
+      if (timeTxt) timeTxt.textContent = '30s';
+      const questProg = hud.querySelector('#dragonFlightQuestProgress');
+      if (questProg) questProg.textContent = '';
+    }
+
+    if (questStage > 0) {
+      this.startFlightQuest(questStage);
+    } else {
+      this.clearFlightRings();
+      this.activeQuest = null;
+    }
+
+    playSfx('tet_lixi', 'tet');
+    this.toast('🐉 BẠN ĐÃ CƯỠI LÊN RỒNG THẦN! Dùng W/S/A/D/Space để bay lượn trên bầu trời (30s)!');
+    this.emitOp?.('dragon_mount', { riding: true, skin: this.currentDragonSkin, questStage });
+  }
+
+  stopDragonRide() {
+    if (!this.isRidingDragon) return;
+    this.isRidingDragon = false;
+    this.dragonFlightTimer = 0;
+
+    const hud = document.getElementById('dragonFlightHud');
+    if (hud) hud.classList.add('hidden');
+
+    if (this.activeQuest && this.ringsCollected < this.activeQuest.ringCount) {
+      this.toast('⏳ Thử thách bay đã hết thời gian! Hãy thử lại ở Đài Triệu Hồi Rồng nhé!');
+      this.clearFlightRings();
+      this.activeQuest = null;
+    }
+
+    const me = this.getMe();
+    if (me && this.dragon?.group) {
+      me.x = Math.max(3, Math.min(26, this.dragon.group.position.x / TILE));
+      me.y = Math.max(3, Math.min(20, this.dragon.group.position.z / TILE));
+      if (me.av?.root) {
+        me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
+      }
+    }
+
+    this.toast('🎉 Chuyến bay kết thúc! Rồng Thần đã đưa bạn hạ cánh an toàn.');
+    this.emitOp?.('dragon_mount', { riding: false });
+  }
+
+  isRiding() {
+    return this.isRidingDragon;
+  }
+
+  // --------------------------------------------------------------------------
+  // AERIAL RING FLIGHT QUEST SYSTEM (UNLOCK DRAGON SKINS)
+  // --------------------------------------------------------------------------
+  startFlightQuest(stageIndex) {
+    const quest = FLIGHT_QUESTS[stageIndex - 1] || FLIGHT_QUESTS[0];
+    this.activeQuest = quest;
+    this.ringsCollected = 0;
+    this.spawnQuestRings(quest);
+
+    const hud = document.getElementById('dragonFlightHud');
+    if (hud) {
+      const questProg = hud.querySelector('#dragonFlightQuestProgress');
+      if (questProg) {
+        questProg.textContent = `🎯 Vòng bay: 0 / ${quest.ringCount} · Mở khóa: ${DRAGON_SKINS[quest.targetSkin]?.name}`;
+      }
+    }
+    this.toast(`🎯 BẮT ĐẦU: ${quest.title}! Hãy bay xuyên qua ${quest.ringCount} vòng tròn lơ lửng trên trời!`);
+  }
+
+  spawnQuestRings(quest) {
+    this.clearFlightRings();
+
+    const targetSkin = DRAGON_SKINS[quest.targetSkin] || DRAGON_SKINS.jade;
+    const ringColor = targetSkin.accent || '#facc15';
+
+    // Scenic aerial waypoints soaring around the Tet plaza
+    const waypoints = [
+      { x: 14.5 * TILE, y: 12.0, z: 16.5 * TILE },
+      { x: 19.5 * TILE, y: 16.5, z: 14.5 * TILE },
+      { x: 22.5 * TILE, y: 20.0, z: 11.5 * TILE },
+      { x: 18.5 * TILE, y: 25.0, z: 6.5 * TILE },
+      { x: 14.5 * TILE, y: 22.0, z: 4.5 * TILE },
+      { x: 9.5 * TILE, y: 18.0, z: 7.0 * TILE },
+      { x: 6.5 * TILE, y: 14.5, z: 11.5 * TILE },
+      { x: 6.5 * TILE, y: 11.5, z: 16.5 * TILE },
+      { x: 10.5 * TILE, y: 16.0, z: 19.5 * TILE },
+      { x: 14.5 * TILE, y: 28.0, z: 17.5 * TILE },
+      { x: 20.5 * TILE, y: 24.0, z: 12.5 * TILE },
+      { x: 16.5 * TILE, y: 30.0, z: 8.5 * TILE },
+      { x: 11.5 * TILE, y: 21.0, z: 12.5 * TILE },
+      { x: 14.5 * TILE, y: 15.0, z: 11.5 * TILE },
+      { x: 18.5 * TILE, y: 19.0, z: 15.5 * TILE },
+    ];
+
+    for (let i = 0; i < quest.ringCount; i++) {
+      const wp = waypoints[i % waypoints.length];
+      const ring = buildAerialRing(ringColor, 3.4);
+      ring.position.set(wp.x, wp.y, wp.z);
+      ring.userData.collected = false;
+      ring.userData.radius = 3.4;
+      this.group.add(ring);
+      this.flightRings.push(ring);
+    }
+  }
+
+  clearFlightRings() {
+    for (const r of this.flightRings) {
+      if (r) this.group.remove(r);
+    }
+    this.flightRings = [];
+  }
+
+  completeFlightQuest() {
+    if (!this.activeQuest) return;
+    const targetSkin = this.activeQuest.targetSkin;
+    const skinInfo = DRAGON_SKINS[targetSkin];
+
+    if (!this.unlockedDragonSkins.includes(targetSkin)) {
+      this.unlockedDragonSkins.push(targetSkin);
+      localStorage.setItem('gh_unlocked_dragon_skins', JSON.stringify(this.unlockedDragonSkins));
+    }
+    this.setDragonSkin(targetSkin);
+
+    playSfx('plinko_win', 'casino');
+    this.toast(`🏆 CHÚC MỪNG! BẠN ĐÃ MỞ KHÓA THÀNH CÔNG SKIN RỒNG: ${skinInfo?.name}!`);
+
+    const hud = document.getElementById('dragonFlightHud');
+    if (hud) {
+      const questProg = hud.querySelector('#dragonFlightQuestProgress');
+      if (questProg) questProg.textContent = `🎉 ĐÃ MỞ KHÓA: ${skinInfo?.name}!`;
+    }
+
+    this.clearFlightRings();
+    this.activeQuest = null;
   }
 
   // --------------------------------------------------------------------------
@@ -903,25 +1281,149 @@ export class MinigameManager {
       pt.mesh.scale.set(scale, scale, scale);
     }
 
-    // 5. Update Golden Dragon Aerial Undulation (Tet)
+    // 5. Update Crystal Dragon (Patrol OR Player-Controlled Flight)
     if (this.dragon?.group) {
-      const angle = now * 0.00045;
-      const tx = (14.5 + Math.sin(angle) * 8.5) * TILE;
-      const tz = (11.5 + Math.cos(angle * 2) * 5.5) * TILE;
-      const ty = 8.8 + Math.sin(angle * 3) * 1.8;
+      if (this.isRidingDragon) {
+        // Player Controlled Flight Mode (30s)
+        this.dragonFlightTimer -= dt;
+        const hud = document.getElementById('dragonFlightHud');
+        if (hud) {
+          const timeTxt = hud.querySelector('#dragonFlightTimeText');
+          if (timeTxt) {
+            timeTxt.textContent = `${Math.max(0, Math.ceil(this.dragonFlightTimer))}s`;
+          }
+        }
 
-      const curPos = this.dragon.group.position;
-      curPos.x += (tx - curPos.x) * Math.min(1, dt * 2.5);
-      curPos.y += (ty - curPos.y) * Math.min(1, dt * 2.5);
-      curPos.z += (tz - curPos.z) * Math.min(1, dt * 2.5);
+        if (this.dragonFlightTimer <= 0) {
+          this.stopDragonRide();
+          return;
+        }
 
-      const dx = tx - curPos.x;
-      const dz = tz - curPos.z;
-      if (dx * dx + dz * dz > 0.001) {
-        this.dragon.group.rotation.y = Math.atan2(dx, dz);
+        // Flight Steer & Kinematics
+        const keys = this.dragonKeys;
+        const turnRate = 2.4 * dt;
+        if (keys.left) {
+          this.dragonYaw += turnRate;
+          this.dragonRoll = THREE.MathUtils.lerp(this.dragonRoll, 0.45, dt * 5);
+        } else if (keys.right) {
+          this.dragonYaw -= turnRate;
+          this.dragonRoll = THREE.MathUtils.lerp(this.dragonRoll, -0.45, dt * 5);
+        } else {
+          this.dragonRoll = THREE.MathUtils.lerp(this.dragonRoll, 0, dt * 4);
+        }
+
+        if (keys.forward) {
+          this.dragonSpeed = THREE.MathUtils.lerp(this.dragonSpeed, 28.0, dt * 3);
+          this.dragonPitch = THREE.MathUtils.lerp(this.dragonPitch, 0.25, dt * 4);
+        } else if (keys.backward) {
+          this.dragonSpeed = THREE.MathUtils.lerp(this.dragonSpeed, 10.0, dt * 4);
+          this.dragonPitch = THREE.MathUtils.lerp(this.dragonPitch, -0.2, dt * 4);
+        } else {
+          this.dragonSpeed = THREE.MathUtils.lerp(this.dragonSpeed, 18.0, dt * 2);
+          this.dragonPitch = THREE.MathUtils.lerp(this.dragonPitch, 0, dt * 3);
+        }
+
+        let vy = 0;
+        if (keys.up) vy = 12.0;
+        else if (keys.down) vy = -12.0;
+
+        const curPos = this.dragon.group.position;
+        curPos.x += Math.sin(this.dragonYaw) * this.dragonSpeed * dt;
+        curPos.z += Math.cos(this.dragonYaw) * this.dragonSpeed * dt;
+        curPos.y += vy * dt;
+
+        // Boundaries clamp (smooth airspace ceiling & floor)
+        curPos.y = Math.max(3.2, Math.min(46.0, curPos.y));
+        curPos.x = Math.max(3.5 * TILE, Math.min(26.5 * TILE, curPos.x));
+        curPos.z = Math.max(3.5 * TILE, Math.min(20.5 * TILE, curPos.z));
+
+        this.dragon.group.rotation.y = this.dragonYaw;
+        this.dragon.head.rotation.x = this.dragonPitch;
+        this.dragon.head.rotation.z = this.dragonRoll;
+
+        // Mount local player avatar on dragon neck
+        const me = this.getMe();
+        if (me?.av?.root && this.dragon.mountPoint) {
+          const mountWorld = this.dragon.mountPoint.getWorldPosition(new THREE.Vector3());
+          me.av.root.position.copy(mountWorld);
+          me.av.root.rotation.y = this.dragonYaw + Math.PI;
+          me.x = mountWorld.x / TILE;
+          me.y = mountWorld.z / TILE;
+        }
+
+        // Animate Legs paddling through celestial wind
+        if (this.dragon.legs) {
+          for (let li = 0; li < this.dragon.legs.length; li++) {
+            this.dragon.legs[li].rotation.x = Math.sin(now * 0.008 + li) * 0.35;
+          }
+        }
+
+        // Undulating serpentine wave across segments
+        for (let s = 0; s < this.dragon.bodySegments.length; s++) {
+          const seg = this.dragon.bodySegments[s];
+          seg.position.x = Math.sin(now * 0.007 + s * 0.5) * (0.45 + s * 0.04);
+          seg.position.y = Math.cos(now * 0.006 + s * 0.5) * (0.35 + s * 0.02);
+          seg.rotation.z = Math.sin(now * 0.007 + s * 0.5) * 0.3;
+        }
+
+        // Check aerial ring collection
+        if (this.activeQuest && this.flightRings.length > 0) {
+          const headPos = this.dragon.head.getWorldPosition(new THREE.Vector3());
+          for (const ring of this.flightRings) {
+            if (!ring.userData.collected) {
+              const d = headPos.distanceTo(ring.position);
+              if (d < ring.userData.radius + 1.4) {
+                ring.userData.collected = true;
+                ring.visible = false;
+                this.ringsCollected++;
+                playSfx('plinko_win', 'casino');
+                this.toast(`🎯 Thu thập vòng bay (${this.ringsCollected}/${this.activeQuest.ringCount})!`);
+                const progEl = document.getElementById('dragonFlightQuestProgress');
+                if (progEl) {
+                  progEl.textContent = `🎯 Vòng bay: ${this.ringsCollected} / ${this.activeQuest.ringCount} · Mở khóa: ${DRAGON_SKINS[this.activeQuest.targetSkin]?.name}`;
+                }
+                if (this.ringsCollected >= this.activeQuest.ringCount) {
+                  this.completeFlightQuest();
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // Autonomous figure-8 sky patrol
+        const angle = now * 0.00045;
+        const tx = (14.5 + Math.sin(angle) * 8.5) * TILE;
+        const tz = (11.5 + Math.cos(angle * 2) * 5.5) * TILE;
+        const ty = 9.5 + Math.sin(angle * 3) * 2.2;
+
+        const curPos = this.dragon.group.position;
+        curPos.x += (tx - curPos.x) * Math.min(1, dt * 2.5);
+        curPos.y += (ty - curPos.y) * Math.min(1, dt * 2.5);
+        curPos.z += (tz - curPos.z) * Math.min(1, dt * 2.5);
+
+        const dx = tx - curPos.x;
+        const dz = tz - curPos.z;
+        if (dx * dx + dz * dz > 0.001) {
+          this.dragon.group.rotation.y = Math.atan2(dx, dz);
+        }
+
+        // Animate legs
+        if (this.dragon.legs) {
+          for (let li = 0; li < this.dragon.legs.length; li++) {
+            this.dragon.legs[li].rotation.x = Math.sin(now * 0.005 + li) * 0.25;
+          }
+        }
+
+        // Serpentine undulation across body segments
+        for (let s = 0; s < this.dragon.bodySegments.length; s++) {
+          const seg = this.dragon.bodySegments[s];
+          seg.position.x = Math.sin(now * 0.004 + s * 0.45) * 0.85;
+          seg.position.y = Math.cos(now * 0.0035 + s * 0.45) * 0.55;
+          seg.rotation.z = Math.sin(now * 0.004 + s * 0.45) * 0.25;
+        }
       }
 
-      // Animate Orbiting Dạ Minh Châu (Dragon Pearl) ahead of the mouth
+      // Orbiting Dạ Minh Châu (Dragon Pearl) ahead of the mouth
       if (this.dragon.pearlGroup) {
         const pAngle = now * 0.003;
         this.dragon.pearlGroup.position.set(
@@ -929,14 +1431,6 @@ export class MinigameManager {
           Math.cos(pAngle * 1.5) * 0.4 + 0.2,
           2.6 + Math.cos(pAngle) * 0.5
         );
-      }
-
-      // Majestic wave undulation across 14 segments with dynamic banking
-      for (let s = 0; s < this.dragon.bodySegments.length; s++) {
-        const seg = this.dragon.bodySegments[s];
-        seg.position.x = Math.sin(now * 0.004 + s * 0.45) * 0.85;
-        seg.position.y = Math.cos(now * 0.0035 + s * 0.45) * 0.55;
-        seg.rotation.z = Math.sin(now * 0.004 + s * 0.45) * 0.25;
       }
     }
   }

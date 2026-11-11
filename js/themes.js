@@ -30,7 +30,7 @@ export const THEMES = {
   },
   tet: {
     name: '🧧 Tết Nguyên Đán',
-    bg: '#2e0a05',
+    bg: '#070617',
     floor: ['#fef08a', '#fde047'],
     path: '#f59e0b',
     wall: '#b91c1c',
@@ -152,12 +152,11 @@ export const ORNAMENTS = [
 ];
 
 export const LIXI_MONEY = [
-  { label: '1.000đ', amount: 1000, weight: 22 },
-  { label: '2.000đ', amount: 2000, weight: 22 },
-  { label: '5.000đ', amount: 5000, weight: 20 },
-  { label: '100.000đ', amount: 100000, weight: 15 },
-  { label: '200.000đ', amount: 200000, weight: 12 },
-  { label: '500.000đ', amount: 500000, weight: 9 },
+  { label: '100 Xu', amount: 100, weight: 50, color: '#facc15' },
+  { label: '200 Xu', amount: 200, weight: 28, color: '#38bdf8' },
+  { label: '500 Xu', amount: 500, weight: 14, color: '#4ade80' },
+  { label: '1.000 Xu', amount: 1000, weight: 7, color: '#c084fc' },
+  { label: 'JACKPOT 10.000 XU', amount: 10000, weight: 1, color: '#f43f5e', isJackpot: true },
 ];
 
 export const LIXI_WISHES = [
@@ -170,28 +169,30 @@ export const LIXI_WISHES = [
 ];
 
 export function rollLixiReward() {
-  // 65% chance of money, 35% chance of special blessing wish
-  if (Math.random() < 0.65) {
-    const total = LIXI_MONEY.reduce((s, i) => s + i.weight, 0);
-    let r = Math.random() * total;
-    for (const item of LIXI_MONEY) {
-      r -= item.weight;
-      if (r <= 0) {
-        return {
-          type: 'money',
-          title: `💵 Lộc Xuân: ${item.label}`,
-          detail: `Chúc mừng bạn vừa hái được bao lì xì mệnh giá ${item.label} từ Cây Mai Đại Thụ!`,
-          short: `nhận được lì xì ${item.label} 💵`,
-        };
-      }
+  const total = LIXI_MONEY.reduce((s, i) => s + i.weight, 0);
+  let r = Math.random() * total;
+  let selected = LIXI_MONEY[0];
+  for (const item of LIXI_MONEY) {
+    r -= item.weight;
+    if (r <= 0) {
+      selected = item;
+      break;
     }
   }
+
   const wish = LIXI_WISHES[Math.floor(Math.random() * LIXI_WISHES.length)];
   return {
-    type: 'wish',
-    title: '📜 Quẻ Chúc Đầu Xuân',
-    detail: wish,
-    short: `nhận được lời chúc: "${wish}"`,
+    type: 'money',
+    amount: selected.amount,
+    label: selected.label,
+    isJackpot: !!selected.isJackpot,
+    color: selected.color,
+    wish,
+    title: selected.isJackpot ? '💥 NỔ HŨ JACKPOT 10.000 XU! 💥' : `🧧 Lộc Xuân: ${selected.label}`,
+    detail: selected.isJackpot
+      ? `ĐẠI PHÚ QUÝ! Bạn đã may mắn nổ hũ Jackpot cực hiếm 10.000 Xu từ Cây Mai Đại Thụ! Số Xu đã được nạp thẳng vào Ví của bạn!`
+      : `Chúc mừng bạn vừa hái được bao lì xì trị giá ${selected.label} từ Cây Mai Đại Thụ! Số Xu đã được cộng thẳng vào Ví!`,
+    short: selected.isJackpot ? `nổ hũ JACKPOT 10.000 Xu 💥` : `hái được lì xì ${selected.label} 🧧`,
   };
 }
 

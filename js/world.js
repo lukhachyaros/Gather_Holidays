@@ -20,6 +20,8 @@ import {
   buildCostumeBooth,
   buildVampireNPC,
   buildGiantMaiTree,
+  buildPhucLocThoShrine,
+  buildDragonAltar,
   buildFireworkLauncher,
   buildFirecrackerTable,
   buildValentineHeartTree,
@@ -178,17 +180,77 @@ export class World {
     const bg = new THREE.Color(th.bg);
     this.bgColor = bg;
     this.scene.background = null;
-    this.scene.fog = new THREE.Fog(bg, 34, 92);
+    this.scene.fog = new THREE.Fog(bg, key === 'tet' ? 38 : 34, key === 'tet' ? 120 : 92);
     this.hemi.color.set(key === 'halloween' ? '#a78bfa' : key === 'tet' ? '#fde68a' : key === 'valentine' ? '#fbcfe8' : '#e0f2fe');
-    this.hemi.groundColor.set(dark ? '#1e1b2e' : '#8a7f70');
-    this.hemi.intensity = key === 'halloween' ? 0.72 : key === 'valentine' ? 0.88 : 0.92;
-    this.sun.color.set(key === 'halloween' ? '#c4b5fd' : key === 'valentine' ? '#fecdd3' : '#fff1d6');
-    this.sun.intensity = key === 'halloween' ? 0.68 : key === 'valentine' ? 0.96 : 1.15;
+    this.hemi.groundColor.set(key === 'tet' ? '#070617' : dark ? '#1e1b2e' : '#8a7f70');
+    this.hemi.intensity = key === 'halloween' ? 0.72 : key === 'tet' ? 0.78 : key === 'valentine' ? 0.88 : 0.92;
+    this.sun.color.set(key === 'halloween' ? '#c4b5fd' : key === 'tet' ? '#fef08a' : key === 'valentine' ? '#fecdd3' : '#fff1d6');
+    this.sun.intensity = key === 'halloween' ? 0.68 : key === 'tet' ? 0.85 : key === 'valentine' ? 0.96 : 1.15;
     this.dayHemiIntensity = this.hemi.intensity;
     this.daySunIntensity = this.sun.intensity;
     this.dayFogColor = bg.clone();
     this.setDayNightTime(this.timeOfDay);
     this.initParticles(th.particles);
+
+    // Tet Night Sky with Stars & Glowing Moon
+    if (this.nightSkyGroup) {
+      this.scene.remove(this.nightSkyGroup);
+      this.nightSkyGroup = null;
+    }
+    if (key === 'tet') {
+      this.nightSkyGroup = new THREE.Group();
+
+      // Starfield (380 celestial stars with twinkling attributes)
+      const starCount = 380;
+      const positions = new Float32Array(starCount * 3);
+      const starColors = new Float32Array(starCount * 3);
+      const cWhite = new THREE.Color('#ffffff');
+      const cGold = new THREE.Color('#fef08a');
+      const cCyan = new THREE.Color('#bae6fd');
+      for (let i = 0; i < starCount; i++) {
+        const theta = Math.random() * 2.0 * Math.PI;
+        const phi = Math.acos(2.0 * Math.random() - 1.0);
+        const r = 90 + Math.random() * 55;
+        const sinPhi = Math.sin(phi);
+        positions[i * 3] = r * sinPhi * Math.cos(theta);
+        positions[i * 3 + 1] = Math.max(14, Math.abs(r * Math.cos(phi))); // Upper celestial dome
+        positions[i * 3 + 2] = r * sinPhi * Math.sin(theta);
+        const pick = i % 3 === 0 ? cGold : i % 3 === 1 ? cCyan : cWhite;
+        starColors[i * 3] = pick.r;
+        starColors[i * 3 + 1] = pick.g;
+        starColors[i * 3 + 2] = pick.b;
+      }
+      const starGeo = new THREE.BufferGeometry();
+      starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+      const starMat = new THREE.PointsMaterial({
+        size: 1.6,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.92,
+      });
+      const stars = new THREE.Points(starGeo, starMat);
+      this.nightSkyGroup.add(stars);
+
+      // Glowing Lunar Moon Sphere
+      const moonGroup = new THREE.Group();
+      moonGroup.position.set(-28, 48, -48);
+      const moonMat = new THREE.MeshStandardMaterial({
+        color: 0xfffbeb,
+        emissive: 0xfef08a,
+        emissiveIntensity: 2.2,
+        roughness: 0.2,
+      });
+      const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(3.6, 24, 24), moonMat);
+      moonGroup.add(moonMesh);
+
+      // Warm Moon Light
+      const moonLight = new THREE.PointLight(0xfef08a, 2.5, 75);
+      moonGroup.add(moonLight);
+      this.nightSkyGroup.add(moonGroup);
+
+      this.scene.add(this.nightSkyGroup);
+    }
   }
 
   setDayNightTime(time) {
@@ -365,6 +427,14 @@ export class World {
         mt.position.set(h.x * TILE, 0, h.y * TILE);
         this.group.add(mt);
         this.maiEnvelopes = mt.userData.envelopes || [];
+      } else if (h.type === 'phuc_loc_tho_shrine') {
+        const pls = buildPhucLocThoShrine();
+        pls.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(pls);
+      } else if (h.type === 'dragon_altar') {
+        const da = buildDragonAltar();
+        da.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(da);
       } else if (h.type === 'firework_launcher') {
         const fl = buildFireworkLauncher();
         fl.position.set(h.x * TILE, 0, h.y * TILE);
@@ -485,27 +555,31 @@ export class World {
   spawnFireworksShow(tileX, tileZ) {
     const bx = tileX * TILE,
       bz = tileZ * TILE;
-    const colors = ['#ff595e', '#ffca3a', '#8ac926', '#00bbf9', '#f15bb5', '#ffd166'];
-    for (let i = 0; i < 7; i++) {
+    const colors = ['#f43f5e', '#facc15', '#10b981', '#38bdf8', '#c084fc', '#fb923c', '#ffffff'];
+    const shapes = ['classic', 'heart', 'star', 'blossom', 'ring', 'willow'];
+    const count = 9;
+    for (let i = 0; i < count; i++) {
       setTimeout(() => {
         const col = colors[i % colors.length];
-        const rocket = new THREE.Mesh(G.sph(), mat(col, { emissive: col, emissiveIntensity: 2 }));
-        rocket.scale.setScalar(0.24);
-        const rx = bx + (Math.random() - 0.5) * 1.4;
-        const rz = bz + (Math.random() - 0.5) * 1.4;
+        const shape = shapes[Math.floor(Math.random() * shapes.length)];
+        const rocket = new THREE.Mesh(G.sph(), mat(col, { emissive: col, emissiveIntensity: 2.5 }));
+        rocket.scale.setScalar(0.28);
+        const rx = bx + (Math.random() - 0.5) * 1.8;
+        const rz = bz + (Math.random() - 0.5) * 1.8;
         rocket.position.set(rx, 1.2, rz);
         this.fxGroup.add(rocket);
         this.fireworks.push({
           kind: 'rocket',
           mesh: rocket,
-          vx: (Math.random() - 0.5) * 2.5,
-          vy: 13 + Math.random() * 4,
-          vz: (Math.random() - 0.5) * 2.5,
+          vx: (Math.random() - 0.5) * 3.2,
+          vy: 14 + Math.random() * 5.5,
+          vz: (Math.random() - 0.5) * 3.2,
           color: col,
+          shape,
           age: 0,
-          maxAge: 0.85 + Math.random() * 0.25,
+          maxAge: 0.95 + Math.random() * 0.35,
         });
-      }, i * 320);
+      }, i * 280);
     }
   }
 
@@ -533,30 +607,125 @@ export class World {
     }
   }
 
-  explodeRocket(x, y, z, color) {
-    const m = mat(color, { emissive: color, emissiveIntensity: 2.4 });
-    const light = new THREE.PointLight(color, 8, 28);
-    light.position.set(x, y, z);
-    this.fxGroup.add(light);
-    setTimeout(() => this.fxGroup.remove(light), 550);
+  explodeRocket(x, y, z, color, shape = 'classic') {
+    const m = mat(color, { emissive: color, emissiveIntensity: 2.6 });
+    const flash = new THREE.PointLight(color, 12, 38);
+    flash.position.set(x, y, z);
+    this.fxGroup.add(flash);
+    setTimeout(() => this.fxGroup.remove(flash), 600);
 
-    for (let i = 0; i < 28; i++) {
+    const makeSpark = (vx, vy, vz, maxAge = 1.3, gravMod = 1.0, scale = 0.22) => {
       const p = new THREE.Mesh(G.sph(), m);
-      p.scale.setScalar(0.22);
+      p.scale.setScalar(scale);
       p.position.set(x, y, z);
       this.fxGroup.add(p);
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const speed = 4.5 + Math.random() * 5.5;
       this.fireworks.push({
         kind: 'spark',
         mesh: p,
-        vx: Math.sin(phi) * Math.cos(theta) * speed,
-        vy: Math.cos(phi) * speed,
-        vz: Math.sin(phi) * Math.sin(theta) * speed,
+        vx,
+        vy,
+        vz,
         age: 0,
-        maxAge: 1.1 + Math.random() * 0.4,
+        maxAge,
+        gravMod,
       });
+    };
+
+    if (shape === 'heart') {
+      // Parametric 3D Heart Burst ❤️
+      const num = 46;
+      for (let i = 0; i < num; i++) {
+        const t = (i / num) * Math.PI * 2;
+        const hx = 16 * Math.pow(Math.sin(t), 3);
+        const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+        const sp = 0.48;
+        makeSpark(
+          hx * sp + (Math.random() - 0.5) * 0.8,
+          hy * sp + (Math.random() - 0.5) * 0.8,
+          (Math.random() - 0.5) * 1.8,
+          1.5 + Math.random() * 0.35,
+          0.7,
+          0.26
+        );
+      }
+    } else if (shape === 'star') {
+      // 5-Pointed Star Burst ⭐️
+      const num = 45;
+      for (let i = 0; i < num; i++) {
+        const t = (i / num) * Math.PI * 2;
+        const r = (i % 2 === 0 ? 8.5 : 3.4) * (0.85 + Math.random() * 0.3);
+        makeSpark(
+          Math.cos(t) * r,
+          Math.sin(t) * r,
+          (Math.random() - 0.5) * 1.8,
+          1.4 + Math.random() * 0.3,
+          0.8,
+          0.25
+        );
+      }
+    } else if (shape === 'blossom') {
+      // 5-Petal Apricot Blossom Bloom 🌸
+      const num = 50;
+      for (let i = 0; i < num; i++) {
+        const t = (i / num) * Math.PI * 2;
+        const r = (6.2 + 2.8 * Math.cos(5 * t)) * (0.9 + Math.random() * 0.2);
+        makeSpark(
+          Math.cos(t) * r,
+          Math.sin(t) * r,
+          (Math.random() - 0.5) * 2.2,
+          1.5 + Math.random() * 0.3,
+          0.75,
+          0.24
+        );
+      }
+    } else if (shape === 'ring') {
+      // Saturn Concentric Expanding Ring ⭕️
+      const num = 44;
+      const tilt = Math.random() * Math.PI;
+      for (let i = 0; i < num; i++) {
+        const t = (i / num) * Math.PI * 2;
+        const speed = 7.5 + (i % 2 === 0 ? 0 : -2.8);
+        const rx = Math.cos(t) * speed;
+        const rz = Math.sin(t) * speed;
+        makeSpark(
+          rx,
+          Math.sin(tilt) * rz * 0.45 + (Math.random() - 0.5) * 1.2,
+          Math.cos(tilt) * rz,
+          1.4 + Math.random() * 0.3,
+          0.85,
+          0.23
+        );
+      }
+    } else if (shape === 'willow') {
+      // Golden Brocade Waterfall ✨
+      const num = 42;
+      for (let i = 0; i < num; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const sp = 2.5 + Math.random() * 5.0;
+        makeSpark(
+          Math.cos(theta) * sp,
+          3.8 + Math.random() * 3.5,
+          Math.sin(theta) * sp,
+          2.2 + Math.random() * 0.6,
+          0.4, // Slow graceful downward drift
+          0.2
+        );
+      }
+    } else {
+      // Classic Spherical Fireworks Burst
+      for (let i = 0; i < 38; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const speed = 5.2 + Math.random() * 5.8;
+        makeSpark(
+          Math.sin(phi) * Math.cos(theta) * speed,
+          Math.cos(phi) * speed,
+          Math.sin(phi) * Math.sin(theta) * speed,
+          1.25 + Math.random() * 0.4,
+          1.0,
+          0.22
+        );
+      }
     }
   }
 
@@ -665,13 +834,13 @@ export class World {
       fw.mesh.position.y += fw.vy * dt;
       fw.mesh.position.z += fw.vz * dt;
       if (fw.kind === 'spark') {
-        fw.vy -= 9.8 * dt;
-        const s = Math.max(0.01, (1 - fw.age / fw.maxAge) * 0.2);
+        fw.vy -= (9.8 * (fw.gravMod ?? 1.0)) * dt;
+        const s = Math.max(0.01, (1 - fw.age / fw.maxAge) * 0.22);
         fw.mesh.scale.setScalar(s);
       }
       if (fw.age >= fw.maxAge) {
         if (fw.kind === 'rocket') {
-          this.explodeRocket(fw.mesh.position.x, fw.mesh.position.y, fw.mesh.position.z, fw.color);
+          this.explodeRocket(fw.mesh.position.x, fw.mesh.position.y, fw.mesh.position.z, fw.color, fw.shape);
         }
         this.fxGroup.remove(fw.mesh);
         this.fireworks.splice(i, 1);

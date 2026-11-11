@@ -42,7 +42,7 @@ import {
   isBgmMuted,
   getBgmVolume,
 } from './audio.js';
-import { MinigameManager } from './minigames.js';
+import { MinigameManager, DRAGON_SKINS, FLIGHT_QUESTS } from './minigames.js';
 import {
   initCasino,
   openRoulette,
@@ -407,10 +407,11 @@ try {
   initMobileControls();
   setupBuilderToolsInteraction();
   setupAdminCommandAutocomplete();
-  initGameSplashScreen();
 } catch (e) {
-  console.error(e);
-  document.addEventListener('DOMContentLoaded', () => toast('Trình duyệt không hỗ trợ WebGL'));
+  console.error('Three.js / WebGL Setup Error:', e);
+  document.addEventListener('DOMContentLoaded', () => toast('Trình duyệt đang mở chế độ hạn chế đồ họa 3D'));
+} finally {
+  initGameSplashScreen();
 }
 
 function initGameSplashScreen() {
@@ -419,18 +420,30 @@ function initGameSplashScreen() {
   const status = $('splashStatusText');
   if (!splash) return;
 
-  let progress = 12;
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearInterval(interval);
+    clearTimeout(hardTimer);
+    if (bar) bar.style.width = '100%';
+    if (status) status.textContent = 'Hoàn tất! Đang vào sảnh...';
+    splash.classList.add('fade-out');
+    setTimeout(() => {
+      try {
+        if (splash.parentNode) splash.remove();
+      } catch (_) {}
+    }, 600);
+  };
+
+  splash.onclick = finish;
+  const hardTimer = setTimeout(finish, 1600);
+
+  let progress = 18;
   const interval = setInterval(() => {
-    progress += Math.floor(Math.random() * 18) + 14;
+    progress += Math.floor(Math.random() * 25) + 15;
     if (progress >= 100) {
-      progress = 100;
-      clearInterval(interval);
-      if (bar) bar.style.width = '100%';
-      if (status) status.textContent = 'Hoàn tất! Đang bước vào thế giới...';
-      setTimeout(() => {
-        splash.classList.add('fade-out');
-        setTimeout(() => splash.remove(), 850);
-      }, 350);
+      finish();
     } else {
       if (bar) bar.style.width = `${progress}%`;
       if (status) {
@@ -438,7 +451,7 @@ function initGameSplashScreen() {
         else if (progress > 30) status.textContent = 'Đang nạp không gian lễ hội 3D...';
       }
     }
-  }, 100);
+  }, 90);
 }
 
 function initMobileControls() {
@@ -708,6 +721,20 @@ $('btnRefreshLobby').onclick = () => {
   toast('🔄 Đã làm mới danh sách phòng trực tuyến!');
 };
 
+const lobbyBadgeEl = $('lobbyOnlineBadge');
+if (lobbyBadgeEl) {
+  lobbyBadgeEl.onclick = () => {
+    const status = lobby?.getConnectionStatus?.() || { isOnline: false, roomCount: 0 };
+    if (status.isOnline) {
+      toast(`✅ Cụm máy chủ MQTT kết nối tốt · ${status.roomCount} phòng trực tuyến`);
+    } else {
+      toast('⏳ Đang kết nối lại cụm máy chủ MQTT...');
+    }
+    lobby?.requestDiscover?.();
+    renderLobbyRooms();
+  };
+}
+
 $('btnCloseLobby').onclick = () => {
   if (me?.started && !isKicked) $('landing').classList.add('hidden');
 };
@@ -778,6 +805,20 @@ function renderLobbyRooms() {
   if (!box) return;
   const liveRooms = lobby ? lobby.getRooms() : [];
   const liveMap = new Map(liveRooms.map(r => [r.id, r]));
+
+  const badge = $('lobbyOnlineBadge');
+  if (badge) {
+    const status = lobby?.getConnectionStatus?.() || { isOnline: true, roomCount: liveRooms.length };
+    if (status.isOnline) {
+      badge.textContent = `● Trực tuyến (${liveRooms.length} phòng)`;
+      badge.className = 'live-dot online';
+      badge.title = 'Máy chủ MQTT kết nối tốt · Bấm để kiểm tra chi tiết';
+    } else {
+      badge.textContent = '⏳ Đang kết nối máy chủ...';
+      badge.className = 'live-dot connecting';
+      badge.title = 'Đang kết nối lại máy chủ MQTT · Bấm để thử lại ngay';
+    }
+  }
 
   updateInviteBanner(liveMap);
 
@@ -3346,19 +3387,280 @@ function hangHeldOrnamentOnTree() {
 }
 
 function pickAndOpenLixi() {
-  if (!checkCooldown()) return;
-  const reward = rollLixiReward();
-  $('lixiTitle').textContent = reward.title;
-  $('lixiDetail').textContent = reward.detail;
-  openDialog('dlgLixi');
+  openLixiRhythmGame();
+}
+
+// ----------------------------------------------------------------------------
+// TET 2025: LIXI REAL-TIME SCHEDULE & RHYTHM MINI-GAME
+// ----------------------------------------------------------------------------
+function getLixiEventStatus() {
+  const now = new Date();
+  const min = now.getMinutes();
+  const sec = now.getSeconds();
+  const cycleMin = min % 15;
+  const inEvent = cycleMin < 5;
+  const remainSec = inEvent ? (4 - cycleMin) * 60 + (59 - sec) : (14 - cycleMin) * 60 + (59 - sec);
+  const m = Math.floor(remainSec / 60);
+  const s = remainSec % 60;
+  const timeStr = `${m}:${s < 10 ? '0' : ''}${s}`;
+  return { inEvent, remainSec, timeStr };
+}
+
+let rhythmAnimationId = null;
+let rhythmNeedlePos = 50;
+let rhythmTargetMin = 35;
+let rhythmTargetMax = 55;
+let isRhythmStopped = false;
+let lixiTimerInterval = null;
+
+function openLixiRhythmGame() {
+  const status = getLixiEventStatus();
+  if (!status.inEvent) {
+    toast(`⏳ Sự kiện Hái Lộc Lì Xì chưa đến giờ! Đang đếm ngược: ${status.timeStr}. Bạn hãy quay lại sau nhé!`);
+    return;
+  }
+
+  openDialog('dlgLixiRhythm');
+  $('lixiRhythmResult').classList.add('hidden');
+  $('btnTryAnotherLixi').classList.add('hidden');
+  $('btnStopRhythmNeedle').disabled = false;
+  $('btnStopRhythmNeedle').textContent = '🎯 DỪNG LẠI! (Phím Space)';
+
+  // Update timer text
+  const updateTimer = () => {
+    const s = getLixiEventStatus();
+    $('lixiEventTimerText').textContent = s.inEvent ? `⏳ Còn ${s.timeStr}` : '⏰ Sự kiện đã kết thúc';
+    if (!s.inEvent) {
+      clearInterval(lixiTimerInterval);
+    }
+  };
+  updateTimer();
+  clearInterval(lixiTimerInterval);
+  lixiTimerInterval = setInterval(updateTimer, 1000);
+
+  // Setup random target sweet spot (18% width)
+  const spotWidth = 18;
+  const spotLeft = 15 + Math.floor(Math.random() * 52);
+  rhythmTargetMin = spotLeft;
+  rhythmTargetMax = spotLeft + spotWidth;
+  const spotEl = $('rhythmSweetSpot');
+  if (spotEl) {
+    spotEl.style.left = `${rhythmTargetMin}%`;
+    spotEl.style.width = `${spotWidth}%`;
+  }
+
+  isRhythmStopped = false;
+  const needleEl = $('rhythmNeedle');
+
+  const startT = performance.now();
+  function animateRhythm(now) {
+    if (isRhythmStopped) return;
+    const elapsed = now - startT;
+    rhythmNeedlePos = 50 + 46 * Math.sin(elapsed * 0.0038);
+    if (needleEl) needleEl.style.left = `${rhythmNeedlePos}%`;
+    rhythmAnimationId = requestAnimationFrame(animateRhythm);
+  }
+  cancelAnimationFrame(rhythmAnimationId);
+  rhythmAnimationId = requestAnimationFrame(animateRhythm);
+}
+
+function stopRhythmNeedleAndCheck() {
+  if (isRhythmStopped) return;
+  isRhythmStopped = true;
+  cancelAnimationFrame(rhythmAnimationId);
+  $('btnStopRhythmNeedle').disabled = true;
+
+  const isHit = rhythmNeedlePos >= rhythmTargetMin && rhythmNeedlePos <= rhythmTargetMax;
+  const resBox = $('lixiRhythmResult');
+  const titleEl = $('lixiRhythmTitle');
+  const detailEl = $('lixiRhythmDetail');
+  resBox.classList.remove('hidden');
+
+  if (isHit) {
+    const reward = rollLixiReward();
+    addChips(reward.amount); // Instantly credits Xu to player wallet!
+    titleEl.textContent = reward.title;
+    detailEl.innerHTML = `<div>${reward.detail}</div><div style="margin-top:6px;font-weight:700;color:#fde047">🧧 ${reward.wish}</div>`;
+
+    if (reward.isJackpot) {
+      world?.spawnFireworksShow?.(me.x, me.y);
+      playSfx('plinko_win', 'casino');
+      toast('💥💥💥 ĐẠI PHÚ QUÝ! BẠN VỪA NỔ HŨ JACKPOT 10.000 XU! 💥💥💥');
+      const announcement = `🎉 [THÔNG BÁO] Chúc mừng ${me.name} vừa nổ hũ JACKPOT 10.000 XU từ Cây Mai Đại Thụ! 🎉`;
+      logChat('HỆ THỐNG', announcement);
+      net.send('chat', { t: announcement });
+    } else {
+      playSfx('tet_lixi', 'tet');
+      playSfx('plinko_win', 'casino');
+      toast(`🧧 Hái lộc thành công! Bạn nhận được ${reward.label}!`);
+      floaters.push({ e: `🪙 +${reward.amount} Xu!`, who: net.selfId, t: Date.now() });
+    }
+
+    me.av?.playEmote('cheer');
+    net.send('emote', { e: '🧧', clip: 'cheer' });
+  } else {
+    playSfx('pop');
+    titleEl.textContent = '💨 Hụt Nhịp Rồi!';
+    detailEl.textContent = 'Bạn đã bấm hơi lệch vạch màu xanh! Hãy bình tĩnh canh đúng vạch màu xanh ở lần hái tiếp theo nhé!';
+    $('btnTryAnotherLixi').classList.remove('hidden');
+    $('btnStopRhythmNeedle').textContent = '❌ Chưa Trúng';
+  }
+}
+
+$('btnStopRhythmNeedle').onclick = stopRhythmNeedleAndCheck;
+$('btnTryAnotherLixi').onclick = () => {
+  openLixiRhythmGame();
+};
+
+// ----------------------------------------------------------------------------
+// TET 2025: SACRED SHRINE OF PHÚC - LỘC - THỌ
+// ----------------------------------------------------------------------------
+let lastPltBowTime = 0;
+
+function openPhucLocThoDialog() {
+  openDialog('dlgPhucLocTho');
+  $('pltBlessingResult').classList.add('hidden');
+}
+
+$('btnPltIncense').onclick = () => {
   me.av?.playEmote('interact');
   playSfx('tet_lixi', 'tet');
-  floaters.push({ e: '🧧', who: net.selfId, t: Date.now() });
-  net.send('emote', { e: '🧧', clip: 'interact' });
-  const msg = `🧧 Hái lộc Cây Mai Đại Thụ và ${reward.short}`;
-  logChat(me.name, msg);
-  net.send('chat', { t: msg });
+  floaters.push({ e: '🕯️✨ Dâng Hương Cầu An', who: net.selfId, t: Date.now() });
+  toast('✨ Bạn đã thành tâm dâng hương trước Tam Vị Thần! Khí lành bao quanh, tâm an vạn sự như ý!');
+  $('pltResultTitle').textContent = '🕯️ Hương Khói Tụ Khí An Khang';
+  $('pltResultMsg').textContent = 'Nén hương trầm lan tỏa thanh tịnh, xua tan u ám, đem lại bình an và may mắn cho bạn cùng gia quyến suốt năm mới!';
+  $('pltBlessingResult').classList.remove('hidden');
+};
+
+$('btnPltBow').onclick = () => {
+  const now = Date.now();
+  if (now - lastPltBowTime < 3 * 60 * 1000) {
+    const remainSec = Math.ceil((3 * 60 * 1000 - (now - lastPltBowTime)) / 1000);
+    const m = Math.floor(remainSec / 60);
+    const s = remainSec % 60;
+    toast(`⏳ Bạn vừa lạy Tam Vị Thần rồi! Hãy tịnh tâm chờ ${m}p ${s}s để lạy lần tiếp nhé.`);
+    return;
+  }
+  lastPltBowTime = now;
+
+  me.av?.playEmote('sit');
+  const blessings = [
+    { god: 'Ông Phúc', xu: 88, wish: 'Phúc duyên tròn đầy, gia đạo an khang, con đàn cháu đống thuận hòa!' },
+    { god: 'Ông Lộc', xu: 168, wish: 'Lộc tấn vinh hoa, tiền vào như nước, công danh sự nghiệp đại hiển đạt!' },
+    { god: 'Ông Thọ', xu: 99, wish: 'Thân tâm an lạc, bách niên giai lão, sức khỏe dồi dào thọ tỷ Nam Sơn!' },
+  ];
+  const b = blessings[Math.floor(Math.random() * blessings.length)];
+  addChips(b.xu);
+  playSfx('plinko_win', 'casino');
+  floaters.push({ e: `🪙 +${b.xu} Xu Lộc`, who: net.selfId, t: Date.now() });
+  toast(`🙏 ${b.god} ban phúc: "${b.wish}" (+${b.xu} Xu lộc đầu xuân!)`);
+
+  $('pltResultTitle').textContent = `🙏 ${b.god} Ban Phúc Lành (+${b.xu} Xu)`;
+  $('pltResultMsg').textContent = `"${b.wish}" Số Xu lộc đã được nạp thẳng vào Ví của bạn!`;
+  $('pltBlessingResult').classList.remove('hidden');
+};
+
+$('btnPltChant').onclick = () => {
+  me.av?.playEmote('sit');
+  playSfx('tet_lixi', 'tet');
+  floaters.push({ e: '📿 Tịnh Tâm Niệm Phật', who: net.selfId, t: Date.now() });
+  toast('📿 Đang đọc kinh cầu phúc... Tâm tịnh trí sáng, vạn sự hanh thông.');
+  $('pltResultTitle').textContent = '📿 Tâm Tịnh Trí Sáng';
+  $('pltResultMsg').textContent = 'Tiếng kinh thanh tịnh lắng đọng tâm hồn. Chúc bạn một năm an nhiên tự tại, mọi điều sở cầu đều như ý nguyện!';
+  $('pltBlessingResult').classList.remove('hidden');
+};
+
+// ----------------------------------------------------------------------------
+// TET 2025: DRAGON SUMMONING ALTAR & FLIGHT QUESTS
+// ----------------------------------------------------------------------------
+function openDragonAltarDialog() {
+  openDialog('dlgDragonAltar');
+  renderDragonQuestList();
+  renderDragonSkinGrid();
 }
+
+function renderDragonQuestList() {
+  const container = $('dragonQuestList');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const unlocked = minigames?.getUnlockedDragonSkins() || ['gold'];
+
+  FLIGHT_QUESTS.forEach(q => {
+    const isUnlocked = unlocked.includes(q.targetSkin);
+    const card = document.createElement('div');
+    card.className = `quest-card ${isUnlocked ? 'unlocked' : ''}`;
+
+    const targetSkin = DRAGON_SKINS[q.targetSkin];
+    card.innerHTML = `
+      <div class="quest-meta">
+        <div class="quest-title">${q.title}</div>
+        <div class="quest-sub">${q.desc}</div>
+      </div>
+      <div>
+        ${
+          isUnlocked
+            ? '<button class="info sm-btn" data-stage="' + q.stage + '">✈️ Bay Lại</button>'
+            : '<button class="primary sm-btn" data-stage="' + q.stage + '">🚀 Bắt Đầu Bay</button>'
+        }
+      </div>
+    `;
+
+    card.querySelector('button').onclick = () => {
+      closeDialog('dlgDragonAltar');
+      minigames?.startDragonRide(q.stage);
+    };
+
+    container.appendChild(card);
+  });
+}
+
+function renderDragonSkinGrid() {
+  const grid = $('dragonSkinGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const unlocked = minigames?.getUnlockedDragonSkins() || ['gold'];
+  const activeSkin = minigames?.currentDragonSkin || 'gold';
+
+  Object.values(DRAGON_SKINS).forEach(skin => {
+    const isUnlocked = unlocked.includes(skin.id);
+    const isActive = activeSkin === skin.id;
+
+    const card = document.createElement('div');
+    card.className = `dragon-skin-card ${isActive ? 'active' : ''} ${!isUnlocked ? 'locked' : ''}`;
+    const hexColor = '#' + skin.color.toString(16).padStart(6, '0');
+
+    card.innerHTML = `
+      <div class="skin-swatch" style="background:${hexColor}"></div>
+      <div class="skin-name">${skin.name.split(' (')[0]}</div>
+      <div class="skin-badge ${isActive ? 'active' : ''}">
+        ${isActive ? 'Đang Dùng' : isUnlocked ? 'Đã Mở' : '🔒 Khóa'}
+      </div>
+    `;
+
+    if (isUnlocked) {
+      card.onclick = () => {
+        minigames?.setDragonSkin(skin.id);
+        renderDragonSkinGrid();
+        toast(`🐉 Đã đổi sang skin Rồng: ${skin.name}!`);
+      };
+    } else {
+      card.title = 'Làm Thử Thách Bay Vòng Tròn để mở khóa skin này!';
+    }
+
+    grid.appendChild(card);
+  });
+}
+
+$('btnStartFreeDragonRide').onclick = () => {
+  closeDialog('dlgDragonAltar');
+  minigames?.startDragonRide(0);
+};
+
+$('btnExitDragonFlight').onclick = () => {
+  minigames?.stopDragonRide();
+};
 
 function updateStatusBadges() {
   if (!me) return;
@@ -3665,7 +3967,13 @@ function triggerInteract(target = activeTarget) {
         openLoveWishingDialog(h.id);
         break;
       case 'mai_tree':
-        pickAndOpenLixi();
+        openLixiRhythmGame();
+        break;
+      case 'dragon_altar':
+        openDragonAltarDialog();
+        break;
+      case 'phuc_loc_tho_shrine':
+        openPhucLocThoDialog();
         break;
       case 'firework_launcher':
         if (!checkCooldown()) return;
@@ -3736,6 +4044,34 @@ addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   const k = e.key ? e.key.toLowerCase() : '';
   const code = e.code || '';
+
+  // Rhythm Mini-Game spacebar stop
+  if (!$('dlgLixiRhythm')?.classList.contains('hidden')) {
+    if (e.key === ' ' || code === 'Space') {
+      stopRhythmNeedleAndCheck();
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // Dragon flight steering controls
+  if (minigames?.isRiding()) {
+    if (code === 'KeyW' || k === 'w' || code === 'ArrowUp') minigames.dragonKeys.forward = true;
+    if (code === 'KeyS' || k === 's' || code === 'ArrowDown') minigames.dragonKeys.backward = true;
+    if (code === 'KeyA' || k === 'a' || code === 'ArrowLeft') minigames.dragonKeys.left = true;
+    if (code === 'KeyD' || k === 'd' || code === 'ArrowRight') minigames.dragonKeys.right = true;
+    if (code === 'Space' || e.key === ' ') {
+      minigames.dragonKeys.up = true;
+      e.preventDefault();
+      return;
+    }
+    if (code === 'ShiftLeft' || code === 'ShiftRight' || k === 'shift') {
+      minigames.dragonKeys.down = true;
+      e.preventDefault();
+      return;
+    }
+  }
+
   if (e.key === 'Enter') {
     document.exitPointerLock?.();
     $('chatIn').focus();
@@ -3810,6 +4146,17 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => {
   const k = e.key ? e.key.toLowerCase() : '';
   const code = e.code || '';
+
+  // Dragon flight key release
+  if (minigames?.isRiding()) {
+    if (code === 'KeyW' || k === 'w' || code === 'ArrowUp') minigames.dragonKeys.forward = false;
+    if (code === 'KeyS' || k === 's' || code === 'ArrowDown') minigames.dragonKeys.backward = false;
+    if (code === 'KeyA' || k === 'a' || code === 'ArrowLeft') minigames.dragonKeys.left = false;
+    if (code === 'KeyD' || k === 'd' || code === 'ArrowRight') minigames.dragonKeys.right = false;
+    if (code === 'Space' || e.key === ' ') minigames.dragonKeys.up = false;
+    if (code === 'ShiftLeft' || code === 'ShiftRight' || k === 'shift') minigames.dragonKeys.down = false;
+  }
+
   if (k) keys.delete(k);
   if (code) keys.delete(code);
   if (code === 'KeyW' || k === 'w' || k === 'ư' || k === 'process') {

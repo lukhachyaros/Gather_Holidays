@@ -424,39 +424,56 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       x: 14.5,
       y: 11.5,
       radius: 2.9,
-      prompt: '🧧 Cây Mai Đại Thụ · [E] Hái Bao Lì Xì (Ngẫu nhiên 1k–500k hoặc Câu chúc Tết)',
+      prompt: '🧧 Cây Mai Đại Thụ · [E] Hái Lộc Lì Xì (Cứ 15p mở 1 lần trong 5p - Mini Game Canh Nhịp)',
     });
     colliders.push({ x: 14.5, y: 11.5, r: 0.42 });
 
-    // 2 Firework Launcher Machines & surrounding Small Firecracker Tables
-    [
-      { id: 'fw_launcher_left', x: 6.5, y: 14.5 },
-      { id: 'fw_launcher_right', x: 22.5, y: 14.5 },
-    ].forEach(fw => {
-      hotspots.push({
-        id: fw.id,
-        type: 'firework_launcher',
-        x: fw.x,
-        y: fw.y,
-        radius: 2.1,
-        prompt: '🎆 Máy Bắn Pháo Hoa · [E] Khởi động giàn phóng pháo hoa rực rỡ!',
-      });
-      colliders.push({ x: fw.x, y: fw.y, r: 0.22 });
+    // Dragon Summoning Altar (Đài Triệu Hồi Rồng Thần)
+    hotspots.push({
+      id: 'dragon_altar',
+      type: 'dragon_altar',
+      x: 10.5,
+      y: 11.5,
+      radius: 2.4,
+      prompt: '🐉 Đài Triệu Hồi Rồng Thần · [E] Cưỡi Rồng Bay (30s) / Nhận Thử Thách Mở Khóa Skin',
+    });
+    colliders.push({ x: 10.5, y: 11.5, r: 0.4 });
 
-      // 2 Small firecracker tables flanking each launcher
-      [-1.9, 1.9].forEach((dx, ti) => {
-        const tx = fw.x + dx;
-        const ty = fw.y;
-        hotspots.push({
-          id: `${fw.id}_table_${ti}`,
-          type: 'firecracker_table',
-          x: tx,
-          y: ty,
-          radius: 1.5,
-          prompt: '🧨 Bàn Pháo Nổ Nhỏ · [E] Đốt pháo nổ lách tách vui xuân',
-        });
-        colliders.push({ x: tx, y: ty, r: 0.18 });
+    // Sacred Shrine of the 3 Star Gods: Phúc - Lộc - Thọ (Replaces left firecracker area)
+    hotspots.push({
+      id: 'phuc_loc_tho_shrine',
+      type: 'phuc_loc_tho_shrine',
+      x: 6.5,
+      y: 14.5,
+      radius: 2.8,
+      prompt: '🏮 Điện Thờ Tam Đa Phúc - Lộc - Thọ · [E] Thắp Hương · Lạy Cầu May · Ngồi Đọc Kinh',
+    });
+    colliders.push({ x: 6.5, y: 14.5, r: 0.85 });
+
+    // Right Fireworks Launcher Machine & surrounding Small Firecracker Tables
+    hotspots.push({
+      id: 'fw_launcher_right',
+      type: 'firework_launcher',
+      x: 22.5,
+      y: 14.5,
+      radius: 2.1,
+      prompt: '🎆 Máy Bắn Pháo Hoa · [E] Khởi động giàn phóng pháo hoa rực rỡ!',
+    });
+    colliders.push({ x: 22.5, y: 14.5, r: 0.22 });
+
+    // 2 Small firecracker tables flanking right launcher
+    [-1.9, 1.9].forEach((dx, ti) => {
+      const tx = 22.5 + dx;
+      const ty = 14.5;
+      hotspots.push({
+        id: `fw_launcher_right_table_${ti}`,
+        type: 'firecracker_table',
+        x: tx,
+        y: ty,
+        radius: 1.5,
+        prompt: '🧨 Bàn Pháo Nổ Nhỏ · [E] Đốt pháo nổ lách tách vui xuân',
       });
+      colliders.push({ x: tx, y: ty, r: 0.18 });
     });
 
     // 2 Festive Couple Sofas beside the firework plazas
