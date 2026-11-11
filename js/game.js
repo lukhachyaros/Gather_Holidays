@@ -379,9 +379,38 @@ try {
   initMobileControls();
   setupBuilderToolsInteraction();
   setupAdminCommandAutocomplete();
+  initGameSplashScreen();
 } catch (e) {
   console.error(e);
   document.addEventListener('DOMContentLoaded', () => toast('Trình duyệt không hỗ trợ WebGL'));
+}
+
+function initGameSplashScreen() {
+  const splash = $('gameSplashScreen');
+  const bar = $('splashProgressBar');
+  const status = $('splashStatusText');
+  if (!splash) return;
+
+  let progress = 12;
+  const interval = setInterval(() => {
+    progress += Math.floor(Math.random() * 18) + 14;
+    if (progress >= 100) {
+      progress = 100;
+      clearInterval(interval);
+      if (bar) bar.style.width = '100%';
+      if (status) status.textContent = 'Hoàn tất! Đang bước vào thế giới...';
+      setTimeout(() => {
+        splash.classList.add('fade-out');
+        setTimeout(() => splash.remove(), 850);
+      }, 350);
+    } else {
+      if (bar) bar.style.width = `${progress}%`;
+      if (status) {
+        if (progress > 60) status.textContent = 'Đang đồng bộ hoạt ảnh & âm thanh...';
+        else if (progress > 30) status.textContent = 'Đang nạp không gian lễ hội 3D...';
+      }
+    }
+  }, 100);
 }
 
 function initMobileControls() {
@@ -1062,12 +1091,6 @@ async function start() {
   me.av.label.visible = false;
   scene.add(me.av.root);
 
-  const offOfficial = OFFICIAL_ROOMS.find(o => o.id === roomName);
-  if (offOfficial && state.theme === 'casino') {
-    state.theme = offOfficial.theme;
-    state.map = buildThemeMap(offOfficial.theme);
-  }
-
   // Immediately synchronize 3D world before starting animation loop
   world.sync(state, roomName);
 
@@ -1422,12 +1445,6 @@ const handlers = {
     if (s.roomTitle) roomTitle = s.roomTitle;
     gotState = true;
 
-    const offOfficial = OFFICIAL_ROOMS.find(o => o.id === roomName);
-    if (offOfficial && state.theme === 'casino') {
-      state.theme = offOfficial.theme;
-      state.map = buildThemeMap(offOfficial.theme);
-    }
-
     if (first) {
       start();
     } else {
@@ -1512,7 +1529,17 @@ function applyOp(op, senderId = null) {
         world.sync(state, roomName);
         minigames?.setTheme(op.theme);
         broadcastMyRoomToLobby();
-        toast(op.theme === 'casino' ? '🎰 Cả phòng đã cùng bước vào Mật Thất Casino Hoàng Gia!' : `🗺️ Chủ phòng đã chuyển chủ đề sang: ${THEMES[op.theme].name}`);
+        if (op.theme === 'casino') {
+          me.x = 14.5;
+          me.y = 17.5;
+          me.h = 0;
+          me.vy = 0;
+          yaw = Math.PI;
+          if (me.av?.root) me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
+          toast('🎰 Cả phòng đã cùng bước vào Mật Thất Casino & Pub Hoàng Gia!');
+        } else {
+          toast(`🗺️ Chủ phòng đã chuyển chủ đề sang: ${THEMES[op.theme].name}`);
+        }
       }
       break;
     }
@@ -1894,6 +1921,27 @@ function applyOp(op, senderId = null) {
     }
     case 'admin_tornado': {
       spawnTornado(op.target, op.by);
+      break;
+    }
+    case 'admin_dinnerbone': {
+      if (op.target === me.name || op.target === 'all') {
+        me.isDinnerbone = !me.isDinnerbone;
+        me.av?.setDinnerbone?.(me.isDinnerbone);
+      }
+      peers.forEach(p => {
+        if (op.target === p.name || op.target === 'all') {
+          p.isDinnerbone = !p.isDinnerbone;
+          p.av?.setDinnerbone?.(p.isDinnerbone);
+        }
+      });
+      break;
+    }
+    case 'admin_clone': {
+      spawnCloneHorde(op.target);
+      break;
+    }
+    case 'admin_guillotine': {
+      spawnGuillotineStrike(op.target);
       break;
     }
     case 'admin_golden': {
@@ -4407,11 +4455,6 @@ function updateCamera(dt = 0.016) {
 let lastRoomBeforeCasino = null;
 
 function enterSecretCasino() {
-  if (state?.theme === 'casino') {
-    toast('🎰 Bạn đang ở trong Mật Thất Casino rồi!');
-    return;
-  }
-  toast('🌀 Bức màn bí mật hé mở... Đang dịch chuyển vào Mật Thất Casino Hoàng Gia!');
   leaveSeat();
   lastRoomBeforeCasino = {
     id: roomName,
@@ -4420,17 +4463,21 @@ function enterSecretCasino() {
   };
   state.theme = 'casino';
   state.map = buildThemeMap('casino');
+  state.decor = [];
   world.sync(state, roomName);
   me.x = 14.5;
-  me.y = 18.5;
+  me.y = 17.5;
   me.h = 0;
   me.vy = 0;
+  yaw = Math.PI;
+  pitch = 0.15;
   if (me.av?.root) {
     me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
   }
   playBgm('casino');
   minigames?.setTheme('casino');
   emitOp({ k: 'theme', theme: 'casino', isSecretChamber: true, byHost: state?.hostId || net?.selfId });
+  toast('🎰 Đã bước vào Mật Thất Casino & Pub Hoàng Gia!');
 }
 
 function exitSecretCasino() {
@@ -4457,27 +4504,27 @@ let activeFoundNoteCode = '';
 const PASSAGE_RIDDLES = {
   christmas: {
     icon: '🎄',
-    title: 'Phong Ấn Mật Mã RSA (Số Học Bách Khoa)',
-    sub: 'Giải phương trình đồng dư số nguyên tố để mở khóa Mật Thất Casino',
-    question: 'Hệ mã hóa RSA chọn 2 số nguyên tố p = 61, q = 53 (n = 3233), và khóa công khai e = 17. Để tìm khóa giải mã bí mật d sao cho e·d ≡ 1 (mod φ(n)), ta giải: 17d ≡ 1 (mod 3120). Giá trị của d là:',
-    options: ['d = 1847', 'd = 2753', 'd = 3119', 'd = 2171'],
-    correct: 1,
+    title: 'Đố Mẹo Đêm Giáng Sinh',
+    sub: 'Giải câu đố mẹo dân gian mùa lễ hội tuyết rơi',
+    question: 'Cái gì chỉ xuất hiện vào mùa đông tuyết rơi, có chiếc mũi bằng củ cà rốt xinh xắn, nhưng sợ nhất ánh nắng mặt trời?',
+    options: ['Người tuyết', 'Bánh gừng Noel', 'Tuần lộc mũi đỏ', 'Cây thông tuyết'],
+    correct: 0,
   },
   halloween: {
     icon: '🎃',
-    title: 'Nghịch Lý Máy Turing & Định Lý Gödel',
-    sub: 'Vận dụng logic toán học để phá vỡ phong ấn nghịch lý ngàn năm',
-    question: 'Trong Khoa học máy tính lý thuyết, giả sử tồn tại thuật toán H quyết định bài toán Dừng (Halting Problem). Xét máy Turing nghịch lý D: D(⟨D⟩) dừng khi và chỉ khi H(D, ⟨D⟩) báo không dừng. Mệnh đề logic nào sau đây chứng minh tính bất khả quy (undecidable)?',
+    title: 'Đố Mẹo Đêm Halloween',
+    sub: 'Câu đố hóm hỉnh ngày hội bí ngô và ma cà rồng',
+    question: 'Con ma và bóng ma trong trường học sợ nhất là môn học nào sau đây?',
     options: [
-      'Tràn bộ nhớ stack do không gian trạng thái của máy Turing quá lớn',
-      'Máy D tự mâu thuẫn: D dừng khi và chỉ khi D không dừng, dẫn đến giả thiết H tồn tại là sai',
-      'Độ phức tạp tính toán NP-Complete luôn quy về được đa thức P',
-      'Định lý Church-Turing chỉ áp dụng cho ngôn ngữ chính quy Automata hữu hạn',
+      'Môn Lịch sử (vì suốt ngày phải nghe nhắc lại về người đã khuất)',
+      'Môn Toán (vì tính toán quá nhiều nhức đầu)',
+      'Môn Hóa học (vì sợ phản ứng nổ)',
+      'Môn Thể dục (vì bóng ma không có chân để chạy)',
     ],
-    correct: 1,
+    correct: 0,
   },
   tet: {
-    icon: '🐉',
+    icon: '🧧',
     title: 'Định Lý Số Dư Trung Hoa (Toán Tin Bách Khoa)',
     sub: 'Giải hệ phương trình đồng dư Sun Tzu để mở cánh cổng Speakeasy',
     question: 'Tìm số nguyên dương nhỏ nhất x thỏa mãn hệ phương trình đồng dư sau:\nx ≡ 2 (mod 3)\nx ≡ 3 (mod 5)\nx ≡ 2 (mod 7)\nGiá trị nhỏ nhất của x là:',
@@ -4485,17 +4532,17 @@ const PASSAGE_RIDDLES = {
     correct: 0,
   },
   valentine: {
-    icon: '🏹',
-    title: 'Lý Thuyết Trò Chơi & Thuật Toán Gale-Shapley',
-    sub: 'Cân bằng Nash & Ghép cặp hôn nhân bền vững Nobel Kinh Tế',
-    question: 'Trong Thuật toán Ghép cặp Bền vững Gale-Shapley (Deferred Acceptance) với tập n nam và n nữ có danh sách ưu tiên nghiêm ngặt. Khi phía chủ động cầu hôn là phía nam, phát biểu nào sau đây đúng về trạng thái bền vững đạt được?',
+    icon: '💝',
+    title: 'Đố Mẹo Ngày Lễ Tình Nhân',
+    sub: 'Câu đố mẹo hóm hỉnh về tình yêu đôi lứa',
+    question: 'Tại sao thần Tình Yêu Cupid khi đi bắn mũi tên tình duyên lại luôn bịt mắt?',
     options: [
-      'Tạo ra kết quả tối ưu cho nữ (female-optimal) và tồi nhất cho nam',
-      'Thuật toán có thể lặp vô hạn và không bao giờ hội tụ',
-      'Luôn đạt trạng thái tối ưu cho bên đề xuất (male-optimal) và tồi nhất cho bên chấp thuận (female-pessimal)',
-      'Chỉ tồn tại duy nhất một cặp đôi ghép được không phụ thuộc danh sách ưu tiên',
+      'Vì tình yêu là mù quáng',
+      'Vì sợ ánh nắng chói mắt',
+      'Vì bắn bừa cũng dính duyên',
+      'Vì muốn ngầu hơn các vị thần khác',
     ],
-    correct: 2,
+    correct: 0,
   },
 };
 
@@ -4670,108 +4717,126 @@ $('inSecretCode').onkeydown = e => {
 // ============================================================================
 // TITLES COLLECTION SYSTEM
 // ============================================================================
+const RAW_NAMETAGS = [
+  "Báo thủ", "Lọ Vương", "Lụy em", "Cờ đỏ", "Cờ xanh", "Cờ lê", "Main Character",
+  "Nigger", "Gaslighter", "Trường Giang", "Nô lệ deadline", "Thần đèn", "Em bé",
+  "Faker", "Boy 2 mái", "Sơn Tung MTP", "Hieuthuhai", "J97", "Donald Trump",
+  "Charlie Kirk", "Son", "Hustlang Robber", "Drake", "Kendrick Lamar", "Ri Đỗ",
+  "Mười Gió", "Spider Man", "Ben 10", "SpongeBob", "NGƯỜI ĐẸP TRAI", "GAY",
+  "VF3", "Phạm Nhật Vượng", "SVBK", "Rick Astley", "Phùng Thanh Độ", "Tú Sena",
+  "Sweetie Fox", "The Rock", "John Cena", "Yasuo", "Allain", "Boy Cô Đơn",
+  "Elon Musk", "67", "Tộc", "Ngoo lớmmm!!!"
+];
+
 const TITLE_LIST = [
+  {
+    id: 'none',
+    name: 'Ẩn danh hiệu',
+    desc: 'Không hiển thị huy hiệu danh hiệu trên tên',
+    color: '#94a3b8',
+    condition: () => true,
+  },
   {
     id: 'admin',
     name: '👑 ADMIN',
-    desc: 'Đặc quyền Tối cao dành riêng cho Quản Trị Viên đã xác thực mật mã "grinding shit"',
+    desc: 'Đặc quyền Tối cao dành riêng cho Quản Trị Viên đã xác thực hệ thống',
+    color: '#ef4444',
     condition: () => isAdminVerified(),
-    lockMsg: 'Cần xác thực mật mã Admin "grinding shit" (Bấm phím [;] để nhập)!',
+    lockMsg: 'Cần xác thực quyền Quản Trị Viên (Bấm phím [;] để kích hoạt)!',
   },
   {
     id: 'vuadoden',
     name: '👑 Vua Đỏ Đen',
-    desc: 'Đạt danh hiệu huyền thoại khi trúng Jackpot / Thắng lớn nhất ở cả 5 trò chơi tại Casino!',
+    desc: 'Đạt danh hiệu huyền thoại khi trúng Jackpot ở cả 5 trò chơi tại Casino!',
+    color: '#facc15',
     condition: () => {
       try {
         const history = JSON.parse(localStorage.getItem('gh_jackpot_wins') || '[]');
         return ['roulette', 'duck_derby', 'blackjack', 'slot_machine', 'plinko'].every(k => history.includes(k));
       } catch { return false; }
     },
-    lockMsg: 'Cần trúng Jackpot ở cả 5 trò (Roulette, Duck Derby, Blackjack, Slot Machine, Plinko)!',
+    lockMsg: 'Cần trúng Jackpot ở cả 5 trò Casino!',
   },
   {
     id: 'trieu_phu',
     name: '💎 Dân Chơi Triệu Phú',
     desc: 'Sở hữu từ 3,000 xu chips casino trở lên trong tài khoản!',
+    color: '#38bdf8',
     condition: () => getChips() >= 3000,
     lockMsg: 'Cần tích lũy từ 3,000 xu chips casino!',
   },
-  {
-    id: 'dai_hiep_xmas',
-    name: '🎄 Đại Hiệp Giáng Sinh',
-    desc: 'Hiệp sĩ tuyết trắng mang lại niềm vui cho mùa Noel',
-    condition: () => true,
-  },
-  {
-    id: 'chua_te_halloween',
-    name: '🎃 Chúa Tể Halloween',
-    desc: 'Bậc thầy bí ngô ma quái dũng cảm đối mặt Boss Ma Cà Rồng',
-    condition: () => true,
-  },
-  {
-    id: 'than_tai_tet',
-    name: '🧧 Thần Tài Gõ Cửa',
-    desc: 'Khai xuân đón lộc, phát pháo rền vang',
-    condition: () => true,
-  },
-  {
-    id: 'than_tinh_yeu',
-    name: '💝 Thần Tình Yêu Cupido',
-    desc: 'Sứ giả gắn kết những trái tim ngọt ngào',
-    condition: () => true,
-  },
-  {
-    id: 'tan_thu',
-    name: '🌟 Tân Thủ Đáng Yêu',
-    desc: 'Nhà thám hiểm mới bước chân vào thế giới lễ hội',
-    condition: () => true,
-  },
-  {
-    id: 'none',
-    name: 'Ẩn danh hiệu',
-    desc: 'Không hiển thị huy hiệu danh hiệu trên tên',
-    condition: () => true,
-  },
+  ...RAW_NAMETAGS.map((tag, idx) => {
+    const isGay = tag.trim() === 'GAY';
+    const tagColors = [
+      '#f43f5e', '#ec4899', '#d946ef', '#a855f7', '#8b5cf6',
+      '#6366f1', '#3b82f6', '#0ea5e9', '#06b6d4', '#14b8a6',
+      '#10b981', '#22c55e', '#84cc16', '#eab308', '#f59e0b', '#f97316'
+    ];
+    return {
+      id: 'tag_' + idx,
+      name: tag,
+      desc: isGay ? '🌈 Danh hiệu cầu vồng Rainbow RGB 24/7 độc quyền lộng lẫy!' : `Danh hiệu cá tính: [${tag}]`,
+      color: isGay ? 'rainbow' : tagColors[idx % tagColors.length],
+      isGay,
+      condition: () => true,
+    };
+  })
 ];
 
+let currentTitleSearchTerm = '';
+
 function openTitlesDialog() {
-  renderTitlesList();
+  const searchInput = $('searchTitles');
+  if (searchInput) {
+    searchInput.value = '';
+    currentTitleSearchTerm = '';
+    searchInput.oninput = (e) => {
+      currentTitleSearchTerm = (e.target.value || '').trim().toLowerCase();
+      renderTitlesGrid();
+    };
+  }
+  renderTitlesGrid();
   openDialog('dlgTitles');
 }
 
-function renderTitlesList() {
-  const container = $('titlesList');
+function renderTitlesGrid() {
+  const container = $('titlesGrid');
   if (!container) return;
   container.innerHTML = '';
   const currentTitle = me?.title || localStorage.getItem('gh_selected_title') || '';
 
-  TITLE_LIST.forEach(t => {
-    const isUnlocked = t.condition(me?.name);
+  const filteredTitles = TITLE_LIST.filter(t => {
+    if (!currentTitleSearchTerm) return true;
+    return t.name.toLowerCase().includes(currentTitleSearchTerm) || (t.desc && t.desc.toLowerCase().includes(currentTitleSearchTerm));
+  });
+
+  if (filteredTitles.length === 0) {
+    container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px;color:#94a3b8">Không tìm thấy danh hiệu phù hợp.</div>';
+    return;
+  }
+
+  filteredTitles.forEach(t => {
+    const isUnlocked = t.condition ? t.condition(me?.name) : true;
     const isEquipped = (t.id === 'none' && !currentTitle) || currentTitle === t.name;
     const card = document.createElement('div');
-    card.className = `title-select-card ${isEquipped ? 'active' : ''}`;
-    card.style.opacity = isUnlocked ? '1' : '0.6';
+    const isGay = t.isGay || t.name === 'GAY';
+    card.className = `title-card ${isEquipped ? 'selected' : ''} ${isGay ? 'rainbow-rgb-247' : ''}`;
+    card.style.opacity = isUnlocked ? '1' : '0.45';
 
-    const color = t.id === 'admin' ? '#ef4444' : t.id === 'vuadoden' ? '#facc15' : '#38bdf8';
+    if (!isGay) {
+      card.style.color = t.color === 'rainbow' ? '#f43f5e' : (t.color || '#facc15');
+    }
+
     card.innerHTML = `
-      <div style="flex:1">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span class="title-badge-preview" style="color:${color}">${t.name}</span>
-          ${isEquipped ? '<span style="font-size:11px;color:#22c55e;font-weight:700">✓ Đang mặc</span>' : ''}
-        </div>
-        <p style="margin:4px 0 0 0;font-size:11.5px;color:#94a3b8">${t.desc}</p>
-        ${!isUnlocked && t.lockMsg ? `<p style="margin:2px 0 0 0;font-size:11px;color:#f87171">🔒 ${t.lockMsg}</p>` : ''}
-      </div>
-      <div>
-        <button class="primary" style="padding:5px 12px;font-size:12px" ${!isUnlocked || isEquipped ? 'disabled' : ''}>
-          ${isEquipped ? 'Đang chọn' : isUnlocked ? 'Mặc' : 'Chưa mở'}
-        </button>
-      </div>
+      <div style="font-size:13px;margin-bottom:2px">${t.name}</div>
+      <div style="font-size:10px;opacity:0.8;font-weight:normal">${isEquipped ? '✓ Đang mặc' : isUnlocked ? 'Nhấn để chọn' : '🔒 Khóa'}</div>
     `;
 
-    card.querySelector('button').onclick = () => {
-      if (!isUnlocked) return;
+    card.onclick = () => {
+      if (!isUnlocked) {
+        toast(`🔒 ${t.lockMsg || 'Danh hiệu này đang bị khóa!'}`);
+        return;
+      }
       selectTitle(t);
     };
 
@@ -4787,7 +4852,7 @@ function selectTitle(titleItem) {
   }
   localStorage.setItem('gh_selected_title', chosenTitle);
   syncMyAppearance();
-  toast(`👑 Bạn đã trang bị danh hiệu: ${chosenTitle || 'Không'}`);
+  toast(`👑 Bạn đã trang bị danh hiệu: [${chosenTitle || 'Không'}]`);
   closeDialog('dlgTitles');
 }
 
@@ -4824,10 +4889,9 @@ function updateAdminUIStatus() {
       btnAdmin.style.boxShadow = '0 0 14px rgba(250, 204, 21, 0.6)';
       btnAdmin.style.color = '#fff';
       btnAdmin.title = 'Bảng Quản Trị Viên (ĐÃ XÁC THỰC) - Phím [;]';
-      if (me) {
+      if (me && !me.title) {
         me.title = '👑 ADMIN';
         me.av?.setName(me.name, me.title, me.nametagStyle);
-        me.av?.setAdminAura?.(true);
         syncMyAppearance();
       }
     } else {
@@ -4836,7 +4900,7 @@ function updateAdminUIStatus() {
       btnAdmin.style.borderColor = 'rgba(250, 204, 21, 0.4)';
       btnAdmin.style.boxShadow = 'none';
       btnAdmin.style.color = '#fca5a5';
-      btnAdmin.title = 'Nhấn để xác thực quyền Admin với mật mã "grinding shit" - Phím [;]';
+      btnAdmin.title = 'Nhấn để mở Bảng Quản Trị Viên - Phím [;]';
       if (me) {
         me.av?.setAdminAura?.(false);
       }
@@ -5117,18 +5181,22 @@ function setupBuilderToolsInteraction() {
   const canvas = renderer.domElement;
   canvas.addEventListener('click', (e) => {
     if (!adminBuilderMode || !isAdminVerified()) return;
-    if (document.pointerLockElement) return;
 
     const rect = canvas.getBoundingClientRect();
-    builderMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    builderMouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    if (document.pointerLockElement) {
+      builderMouse.x = 0;
+      builderMouse.y = 0;
+    } else {
+      builderMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      builderMouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    }
 
     builderRaycaster.setFromCamera(builderMouse, camera);
 
     const blockMeshes = Array.from(world.builderBlocks.values());
     const blockIntersects = builderRaycaster.intersectObjects(blockMeshes, true);
 
-    if (e.altKey && blockIntersects.length > 0) {
+    if ((e.altKey || e.shiftKey) && blockIntersects.length > 0) {
       let topHit = blockIntersects[0].object;
       while (topHit.parent && !topHit.userData.blockId && topHit.parent !== world.builderBlocksGroup) {
         topHit = topHit.parent;
@@ -5160,63 +5228,134 @@ function setupBuilderToolsInteraction() {
       world.addBuilderBlock(block);
       emitOp({ k: 'admin_block_place', block });
       playSfx('plinko_peg', 'casino');
-      toast('🧱 Đã đặt khối 3D! (Giữ Alt + Click khối để Xóa)');
+      toast('🧱 Đã đặt khối 3D! (Alt+Click hoặc Shift+Click để Xóa)');
     }
   });
 }
 
 // ============================================================================
 // ADMIN MOB ATTACK & HUNT SYSTEM (:summon / :attack)
+// Multi-mob support: bat, zombie, dog, creeper, ghost
 // ============================================================================
 function spawnMobAttack(mobType = 'bat', targetName, byAdmin = 'Admin') {
-  toast(`🦇 ${byAdmin} đã triệu hồi QUÁI VẬT BÓNG ĐÊM săn đuổi [${targetName || 'mọi người'}]!`);
+  const type = (mobType || 'bat').toLowerCase();
+  const mobNames = {
+    bat: '🦇 Dơi Hút Máu Bóng Đêm',
+    zombie: '🧟 Xác Sống Khát Máu',
+    dog: '🐕 Chó Săn Địa Ngục',
+    creeper: '💣 Creeper Phát Nổ',
+    ghost: '👻 Hồn Ma Oán Khí',
+  };
+  const displayName = mobNames[type] || `👾 Quái Vật [${type}]`;
+  toast(`⚡ ${byAdmin} đã phái ${displayName} săn đuổi [${targetName || 'mọi người'}]!`);
   playSfx('spooky_laugh', 'halloween');
 
   const mobGroup = new THREE.Group();
-  
-  const bodyGeo = new THREE.SphereGeometry(0.35, 12, 12);
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x180024, roughness: 0.4 });
-  const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-  bodyMesh.position.y = 0.35;
-  mobGroup.add(bodyMesh);
+  let leftWing, rightWing, creeperMat, dogLegs = [];
 
-  const eyeGeo = new THREE.SphereGeometry(0.08, 8, 8);
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
-  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-  leftEye.position.set(-0.14, 0.45, 0.28);
-  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-  rightEye.position.set(0.14, 0.45, 0.28);
-  mobGroup.add(leftEye, rightEye);
+  if (type === 'zombie') {
+    // Zombie: Da xanh, 2 tay duỗi thẳng
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.6 });
+    const clothesMat = new THREE.MeshStandardMaterial({ color: 0x0284c7 });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), skinMat);
+    head.position.y = 1.1;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.55, 0.25), clothesMat);
+    body.position.y = 0.65;
+    const lArm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.5), skinMat);
+    lArm.position.set(-0.25, 0.75, 0.25);
+    const rArm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.5), skinMat);
+    rArm.position.set(0.25, 0.75, 0.25);
+    const legs = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.45, 0.2), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+    legs.position.y = 0.22;
+    mobGroup.add(head, body, lArm, rArm, legs);
+  } else if (type === 'dog') {
+    // Hound / Dog: 4 chân, thân dài
+    const dogMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.7 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.7), dogMat);
+    body.position.y = 0.35;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.3), dogMat);
+    head.position.set(0, 0.5, 0.4);
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.18), new THREE.MeshStandardMaterial({ color: 0x1c1917 }));
+    snout.position.set(0, 0.45, 0.58);
+    mobGroup.add(body, head, snout);
+    for (let i = 0; i < 4; i++) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.25, 0.1), dogMat);
+      leg.position.set((i % 2 === 0 ? -0.15 : 0.15), 0.12, (i < 2 ? 0.22 : -0.22));
+      mobGroup.add(leg);
+      dogLegs.push(leg);
+    }
+  } else if (type === 'creeper') {
+    // Creeper: Thân đứng, 4 chân ngắn
+    creeperMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.5 });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.38), creeperMat);
+    head.position.y = 0.95;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.5, 0.22), creeperMat);
+    body.position.y = 0.52;
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.24), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    face.position.set(0, 0.95, 0.2);
+    mobGroup.add(head, body, face);
+    for (let i = 0; i < 4; i++) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.25, 0.12), creeperMat);
+      leg.position.set((i % 2 === 0 ? -0.12 : 0.12), 0.12, (i < 2 ? 0.1 : -0.1));
+      mobGroup.add(leg);
+    }
+  } else if (type === 'ghost') {
+    // Ghost: Bóng ma trắng mờ
+    const ghostMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, transparent: true, opacity: 0.85, roughness: 0.2 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, 0.9, 16), ghostMat);
+    body.position.y = 0.6;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 16), ghostMat);
+    head.position.y = 1.05;
+    const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    lEye.position.set(-0.1, 1.1, 0.28);
+    const rEye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    rEye.position.set(0.1, 1.1, 0.28);
+    mobGroup.add(body, head, lEye, rEye);
+  } else {
+    // Bat: Mặc định
+    const bodyGeo = new THREE.SphereGeometry(0.35, 12, 12);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x180024, roughness: 0.4 });
+    const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+    bodyMesh.position.y = 0.35;
+    mobGroup.add(bodyMesh);
 
-  const fangGeo = new THREE.ConeGeometry(0.05, 0.16, 6);
-  const fangMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-  const leftFang = new THREE.Mesh(fangGeo, fangMat);
-  leftFang.rotation.x = Math.PI;
-  leftFang.position.set(-0.1, 0.24, 0.3);
-  const rightFang = new THREE.Mesh(fangGeo, fangMat);
-  rightFang.rotation.x = Math.PI;
-  rightFang.position.set(0.1, 0.24, 0.3);
-  mobGroup.add(leftFang, rightFang);
+    const eyeGeo = new THREE.SphereGeometry(0.08, 8, 8);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
+    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+    leftEye.position.set(-0.14, 0.45, 0.28);
+    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+    rightEye.position.set(0.14, 0.45, 0.28);
+    mobGroup.add(leftEye, rightEye);
 
-  const wingShape = new THREE.Shape();
-  wingShape.moveTo(0, 0);
-  wingShape.lineTo(0.6, 0.4);
-  wingShape.lineTo(0.9, 0.1);
-  wingShape.lineTo(0.5, -0.2);
-  wingShape.lineTo(0, 0);
-  const wingGeo = new THREE.ShapeGeometry(wingShape);
-  const wingMat = new THREE.MeshStandardMaterial({ color: 0x3b0764, side: THREE.DoubleSide });
+    const fangGeo = new THREE.ConeGeometry(0.05, 0.16, 6);
+    const fangMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    const leftFang = new THREE.Mesh(fangGeo, fangMat);
+    leftFang.rotation.x = Math.PI;
+    leftFang.position.set(-0.1, 0.24, 0.3);
+    const rightFang = new THREE.Mesh(fangGeo, fangMat);
+    rightFang.rotation.x = Math.PI;
+    rightFang.position.set(0.1, 0.24, 0.3);
+    mobGroup.add(leftFang, rightFang);
 
-  const leftWing = new THREE.Mesh(wingGeo, wingMat);
-  leftWing.position.set(-0.25, 0.35, 0);
-  leftWing.rotation.y = Math.PI;
+    const wingShape = new THREE.Shape();
+    wingShape.moveTo(0, 0);
+    wingShape.lineTo(0.6, 0.4);
+    wingShape.lineTo(0.9, 0.1);
+    wingShape.lineTo(0.5, -0.2);
+    wingShape.lineTo(0, 0);
+    const wingGeo = new THREE.ShapeGeometry(wingShape);
+    const wingMat = new THREE.MeshStandardMaterial({ color: 0x3b0764, side: THREE.DoubleSide });
 
-  const rightWing = new THREE.Mesh(wingGeo, wingMat);
-  rightWing.position.set(0.25, 0.35, 0);
+    leftWing = new THREE.Mesh(wingGeo, wingMat);
+    leftWing.position.set(-0.25, 0.35, 0);
+    leftWing.rotation.y = Math.PI;
 
-  mobGroup.add(leftWing, rightWing);
+    rightWing = new THREE.Mesh(wingGeo, wingMat);
+    rightWing.position.set(0.25, 0.35, 0);
+    mobGroup.add(leftWing, rightWing);
+  }
 
-  mobGroup.position.set(me.x * TILE, me.h + 3.0, me.y * TILE);
+  mobGroup.position.set(me.x * TILE, me.h + 2.5, me.y * TILE);
   scene.add(mobGroup);
 
   const startTime = performance.now();
@@ -5229,19 +5368,33 @@ function spawnMobAttack(mobType = 'bat', targetName, byAdmin = 'Admin') {
       return;
     }
 
-    const wingFlap = Math.sin(elapsed * 0.02) * 0.7;
-    leftWing.rotation.z = wingFlap;
-    rightWing.rotation.z = -wingFlap;
+    if (leftWing && rightWing) {
+      const wingFlap = Math.sin(elapsed * 0.02) * 0.7;
+      leftWing.rotation.z = wingFlap;
+      rightWing.rotation.z = -wingFlap;
+    }
+    if (dogLegs.length === 4) {
+      const legWalk = Math.sin(elapsed * 0.015) * 0.5;
+      dogLegs[0].rotation.x = legWalk;
+      dogLegs[1].rotation.x = -legWalk;
+      dogLegs[2].rotation.x = -legWalk;
+      dogLegs[3].rotation.x = legWalk;
+    }
+    if (creeperMat && elapsed > 2000 && Math.sin(elapsed * 0.03) > 0.3) {
+      creeperMat.color.setHex(0xffffff);
+    } else if (creeperMat) {
+      creeperMat.color.setHex(0x16a34a);
+    }
 
     let tx = me.x * TILE;
-    let ty = me.h + 0.8;
+    let ty = me.h + 0.5;
     let tz = me.y * TILE;
 
     if (targetName && targetName !== me.name && targetName !== 'all') {
       const pEntry = findPeerByName(targetName);
       if (pEntry) {
         tx = pEntry[1].x * TILE;
-        ty = (pEntry[1].h || 0) + 0.8;
+        ty = (pEntry[1].h || 0) + 0.5;
         tz = pEntry[1].y * TILE;
       }
     }
@@ -5251,14 +5404,14 @@ function spawnMobAttack(mobType = 'bat', targetName, byAdmin = 'Admin') {
     const dz = tz - mobGroup.position.z;
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-    if (dist > 0.45) {
-      mobGroup.position.x += (dx / dist) * 0.22;
-      mobGroup.position.y += (dy / dist) * 0.22;
-      mobGroup.position.z += (dz / dist) * 0.22;
+    if (dist > 0.55) {
+      mobGroup.position.x += (dx / dist) * 0.24;
+      mobGroup.position.y += (dy / dist) * 0.24;
+      mobGroup.position.z += (dz / dist) * 0.24;
       mobGroup.lookAt(tx, ty, tz);
       requestAnimationFrame(anim);
     } else {
-      playSfx('spooky_laugh', 'halloween');
+      playSfx('explosion', 'tet');
       playSfx('splat', 'halloween');
 
       if (targetName === me.name || targetName === 'all' || !targetName) {
@@ -5267,12 +5420,18 @@ function spawnMobAttack(mobType = 'bat', targetName, byAdmin = 'Admin') {
         setTimeout(() => document.body.classList.remove('earthquake-active'), 1200);
 
         if (!adminGodMode && !window.adminGodMode) {
-          toast(`💀 BẠN ĐÃ BỊ QUÁI VẬT CẮN HẾT MÁU! Đang hồi sinh về vị trí xuất phát...`);
-          me.x = 14.5;
-          me.y = 18.5;
-          me.h = 0;
-          me.vy = 0;
-          me.av?.playEmote?.('cry');
+          toast(`💀 BẠN ĐÃ BỊ ${displayName.toUpperCase()} HẠ GỤC VỀ 0 HP! Đang hồi sinh...`);
+          me.av?.spawnLegoPop?.(0, 1.2, 0);
+          me.av?.setLimbState?.({ head: false, leftArm: false, rightArm: false, legs: false });
+          setTimeout(() => {
+            me.x = 14.5;
+            me.y = 18.5;
+            me.h = 0;
+            me.vy = 0;
+            if (me.av?.root) me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
+            me.av?.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
+            toast('✨ Bạn đã hồi sinh nguyên vẹn tại điểm xuất phát!');
+          }, 1500);
         } else {
           toast('🛡️ BẬT BẤT TỬ (GOD MODE): Quái cắn không xi nhê!');
         }
@@ -5281,6 +5440,7 @@ function spawnMobAttack(mobType = 'bat', targetName, byAdmin = 'Admin') {
       peers.forEach(p => {
         if (targetName === p.name || targetName === 'all') {
           p.av?.showTomatoSplat?.();
+          p.av?.spawnLegoPop?.(0, 1.2, 0);
           p.av?.playEmote?.('scared');
         }
       });
@@ -5290,6 +5450,150 @@ function spawnMobAttack(mobType = 'bat', targetName, byAdmin = 'Admin') {
   };
 
   requestAnimationFrame(anim);
+}
+
+// ============================================================================
+// ADMIN CLONE HORDE & GUILLOTINE SYSTEM
+// ============================================================================
+function spawnCloneHorde(targetName) {
+  toast(`👥 ĐÃ TRIỆU HỒI ĐÀN PHÂN THÂN TRUY LÙNG [${targetName || 'Mục tiêu'}]!`);
+  playSfx('spooky_laugh', 'halloween');
+
+  let tx = me.x * TILE;
+  let tz = me.y * TILE;
+  if (targetName && targetName !== me.name && targetName !== 'all') {
+    const pEntry = findPeerByName(targetName);
+    if (pEntry) {
+      tx = pEntry[1].x * TILE;
+      tz = pEntry[1].y * TILE;
+    }
+  }
+
+  const clones = [];
+  const hordeGroup = new THREE.Group();
+  scene.add(hordeGroup);
+
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * Math.PI * 2;
+    const dist = 6 + Math.random() * 3;
+    const cloneMesh = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.5 });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), mat);
+    head.position.y = 1.0;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.5, 0.22), mat);
+    body.position.y = 0.6;
+    const legs = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.2), mat);
+    legs.position.y = 0.2;
+    cloneMesh.add(head, body, legs);
+    cloneMesh.position.set(tx + Math.cos(angle) * dist, 0, tz + Math.sin(angle) * dist);
+    hordeGroup.add(cloneMesh);
+    clones.push(cloneMesh);
+  }
+
+  const startT = performance.now();
+  const animClones = () => {
+    const elapsed = performance.now() - startT;
+    if (elapsed > 7000) {
+      scene.remove(hordeGroup);
+      return;
+    }
+
+    let allHit = true;
+    clones.forEach(c => {
+      const cdx = tx - c.position.x;
+      const cdz = tz - c.position.z;
+      const cdist = Math.sqrt(cdx * cdx + cdz * cdz);
+      if (cdist > 0.4) {
+        allHit = false;
+        c.position.x += (cdx / cdist) * 0.18;
+        c.position.z += (cdz / cdist) * 0.18;
+        c.lookAt(tx, 0.5, tz);
+        c.rotation.z = Math.sin(elapsed * 0.02) * 0.15;
+      }
+    });
+
+    if (!allHit) {
+      requestAnimationFrame(animClones);
+    } else {
+      playSfx('explosion', 'tet');
+      if (targetName === me.name || targetName === 'all' || !targetName) {
+        me.av?.spawnLegoPop?.(0, 1.2, 0);
+        toast(`💀 ĐÀN PHÂN THÂN ĐÃ TÚM ĐƯỢC VÀ DẬP BẠN TƠI TẢ!`);
+        me.vy = 8;
+      }
+      scene.remove(hordeGroup);
+    }
+  };
+  requestAnimationFrame(animClones);
+}
+
+function spawnGuillotineStrike(targetName) {
+  toast(`⚔️ MÁY CHÉM GUILLOTINE KHỔNG LỒ GIÁNG XUỐNG [${targetName || 'Mục tiêu'}]!`);
+  let tx = me.x * TILE;
+  let tz = me.y * TILE;
+  if (targetName && targetName !== me.name && targetName !== 'all') {
+    const pEntry = findPeerByName(targetName);
+    if (pEntry) {
+      tx = pEntry[1].x * TILE;
+      tz = pEntry[1].y * TILE;
+    }
+  }
+
+  const gGroup = new THREE.Group();
+  gGroup.position.set(tx, 0, tz);
+
+  // Khung máy chém bằng gỗ
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x5c2b14, roughness: 0.8 });
+  const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.2, 0.2), woodMat);
+  p1.position.set(-0.6, 2.1, 0);
+  const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.2, 0.2), woodMat);
+  p2.position.set(0.6, 2.1, 0);
+  const topBar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.3, 0.25), woodMat);
+  topBar.position.set(0, 4.1, 0);
+
+  // Lưỡi dao sắc bén
+  const bladeMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.9, roughness: 0.2 });
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.5, 0.06), bladeMat);
+  blade.position.set(0, 3.8, 0);
+
+  gGroup.add(p1, p2, topBar, blade);
+  scene.add(gGroup);
+
+  const startT = performance.now();
+  const animBlade = () => {
+    const elapsed = performance.now() - startT;
+    if (elapsed < 800) {
+      // Dao đứng im trên đỉnh rung rung
+      blade.position.x = (Math.random() - 0.5) * 0.04;
+      requestAnimationFrame(animBlade);
+    } else if (elapsed < 1200) {
+      // Rơi vút xuống
+      const progress = (elapsed - 800) / 400;
+      blade.position.y = 3.8 - progress * 2.5;
+      requestAnimationFrame(animBlade);
+    } else {
+      // Trúng đích: XOẸT!
+      playSfx('wood');
+      playSfx('splat', 'halloween');
+      if (targetName === me.name || targetName === 'all' || !targetName) {
+        me.av?.spawnLegoPop?.(0, 1.4, 0);
+        me.av?.setLimbState?.({ head: false });
+        toast('🪓 XOẸT! Bạn đã bị chém bay đầu rơi Lego!');
+        setTimeout(() => {
+          me.av?.setLimbState?.({ head: true });
+        }, 3500);
+      }
+      peers.forEach(p => {
+        if (targetName === p.name || targetName === 'all') {
+          p.av?.spawnLegoPop?.(0, 1.4, 0);
+          p.av?.setLimbState?.({ head: false });
+          setTimeout(() => p.av?.setLimbState?.({ head: true }), 3500);
+        }
+      });
+      setTimeout(() => scene.remove(gGroup), 1800);
+    }
+  };
+  requestAnimationFrame(animBlade);
 }
 
 // ============================================================================
@@ -5572,9 +5876,14 @@ export const ADMIN_COMMAND_CATALOG = [
   { cmd: ':shutdown', usage: ':shutdown', desc: 'Đóng phòng ngay lập tức' },
 
   // 4. Hỗn loạn & Troll (Quyền Nhà Nước)
+  { cmd: ':casino', usage: ':casino', desc: 'Dịch chuyển tức thời vào Mật Thất Casino & Pub Hoàng Gia' },
+  { cmd: ':speakeasy', usage: ':speakeasy', desc: 'Dịch chuyển tức thời vào Mật Thất Casino & Pub Hoàng Gia' },
+  { cmd: ':dinnerbone', usage: ':dinnerbone <tên>', desc: 'Lật ngược 180 độ đầu dưới đất chân trên trời (Minecraft)' },
+  { cmd: ':clone', usage: ':clone <tên>', desc: 'Triệu hồi 10 phân thân chạy đuổi theo đè bẹp mục tiêu' },
+  { cmd: ':guillotine', usage: ':guillotine <tên>', desc: 'Thả máy chém rơi từ trời giáng xuống chặt bay đầu Lego pop' },
   { cmd: ':laser', usage: ':laser <tên>', desc: 'Bắn chùm tia laser hủy diệt từ trời giáng xuống' },
   { cmd: ':tornado', usage: ':tornado <tên>', desc: 'Lốc xoáy hất tung người chơi lên trời' },
-  { cmd: ':summon', usage: ':summon <mob> <tên>', desc: 'Thả quái vật bóng đêm bay cắn KO' },
+  { cmd: ':summon', usage: ':summon <bat|zombie|dog|creeper|ghost> <tên>', desc: 'Thả quái vật săn đuổi cắn mất máu về 0 HP' },
   { cmd: ':attack', usage: ':attack <tên>', desc: 'Điều khiển quái vật cắn cạn máu mục tiêu' },
   { cmd: ':headless', usage: ':headless <tên>', desc: 'Tháo bay đầu của người chơi rớt Lego' },
   { cmd: ':disarm', usage: ':disarm <tên>', desc: 'Tháo mất 2 cánh tay' },
@@ -5806,7 +6115,7 @@ function executeAdminCommand(raw) {
       toast('✨ XÁC THỰC THÀNH CÔNG! Đã kích hoạt quyền Quản Trị Viên Tối Cao (ADMIN)!');
       return true;
     } else {
-      toast('❌ Mật mã Admin không chính xác! Cú pháp: :admin grinding shit');
+      toast('❌ Mật mã xác thực Quản Trị Viên không chính xác!');
       return true;
     }
   }
@@ -5821,7 +6130,7 @@ function executeAdminCommand(raw) {
 
   // Bắt buộc phải xác thực mật mã Admin
   if (!isAdminVerified()) {
-    toast('⛔ Bạn chưa xác thực quyền Admin! Bấm [;] hoặc gõ: :admin grinding shit');
+    toast('⛔ Bạn chưa xác thực quyền Admin! Bấm phím [;] để nhập mật mã xác minh.');
     openAdminAuthDialog();
     return true;
   }
@@ -6165,14 +6474,55 @@ function executeAdminCommand(raw) {
       return true;
     }
 
+    // === CASINO TELEPORT ===
+    case 'casino':
+    case 'speakeasy': {
+      enterSecretCasino();
+      return true;
+    }
+
     // === BUILDER TOOLS ===
     case 'btools':
     case 'build': {
       adminBuilderMode = !adminBuilderMode;
       document.body.classList.toggle('builder-mode-active', adminBuilderMode);
+      $('btoolsHud')?.classList.toggle('hidden', !adminBuilderMode);
+      if (adminBuilderMode && document.pointerLockElement) {
+        document.exitPointerLock?.();
+      }
       toast(adminBuilderMode 
-        ? '🧱 BẬT BUILDER TOOL: Click để ĐẶT khối 3D, Giữ Alt + Click khối để XÓA!' 
+        ? '🧱 BẬT BUILDER TOOL: Click để ĐẶT khối 3D, Alt+Click hoặc Shift+Click để XÓA!' 
         : '🧱 ĐÃ TẮT BUILDER TOOL');
+      return true;
+    }
+
+    // === TROLL: DINNERBONE, CLONE & GUILLOTINE ===
+    case 'dinnerbone': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_dinnerbone', target: targetName, by: me.name });
+      if (targetName === me.name || targetName === 'all') {
+        me.isDinnerbone = !me.isDinnerbone;
+        me.av?.setDinnerbone?.(me.isDinnerbone);
+      }
+      peers.forEach(p => {
+        if (targetName === p.name || targetName === 'all') {
+          p.isDinnerbone = !p.isDinnerbone;
+          p.av?.setDinnerbone?.(p.isDinnerbone);
+        }
+      });
+      toast(`🙃 Đã đảo ngược đầu dưới đất chân trên trời (Dinnerbone) cho ${targetName}!`);
+      return true;
+    }
+    case 'clone': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_clone', target: targetName, by: me.name });
+      spawnCloneHorde(targetName);
+      return true;
+    }
+    case 'guillotine': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_guillotine', target: targetName, by: me.name });
+      spawnGuillotineStrike(targetName);
       return true;
     }
 
@@ -6387,17 +6737,22 @@ function executeAdminCommand(raw) {
       currentGravity = 20;
       adminSpinUntil = 0;
       adminBuilderMode = false;
+      $('btoolsHud')?.classList.add('hidden');
       document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active', 'builder-mode-active');
       world.clearBuilderBlocks();
+      me.isDinnerbone = false;
       if (me?.av) {
         me.av.root.scale.set(1, 1, 1);
         me.av.root.visible = true;
+        me.av.setDinnerbone?.(false);
         me.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
       }
       peers.forEach(p => {
+        p.isDinnerbone = false;
         if (p.av) {
           p.av.root.scale.set(1, 1, 1);
           p.av.root.visible = true;
+          p.av.setDinnerbone?.(false);
           p.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
         }
       });

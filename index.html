@@ -15,6 +15,20 @@
 </script>
 </head>
 <body>
+<!-- Game Splash Screen (Logo, Loading Bar, Smooth Fade) -->
+<div id="gameSplashScreen" class="splash-screen">
+  <div class="splash-content">
+    <img src="assets/logo.jpg" alt="Gather Holidays Logo" class="splash-logo">
+    <div class="splash-title">GATHER HOLIDAYS 3D</div>
+    <div class="splash-sub">Không Gian Lễ Hội Đa Người Chơi 3D Trực Tuyến</div>
+    <div class="splash-bar-container"><div id="splashProgressBar" class="splash-bar"></div></div>
+    <div id="splashStatusText" class="splash-status">Đang nạp không gian lễ hội...</div>
+  </div>
+</div>
+
+<!-- Builder Tools HUD -->
+<div id="btoolsHud" class="btools-hud hidden">🧱 BUILDER MODE: Click để ĐẶT khối 3D | Alt+Click khối để XÓA</div>
+
 <!-- Lobby / Room Browser Overlay -->
 <div id="landing" class="overlay">
   <div class="panel lobby-panel">
@@ -733,14 +747,17 @@
 
 <!-- DIALOG 14: Title Selection -->
 <div id="dlgTitles" class="overlay hidden">
-  <div class="panel" style="width:min(480px,100%)">
+  <div class="panel" style="width:min(540px,100%);max-height:85vh;display:flex;flex-direction:column">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <h2>👑 Bộ Sưu Tập Danh Hiệu</h2>
       <button data-close class="icon-chip">✕</button>
     </div>
     <p class="sub">Danh hiệu hiển thị lấp lánh ngay phía trên tên của bạn để mọi người cùng chiêm ngưỡng!</p>
-    <div id="titlesList" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto;padding-right:4px"></div>
-    <button data-close style="margin-top:8px">Đóng</button>
+    <div class="title-search-box">
+      <input id="searchTitles" class="title-search-input" placeholder="🔍 Tìm kiếm danh hiệu (vd: Faker, GAY, Sơn Tùng, Báo thủ)...">
+    </div>
+    <div id="titlesGrid" class="titles-grid"></div>
+    <button data-close style="margin-top:10px">Đóng</button>
   </div>
 </div>
 

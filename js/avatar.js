@@ -53,12 +53,13 @@ function textSprite(draw, w, h, worldH) {
   c.width = w;
   c.height = h;
   const ctx = c.getContext('2d');
-  draw(ctx, w, h);
+  draw(ctx, w, h, 0);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false }));
   s.scale.set((worldH * w) / h, worldH, 1);
   s.renderOrder = 10;
+  s.userData = { canvas: c, ctx, draw, w, h, texture: t };
   return s;
 }
 
@@ -341,6 +342,17 @@ export class Avatar {
     this.splatGroup.visible = true;
   }
 
+  setDinnerbone(active) {
+    this.isDinnerbone = !!active;
+    if (this.isDinnerbone) {
+      this.body.rotation.z = Math.PI;
+      this.body.position.y = 1.6;
+    } else {
+      this.body.rotation.z = 0;
+      this.body.position.y = 0;
+    }
+  }
+
   setName(name, title = this.title, style = this.nametagStyle) {
     this.name = name;
     this.title = title || null;
@@ -348,10 +360,12 @@ export class Avatar {
     if (this.label) this.root.remove(this.label);
 
     const isAdmin = isAdminUser(name);
-    const displayTitle = isAdmin ? '👑 ADMIN' : this.title;
+    const displayTitle = this.title || (isAdmin ? '👑 ADMIN' : null);
+    const isRainbow = !!(displayTitle && (displayTitle === 'GAY' || displayTitle.includes('GAY'))) || !!style?.rainbow;
+    this.isRainbowNametag = isRainbow;
 
     this.label = textSprite(
-      (x, w, h) => {
+      (x, w, h, animOffset = 0) => {
         const bgFill = isAdmin ? 'rgba(88, 28, 28, 0.92)' : 'rgba(15, 23, 42, 0.88)';
         x.fillStyle = bgFill;
         x.beginPath();
@@ -359,7 +373,11 @@ export class Avatar {
         x.fill();
 
         // Border styling
-        if (style?.border) {
+        if (isRainbow) {
+          const hue = Math.floor(((animOffset * 60) % 360 + 360) % 360);
+          x.strokeStyle = `hsl(${hue}, 100%, 65%)`;
+          x.lineWidth = 4;
+        } else if (style?.border) {
           x.strokeStyle = style.border;
           x.lineWidth = 3.5;
         } else {
@@ -374,17 +392,25 @@ export class Avatar {
         // Title
         if (displayTitle) {
           x.font = 'bold 22px system-ui, sans-serif';
-          x.fillStyle = isAdmin ? '#fde047' : '#facc15';
+          if (isRainbow) {
+            const h1 = Math.floor(((animOffset * 90) % 360 + 360) % 360);
+            const grad = x.createLinearGradient(40, 0, w - 40, 0);
+            grad.addColorStop(0, `hsl(${h1}, 100%, 65%)`);
+            grad.addColorStop(0.5, `hsl(${(h1 + 120) % 360}, 100%, 65%)`);
+            grad.addColorStop(1, `hsl(${(h1 + 240) % 360}, 100%, 65%)`);
+            x.fillStyle = grad;
+          } else {
+            x.fillStyle = isAdmin ? '#fde047' : (style?.color || '#facc15');
+          }
           x.fillText(displayTitle, w / 2, 28);
 
           x.font = style?.font ? `bold 26px ${style.font}` : 'bold 26px system-ui, sans-serif';
-          if (style?.rainbow) {
+          if (isRainbow) {
+            const h2 = Math.floor(((animOffset * 90 + 60) % 360 + 360) % 360);
             const grad = x.createLinearGradient(40, 0, w - 40, 0);
-            grad.addColorStop(0, '#f43f5e');
-            grad.addColorStop(0.25, '#facc15');
-            grad.addColorStop(0.5, '#4ade80');
-            grad.addColorStop(0.75, '#38bdf8');
-            grad.addColorStop(1, '#a855f7');
+            grad.addColorStop(0, `hsl(${h2}, 100%, 75%)`);
+            grad.addColorStop(0.5, `hsl(${(h2 + 120) % 360}, 100%, 75%)`);
+            grad.addColorStop(1, `hsl(${(h2 + 240) % 360}, 100%, 75%)`);
             x.fillStyle = grad;
           } else if (style?.color) {
             x.fillStyle = style.color;
@@ -394,15 +420,7 @@ export class Avatar {
           x.fillText(name, w / 2, 60);
         } else {
           x.font = style?.font ? `bold 32px ${style.font}` : 'bold 32px system-ui, sans-serif';
-          if (style?.rainbow) {
-            const grad = x.createLinearGradient(40, 0, w - 40, 0);
-            grad.addColorStop(0, '#f43f5e');
-            grad.addColorStop(0.25, '#facc15');
-            grad.addColorStop(0.5, '#4ade80');
-            grad.addColorStop(0.75, '#38bdf8');
-            grad.addColorStop(1, '#a855f7');
-            x.fillStyle = grad;
-          } else if (style?.color) {
+          if (style?.color) {
             x.fillStyle = style.color;
           } else {
             x.fillStyle = '#f8fafc';
@@ -651,6 +669,18 @@ export class Avatar {
     if (this.speakingBadge && this.speakingBadge.visible) {
       const s = 0.32 + Math.sin(now * 0.012) * 0.04;
       this.speakingBadge.scale.set(s, s, 1);
+    }
+
+    // Dynamic 24/7 Rainbow RGB update for nametag
+    if (this.isRainbowNametag && this.label && this.label.userData) {
+      this.rainbowTimer = (this.rainbowTimer || 0) + dt;
+      if (this.rainbowTimer >= 0.06) {
+        this.rainbowTimer = 0;
+        const { ctx, draw, w, h, texture } = this.label.userData;
+        ctx.clearRect(0, 0, w, h);
+        draw(ctx, w, h, now * 0.003);
+        texture.needsUpdate = true;
+      }
     }
 
     // Update Lego Brick physics
