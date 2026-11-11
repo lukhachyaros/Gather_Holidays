@@ -282,7 +282,7 @@ const WALK = 2.5,
   RUN = 4.3,
   JUMP_V = 8.5,
   GRAVITY = 20,
-  RADIUS = 0.22;
+  RADIUS = 0.14;
 const ACTION_COOLDOWN = 3000; // 3 seconds anti-spam cooldown for all actions/emotes
 
 // ---------- Official Public Plazas (Always visible in Lobby so players gather together) ----------
@@ -354,10 +354,16 @@ let frameCount = 0,
 // ---------- Three.js Setup ----------
 let renderer, scene, camera, world;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  renderer = new THREE.WebGLRenderer({
+    canvas: $('game'),
+    antialias: true,
+    alpha: true,
+    powerPreference: 'high-performance',
+    stencil: false,
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, 1, 0.1, 300);
   world = new World(scene);
@@ -2606,6 +2612,35 @@ function togglePointerLock() {
   }
 }
 
+function toggleVerticalDrawer(open = null) {
+  const drawer = $('verticalMenuDrawer');
+  const btn = $('btnBrandMenu');
+  if (!drawer) return;
+  const wantOpen = open !== null ? open : drawer.classList.contains('hidden');
+  drawer.classList.toggle('hidden', !wantOpen);
+  btn?.classList.toggle('active', wantOpen);
+  if (wantOpen) {
+    $('emoteQuickPicker')?.classList.add('hidden');
+    $('btnEmoteMenu')?.classList.remove('emote-active');
+  }
+}
+
+function closeVerticalDrawer() {
+  toggleVerticalDrawer(false);
+}
+
+function toggleEmotePicker(open = null) {
+  const pop = $('emoteQuickPicker');
+  const btn = $('btnEmoteMenu');
+  if (!pop) return;
+  const wantOpen = open !== null ? open : pop.classList.contains('hidden');
+  pop.classList.toggle('hidden', !wantOpen);
+  btn?.classList.toggle('emote-active', wantOpen);
+  if (wantOpen) {
+    closeVerticalDrawer();
+  }
+}
+
 function updateLockHud() {
   const locked = !!document.pointerLockElement;
   const lbl = $('lockLabel');
@@ -2615,7 +2650,14 @@ function updateLockHud() {
     lbl.style.color = locked ? '#4ade80' : '#38bdf8';
   }
   if (btn) {
-    btn.textContent = locked ? '🔒' : '🔓';
+    const icon = btn.querySelector('.item-icon');
+    const label = btn.querySelector('.item-label');
+    if (icon && label) {
+      icon.textContent = locked ? '🔒' : '🔓';
+      label.textContent = locked ? 'Mở Khóa Chuột (L)' : 'Khóa Chuột Điều Khiển (L)';
+    } else {
+      btn.textContent = locked ? '🔒' : '🔓';
+    }
   }
   const isCombat = state?.theme === 'christmas' || state?.theme === 'valentine' || state?.theme === 'tet';
   $('crosshair').classList.toggle('hidden', !(mode === 'fps' || locked || isCombat));
@@ -2623,6 +2665,51 @@ function updateLockHud() {
   updateScreen3D();
 }
 document.addEventListener('pointerlockchange', updateLockHud);
+
+// Top Navigation Brand Drawer & Emote Popover Bindings
+$('btnBrandMenu')?.addEventListener('click', e => {
+  e.stopPropagation();
+  toggleVerticalDrawer();
+});
+$('btnCloseDrawer')?.addEventListener('click', e => {
+  e.stopPropagation();
+  closeVerticalDrawer();
+});
+$('btnEmoteMenu')?.addEventListener('click', e => {
+  e.stopPropagation();
+  toggleEmotePicker();
+});
+$('btnCloseEmotePicker')?.addEventListener('click', e => {
+  e.stopPropagation();
+  toggleEmotePicker(false);
+});
+
+document.querySelectorAll('.emote-tile').forEach(tile => {
+  tile.addEventListener('click', e => {
+    e.stopPropagation();
+    const em = tile.dataset.e;
+    const clip = tile.dataset.clip;
+    doSocialAction(em, clip);
+    toggleEmotePicker(false);
+  });
+});
+
+document.addEventListener('pointerdown', e => {
+  const drawer = $('verticalMenuDrawer');
+  const brandBtn = $('btnBrandMenu');
+  if (drawer && !drawer.classList.contains('hidden')) {
+    if (!drawer.contains(e.target) && !brandBtn?.contains(e.target)) {
+      closeVerticalDrawer();
+    }
+  }
+  const pop = $('emoteQuickPicker');
+  const emoteBtn = $('btnEmoteMenu');
+  if (pop && !pop.classList.contains('hidden')) {
+    if (!pop.contains(e.target) && !emoteBtn?.contains(e.target)) {
+      toggleEmotePicker(false);
+    }
+  }
+});
 
 $('topTheme').onchange = e => {
   if (roomName === SECRET_CASINO_ROOM) {
@@ -2644,12 +2731,12 @@ $('topTheme').onchange = e => {
   emitOp({ k: 'theme', theme: e.target.value, byHost: net.selfId });
 };
 
-$('btnLobby').onclick = () => openLobbyOverlay();
+$('btnLobby').onclick = () => { closeVerticalDrawer(); openLobbyOverlay(); };
 $('btnOpenLobbyFromSettings').onclick = () => {
   $('dlgSettings').classList.add('hidden');
   openLobbyOverlay();
 };
-$('btnCloseRoomTop').onclick = () => closeRoomByHost();
+$('btnCloseRoomTop').onclick = () => { closeVerticalDrawer(); closeRoomByHost(); };
 $('btnCloseRoomSettings').onclick = () => closeRoomByHost();
 $('btnSaveRoomPass').onclick = () => {
   if (!isHost()) return toast('⚠️ Chỉ Chủ phòng mới được cài đặt mật khẩu!');
@@ -2678,6 +2765,7 @@ function toggleSettingsModal(forceState = null) {
   const isHidden = dlg.classList.contains('hidden');
   const shouldOpen = forceState !== null ? forceState : isHidden;
   if (shouldOpen) {
+    closeVerticalDrawer();
     document.exitPointerLock?.();
     renderSettingsModal();
     openDialog('dlgSettings');
@@ -2694,18 +2782,22 @@ $('btnRejoinOther').onclick = () => {
 };
 
 $('btnCard').onclick = () => {
+  closeVerticalDrawer();
   refreshRecipients();
   openDialog('dlgCard');
 };
 $('btnInbox').onclick = () => {
+  closeVerticalDrawer();
   renderInbox();
   openDialog('dlgInbox');
 };
 $('btnCopy').onclick = () => {
+  closeVerticalDrawer();
   navigator.clipboard?.writeText(location.href);
   toast('🔗 Đã copy link phòng vào clipboard!');
 };
 $('btnMedia').onclick = () => {
+  closeVerticalDrawer();
   updateMediaDialog();
   openDialog('dlgMedia');
 };
@@ -2713,12 +2805,12 @@ $('btnView').onclick = () => toggleView();
 
 // Voice Chat & Screen Share Event Bindings
 $('btnMic').onclick = () => toggleMic();
-$('btnShareScreen').onclick = () => toggleScreenShare();
+$('btnShareScreen').onclick = () => { closeVerticalDrawer(); toggleScreenShare(); };
 $('btnBgm').onclick = () => {
   const on = toggleBgm();
   toast(on ? '🎵 Đã bật nhạc nền lễ hội' : '🔇 Đã tắt nhạc nền');
 };
-$('btnMinigame').onclick = () => minigames?.triggerAction();
+$('btnMinigame').onclick = () => { closeVerticalDrawer(); minigames?.triggerAction(); };
 
 function toggleEmoteMenu(forceState = null) {
   const dlg = $('dlgEmotes');
@@ -2763,7 +2855,6 @@ document.querySelectorAll('.extra-emote-btn').forEach(btn => {
     toggleEmoteMenu(false);
   };
 });
-
 $('btnStopScreenBadge').onclick = () => stopScreenShare();
 $('tileScreenShare').onclick = () => {
   $('dlgMedia').classList.add('hidden');
@@ -2979,8 +3070,18 @@ function toggleView() {
 }
 
 function updateHud() {
-  $('viewLabel').textContent = mode === 'fps' ? '👁️ Góc nhìn thứ nhất (FPS)' : '🎥 Góc nhìn thứ ba (TPS)';
-  if ($('btnView')) $('btnView').textContent = mode === 'fps' ? '👁️ FPS' : '🎥 TPS';
+  if ($('viewLabel')) $('viewLabel').textContent = mode === 'fps' ? '👁️ Góc nhìn thứ nhất (FPS)' : '🎥 Góc nhìn thứ ba (TPS)';
+  const btn = $('btnView');
+  if (btn) {
+    const icon = btn.querySelector('.item-icon');
+    const label = btn.querySelector('.item-label');
+    if (icon && label) {
+      icon.textContent = mode === 'fps' ? '👁️' : '🎥';
+      label.textContent = mode === 'fps' ? 'Góc Nhìn Thứ Nhất (FPS)' : 'Góc Nhìn Thứ Ba (TPS)';
+    } else {
+      btn.textContent = mode === 'fps' ? '👁️ FPS' : '🎥 TPS';
+    }
+  }
   if (me?.av) me.av.root.visible = mode !== 'fps' && camDist > 0.55;
   updateLockHud();
 
@@ -3285,6 +3386,10 @@ addEventListener('keydown', e => {
     $('chatIn').focus();
     e.preventDefault();
     return;
+  }
+  if (e.key === 'Escape') {
+    closeVerticalDrawer();
+    toggleEmotePicker(false);
   }
   if (k === 'v' || code === 'KeyV') toggleView();
   else if (k === 'l' || code === 'KeyL') togglePointerLock();
@@ -3723,8 +3828,8 @@ const free = (x, y, currentH = 0) => {
       if (s.kind === 'couple') {
         const dx = Math.abs(x - s.x);
         const dy = Math.abs(y - s.y);
-        const limitX = 0.46 + RADIUS * 0.75;
-        const limitY = 0.28 + RADIUS * 0.75;
+        const limitX = 0.36 + RADIUS * 0.5;
+        const limitY = 0.22 + RADIUS * 0.5;
         if (dx < limitX && dy < limitY) {
           const curDx = Math.abs(me.x - s.x);
           const curDy = Math.abs(me.y - s.y);
@@ -3732,7 +3837,7 @@ const free = (x, y, currentH = 0) => {
           return false;
         }
       } else {
-        const minD = 0.22 + RADIUS * 0.75;
+        const minD = 0.16 + RADIUS * 0.5;
         const nextD = Math.hypot(x - s.x, y - s.y);
         if (nextD < minD) {
           const curD = Math.hypot(me.x - s.x, me.y - s.y);
@@ -3748,6 +3853,11 @@ const free = (x, y, currentH = 0) => {
 let last = performance.now(),
   lastSend = 0,
   sent = {};
+
+let lastInteractCheck = 0,
+  lastSeatLabelCheck = 0,
+  lastWorldSync = 0,
+  lastRtcCheck = 0;
 
 function loop(now) {
   if (isKicked || !me?.started || !state) {
@@ -3914,15 +4024,18 @@ function loop(now) {
       av.update(dt);
     }
 
-    // 4. Contextual [E] Prompt Update
-    activeTarget = findNearestInteractable();
-    const promptEl = $('interactPrompt');
-    if (promptEl) {
-      if (activeTarget) {
-        promptEl.textContent = activeTarget.prompt;
-        promptEl.classList.remove('hidden');
-      } else {
-        promptEl.classList.add('hidden');
+    // 4. Contextual [E] Prompt Update (throttled ~11Hz for high FPS)
+    if (now - lastInteractCheck > 88) {
+      lastInteractCheck = now;
+      activeTarget = findNearestInteractable();
+      const promptEl = $('interactPrompt');
+      if (promptEl) {
+        if (activeTarget) {
+          if (promptEl.textContent !== activeTarget.prompt) promptEl.textContent = activeTarget.prompt;
+          promptEl.classList.remove('hidden');
+        } else {
+          promptEl.classList.add('hidden');
+        }
       }
     }
 
@@ -3968,10 +4081,14 @@ function loop(now) {
     });
 
     updateFloaters();
-    if (rtc && me) {
+    if (rtc && me && now - lastRtcCheck > 120) {
+      lastRtcCheck = now;
       rtc.updatePeerDistances(me, peers);
     }
-    world?.sync(state, roomName);
+    if (now - lastWorldSync > 180) {
+      lastWorldSync = now;
+      world?.sync(state, roomName);
+    }
     world?.update(dt, { x: me.x * TILE, z: me.y * TILE });
     minigames?.update(dt);
     updateCamera(dt);
@@ -3981,10 +4098,15 @@ function loop(now) {
     // Update HTML speech bubbles on top of TV screen & 3D world
     me.av?.updateBubble(camera);
     peers.forEach(p => p.av?.updateBubble(camera));
-    updateSeatLabels();
+    if (now - lastSeatLabelCheck > 220) {
+      lastSeatLabelCheck = now;
+      updateSeatLabels();
+    }
   } catch (err) {
     console.error('Lỗi game loop:', err);
   }
+
+  requestAnimationFrame(loop);
 }
 
 function updateFloaters() {

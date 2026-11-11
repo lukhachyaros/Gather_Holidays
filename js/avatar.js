@@ -422,7 +422,8 @@ export class Avatar {
       this.bubbleEl = null;
       return;
     }
-    if (!camera || !this.root.visible) {
+    const layer = document.getElementById('speechLayer');
+    if (!camera || !this.root.visible || layer?.classList.contains('safe-hidden')) {
       this.bubbleEl.style.display = 'none';
       return;
     }

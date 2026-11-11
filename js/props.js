@@ -24,8 +24,9 @@ export function part(parent, g, material, pos = [0, 0, 0], scale = [1, 1, 1], ro
   o.position.set(...pos);
   o.scale.set(...scale);
   if (rot) o.rotation.set(...rot);
-  o.castShadow = true;
-  o.receiveShadow = true;
+  const vol = Math.abs(scale[0] * scale[1] * scale[2]);
+  o.castShadow = vol > 0.02;
+  o.receiveShadow = vol > 0.05;
   parent.add(o);
   return o;
 }

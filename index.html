@@ -90,35 +90,115 @@
 <!-- 3D Game Canvas -->
 <canvas id="game"></canvas>
 
-<!-- Compact Top Navigation Dock -->
+<!-- Compact Top Navigation Dock (Clean Minimalist Dock) -->
 <div id="topbar" class="top-dock">
-  <div class="brand-dock" title="Gather Holidays 3D">
+  <button id="btnBrandMenu" class="brand-dock-btn" title="Bấm để mở danh sách chức năng (Menu)">
     <img src="assets/logo.jpg" alt="Logo" class="dock-logo-img">
     <span class="dock-logo-title">Gather Holidays</span>
-  </div>
-  <button id="btnLobby" class="dock-btn accent" title="Mở Sảnh chờ (Danh sách phòng & Đổi phòng)">🏠 Sảnh</button>
-  <span id="roomInfo" title="Phòng hiện tại & Quyền chủ phòng"></span>
-  <select id="topTheme" title="Chủ đề phòng (Chỉ chủ phòng mới đổi được)"></select>
+    <span class="dock-menu-chevron">▼</span>
+  </button>
   <span class="dock-sep"></span>
-  <button id="btnMic" class="dock-btn" title="Bật/Tắt Microphone để nói chuyện (Phím M)">🔇 Mic</button>
-  <button id="btnShareScreen" class="dock-btn" title="Chia sẻ màn hình máy tính lên TV lớn (Phím P)">🖥️ Chiếu TV</button>
+  <button id="btnEmotes" class="dock-btn emote-btn" title="Biểu cảm & Hành động nhân vật (Phím F hoặc 1-8)">🎭 Emote</button>
   <button id="btnBgm" class="dock-btn bgm-active" title="Bật/Tắt Nhạc nền lễ hội (BGM)">🎵 Nhạc</button>
-  <button id="btnMinigame" class="dock-btn minigame-btn" title="Chơi Minigame theo chủ đề phòng (Phím G)">🎮 Minigame</button>
-  <button id="btnEmotes" class="dock-btn emote-btn" title="Mở Bộ Emote Pack Meccha (Phím F)">🎭 Emotes [F]</button>
-  <button id="btnEnterCode" class="dock-btn" title="Nhập Mật Mã Bí Mật Đổi Xu (Phím C)" style="background:rgba(234,179,8,0.2);border-color:#facc15;color:#fef08a">🎟️ Code [C]</button>
-  <button id="btnTitles" class="dock-btn" title="Bộ Sưu Tập Danh Hiệu">👑 Danh Hiệu</button>
-  <button id="btnCasinoWallet" class="dock-btn hidden" style="background:linear-gradient(135deg,#f59e0b,#b45309);border-color:#fef08a;color:#000;font-weight:700" title="Ví tiền Chips Casino (Nhận thêm chips)">🪙 <span class="casino-chip-count">$0</span></button>
-  <button id="btnAdminCmds" class="dock-btn danger-btn hidden" title="Bảng Lệnh Quản Trị Admin Roblox (Phím ;)">⚡ Admin [;]</button>
-  <span class="dock-sep"></span>
-  <button id="btnCopy" class="dock-btn icon-only" title="Sao chép link mời bạn bè vào phòng này">🔗</button>
-  <button id="btnView" class="dock-btn" title="Đổi góc nhìn Thứ nhất / Thứ ba (Phím V)">🎥 TPS</button>
-  <button id="btnLock" class="dock-btn icon-only" title="Khóa/Mở con trỏ chuột (Phím L hoặc Chuột phải)">🔓</button>
-  <button id="btnCard" class="dock-btn icon-only" title="Viết thiệp chúc mừng">💌</button>
-  <button id="btnInbox" class="dock-btn icon-only" title="Hộp thư thiệp đã lưu">📬<span id="inboxCount" class="mini-badge">0</span></button>
-  <button id="btnMedia" class="dock-btn icon-only" title="Rạp chiếu TV & Hàng chờ video YouTube">🎬<span id="queueCount" class="mini-badge">0</span></button>
-  <button id="btnChatHistoryTop" class="dock-btn icon-only" title="Mở lịch sử trò chuyện (Chat History)">💬<span id="unreadChatBadge" class="mini-badge hidden">0</span></button>
-  <button id="btnSettings" class="dock-btn icon-only" title="Cài đặt Âm lượng, Voice Chat, Chuột & Quản lý phòng (Phím O hoặc U)">⚙️</button>
-  <button id="btnCloseRoomTop" class="dock-btn danger-btn hidden" title="Đóng phòng hiện tại (Chỉ Chủ phòng)">🛑 Đóng phòng</button>
+  <button id="btnMic" class="dock-btn" title="Bật/Tắt Microphone để nói chuyện (Phím M)">🔇 Mic</button>
+</div>
+
+<!-- Floating Vertical Menu Drawer (Opens when clicking the Brand Logo) -->
+<div id="verticalMenuDrawer" class="vertical-drawer hidden">
+  <div class="drawer-header">
+    <div class="drawer-header-left">
+      <span class="drawer-header-icon">🧭</span>
+      <span class="drawer-header-title">Menu Chức Năng</span>
+    </div>
+    <button id="btnCloseDrawer" class="drawer-close-btn" title="Đóng menu">✕</button>
+  </div>
+
+  <div class="drawer-room-bar">
+    <div class="drawer-room-info">
+      <span class="drawer-room-badge">Phòng</span>
+      <span id="roomInfo" class="drawer-room-title" title="Phòng hiện tại & Quyền chủ phòng">#lobby</span>
+    </div>
+    <select id="topTheme" class="drawer-theme-select" title="Chủ đề phòng (Chỉ chủ phòng mới đổi được)"></select>
+  </div>
+
+  <div class="drawer-menu-list">
+    <button id="btnLobby" class="drawer-item" title="Mở Sảnh chờ (Danh sách phòng & Đổi phòng)">
+      <span class="item-icon">🏠</span>
+      <span class="item-label">Sảnh Chờ & Danh Sách Phòng</span>
+    </button>
+    <button id="btnShareScreen" class="drawer-item" title="Chia sẻ màn hình máy tính lên TV lớn (Phím P)">
+      <span class="item-icon">🖥️</span>
+      <span class="item-label">Chiếu Màn Hình Lên TV</span>
+      <kbd class="item-kbd">P</kbd>
+    </button>
+    <button id="btnMedia" class="drawer-item" title="Rạp chiếu TV & Hàng chờ video YouTube">
+      <span class="item-icon">🎬</span>
+      <span class="item-label">Rạp Chiếu TV & Video YouTube</span>
+      <span id="queueCount" class="mini-badge">0</span>
+    </button>
+    <button id="btnMinigame" class="drawer-item" title="Chơi Minigame theo chủ đề phòng (Phím G)">
+      <span class="item-icon">🎮</span>
+      <span class="item-label">Minigame Lễ Hội</span>
+      <kbd class="item-kbd">G</kbd>
+    </button>
+    <button id="btnEnterCode" class="drawer-item" title="Nhập Mật Mã Bí Mật Đổi Xu (Phím C)">
+      <span class="item-icon">🎟️</span>
+      <span class="item-label">Nhập Mật Mã Đổi Xu</span>
+      <kbd class="item-kbd">C</kbd>
+    </button>
+    <button id="btnTitles" class="drawer-item" title="Bộ Sưu Tập Danh Hiệu">
+      <span class="item-icon">👑</span>
+      <span class="item-label">Bộ Sưu Tập Danh Hiệu</span>
+    </button>
+    <button id="btnCasinoWallet" class="drawer-item hidden" title="Ví tiền Chips Casino (Nhận thêm chips)">
+      <span class="item-icon">🪙</span>
+      <span class="item-label">Ví Tiền Casino: <span class="casino-chip-count">$0</span></span>
+    </button>
+    <div class="drawer-divider"></div>
+    <button id="btnCopy" class="drawer-item" title="Sao chép link mời bạn bè vào phòng này">
+      <span class="item-icon">🔗</span>
+      <span class="item-label">Sao Chép Link Mời Bạn Bè</span>
+    </button>
+    <button id="btnView" class="drawer-item" title="Đổi góc nhìn Thứ nhất / Thứ ba (Phím V)">
+      <span class="item-icon">🎥</span>
+      <span class="item-label" id="btnViewLabel">Góc Nhìn Thứ Ba (TPS)</span>
+      <kbd class="item-kbd">V</kbd>
+    </button>
+    <button id="btnLock" class="drawer-item" title="Khóa/Mở con trỏ chuột (Phím L hoặc Chuột phải)">
+      <span class="item-icon">🔓</span>
+      <span class="item-label" id="btnLockLabel">Khóa / Mở Chuột Tự Do</span>
+      <kbd class="item-kbd">L</kbd>
+    </button>
+    <button id="btnChatHistoryTop" class="drawer-item" title="Mở lịch sử trò chuyện (Chat History)">
+      <span class="item-icon">💬</span>
+      <span class="item-label">Lịch Sử Trò Chuyện (Chat)</span>
+      <span id="unreadChatBadge" class="mini-badge hidden">0</span>
+    </button>
+    <button id="btnCard" class="drawer-item" title="Viết thiệp chúc mừng">
+      <span class="item-icon">💌</span>
+      <span class="item-label">Viết Thiệp Chúc Mừng</span>
+    </button>
+    <button id="btnInbox" class="drawer-item" title="Hộp thư thiệp đã lưu">
+      <span class="item-icon">📬</span>
+      <span class="item-label">Hộp Thư Thiệp Đã Lưu</span>
+      <span id="inboxCount" class="mini-badge">0</span>
+    </button>
+    <button id="btnSettings" class="drawer-item" title="Cài đặt Âm lượng, Voice Chat, Chuột & Quản lý phòng (Phím O hoặc U)">
+      <span class="item-icon">⚙️</span>
+      <span class="item-label">Cài Đặt & Quản Lý Phòng</span>
+      <kbd class="item-kbd">O/U</kbd>
+    </button>
+    <button id="btnAdminCmds" class="drawer-item danger-item hidden" title="Bảng Lệnh Quản Trị Admin Roblox (Phím ;)">
+      <span class="item-icon">⚡</span>
+      <span class="item-label">Bảng Quản Trị Admin</span>
+      <kbd class="item-kbd">;</kbd>
+    </button>
+    <div class="drawer-divider"></div>
+    <button id="btnCloseRoomTop" class="drawer-item danger-item hidden" title="Đóng phòng hiện tại (Chỉ Chủ phòng)">
+      <span class="item-icon">🛑</span>
+      <span class="item-label">Đóng Phòng Giải Tán</span>
+    </button>
+  </div>
 </div>
 
 <!-- Safe Zone Indicator & Player HP Bar -->

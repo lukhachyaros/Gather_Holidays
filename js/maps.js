@@ -146,7 +146,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
     prompt: '🎬 Màn Hình Lớn · [E] Mở Hàng Chờ Video YouTube',
   });
   // Solid stage collider for TV screen
-  for (let sx = 12; sx <= 17; sx += 1) colliders.push({ x: sx, y: 2.1, r: 0.35 });
+  for (let sx = 12; sx <= 17; sx += 1) colliders.push({ x: sx, y: 2.1, r: 0.18 });
 
   // Row 1 (y = 4.5): Single chairs on sides + 1 Couple Sofa in center
   const singleCoords = [
@@ -202,7 +202,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       radius: 2.9,
       prompt: '🎄 Cây Thông Giáng Sinh · [E] Treo đồ trang trí / Viết & đọc thiệp trong tất 🧦',
     });
-    colliders.push({ x: 14.5, y: 11.5, r: 0.72 });
+    colliders.push({ x: 14.5, y: 11.5, r: 0.42 });
 
     // 2 Ornament Pickup Tables near the tree
     [
@@ -217,7 +217,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         radius: 1.75,
         prompt: '🎁 Bàn Đồ Trang Trí · [E] Nhặt đồ trang trí đem treo lên cây thông',
       });
-      colliders.push({ x: tb.x, y: tb.y, r: 0.38 });
+      colliders.push({ x: tb.x, y: tb.y, r: 0.22 });
     });
 
     // 2 Campfire Zones with surrounding Log Seats
@@ -233,7 +233,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         radius: 2.5,
         prompt: '🔥 Lửa Trại Ấm Áp · [E] Nướng Marshmallow 🍡 / Uống Ca Cao Nóng ☕',
       });
-      colliders.push({ x: cf.x, y: cf.y, r: 0.38 });
+      colliders.push({ x: cf.x, y: cf.y, r: 0.24 });
 
       // 4 Log seats around each campfire
       const offsets = [
@@ -276,7 +276,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
           rot: rng() * Math.PI * 2,
           variant: i,
         });
-        colliders.push({ x: jx, y: jy, r: 0.28 });
+        colliders.push({ x: jx, y: jy, r: 0.12 });
       }
     });
 
@@ -322,7 +322,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       radius: 2.5,
       prompt: '🎃 Đại Bí Ngô Khổng Lồ · Hãy lại gần các quả bí ngô nhỏ xung quanh để đội lên đầu!',
     });
-    colliders.push({ x: 14.5, y: 11.5, r: 0.85 });
+    colliders.push({ x: 14.5, y: 11.5, r: 0.48 });
 
     // 6 Small Carved Pumpkins with distinct faces around the centerpiece
     const styleKeys = Object.keys(PUMPKIN_HATS);
@@ -357,7 +357,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         radius: 1.35,
         prompt: `🎭 Tủ Hóa Trang · [E] Đổi trang phục (${costumeKey.toUpperCase()})`,
       });
-      colliders.push({ x: bx, y: by, r: 0.32 });
+      colliders.push({ x: bx, y: by, r: 0.18 });
     });
 
     // 2 Gothic Couple Sofas in the garden wings
@@ -420,7 +420,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       radius: 2.9,
       prompt: '🧧 Cây Mai Đại Thụ · [E] Hái Bao Lì Xì (Ngẫu nhiên 1k–500k hoặc Câu chúc Tết)',
     });
-    colliders.push({ x: 14.5, y: 11.5, r: 0.72 });
+    colliders.push({ x: 14.5, y: 11.5, r: 0.42 });
 
     // 2 Firework Launcher Machines & surrounding Small Firecracker Tables
     [
@@ -435,7 +435,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         radius: 2.1,
         prompt: '🎆 Máy Bắn Pháo Hoa · [E] Khởi động giàn phóng pháo hoa rực rỡ!',
       });
-      colliders.push({ x: fw.x, y: fw.y, r: 0.42 });
+      colliders.push({ x: fw.x, y: fw.y, r: 0.22 });
 
       // 2 Small firecracker tables flanking each launcher
       [-1.9, 1.9].forEach((dx, ti) => {
@@ -449,7 +449,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
           radius: 1.5,
           prompt: '🧨 Bàn Pháo Nổ Nhỏ · [E] Đốt pháo nổ lách tách vui xuân',
         });
-        colliders.push({ x: tx, y: ty, r: 0.32 });
+        colliders.push({ x: tx, y: ty, r: 0.18 });
       });
     });
 
@@ -512,7 +512,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       radius: 2.9,
       prompt: '💗 Cây Trái Tim · [E] Viết thiệp tình yêu và gửi lời thương',
     });
-    colliders.push({ x: 14.5, y: 11.5, r: 0.72 });
+    colliders.push({ x: 14.5, y: 11.5, r: 0.42 });
 
     // Two wishing fountains make the garden wings feel like intimate date spots.
     [
@@ -527,7 +527,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         radius: 2.0,
         prompt: '⛲ Suối Ước Nguyện · [E] Gửi một tấm thiệp yêu thương',
       });
-      colliders.push({ x: f.x, y: f.y, r: 0.42 });
+      colliders.push({ x: f.x, y: f.y, r: 0.26 });
     });
 
     // Rose arches frame the two garden entrances.
@@ -536,7 +536,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       { type: 'rose_arch', x: 19.5, y: 9.6, rot: 0 }
     );
     [9.5, 19.5].forEach(ax => {
-      colliders.push({ x: ax - 0.78, y: 9.6, r: 0.2 }, { x: ax + 0.78, y: 9.6, r: 0.2 });
+      colliders.push({ x: ax - 0.78, y: 9.6, r: 0.12 }, { x: ax + 0.78, y: 9.6, r: 0.12 });
     });
 
     // Couple sofas let visitors sit together beside each fountain.

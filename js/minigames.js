@@ -104,17 +104,10 @@ export class MinigameManager {
     const cx = 14.5 * TILE;
     const cz = 4.85 * TILE;
 
-    // Glowing floor perimeter
+    // Subtle floor perimeter (removed intrusive green border outline)
     const floorMesh = new THREE.Mesh(this.geos.safeFloor, this.mats.safeFloor);
     floorMesh.position.set(cx, 0.03, cz);
     this.safeZoneGroup.add(floorMesh);
-
-    // Glowing edge border line
-    const borderGeo = new THREE.EdgesGeometry(this.geos.safeFloor);
-    const borderLine = new THREE.LineSegments(borderGeo, new THREE.LineBasicMaterial({ color: 0x34d399, linewidth: 2 }));
-    borderLine.position.set(cx, 0.04, cz);
-    borderLine.rotation.x = -Math.PI / 2;
-    this.safeZoneGroup.add(borderLine);
 
     // Overhead floating 3D holographic title
     const c = document.createElement('canvas');
@@ -186,26 +179,31 @@ export class MinigameManager {
   updateHUDButton() {
     const btn = document.getElementById('btnMinigame');
     if (!btn) return;
+    const lbl = btn.querySelector('.item-label');
+    const setTxt = (txt, fullTxt) => {
+      if (lbl) lbl.textContent = fullTxt || txt;
+      else btn.textContent = txt;
+    };
 
     switch (this.theme) {
       case 'christmas':
-        btn.textContent = '❄️ Tuyết [G]';
+        setTxt('❄️ Tuyết [G]', 'Minigame Bắn Tuyết PvP');
         btn.title = 'Minigame Giáng Sinh: Đấu Súng Cầu Tuyết FPS ngắm tâm (Chuột Trái / phím G)';
         break;
       case 'halloween':
-        btn.textContent = '🧛 Boss';
-        btn.title = 'Halloween: Boss Vampire rình mồi & vồ Jumpscare (Chạy vào Vùng Ghế TV để an toàn)';
+        setTxt('🧛 Boss', 'Tránh Vampire Boss');
+        btn.title = 'Halloween: Boss Vampire bay rình mồi & vồ Jumpscare (Chạy vào Vùng Ghế TV để an toàn)';
         break;
       case 'tet':
-        btn.textContent = '🎆 Pháo [G]';
+        setTxt('🎆 Pháo [G]', 'Minigame Pháo Thần Công');
         btn.title = 'Minigame Tết: Bắn Pháo Hoa Thần Công ngắm Kim Long rước phúc lộc (Chuột Trái / G)';
         break;
       case 'valentine':
-        btn.textContent = '💘 Cung [G]';
+        setTxt('💘 Cung [G]', 'Minigame Cung Cupid');
         btn.title = 'Minigame Valentine: Đấu Cung Cupid PvP ngắm tâm chuẩn xác (Chuột Trái / phím G)';
         break;
       default:
-        btn.textContent = '🎮 Minigame';
+        setTxt('🎮 Minigame', 'Minigame Lễ Hội');
         break;
     }
   }
@@ -704,11 +702,13 @@ export class MinigameManager {
     const now = performance.now();
     const me = this.getMe();
 
-    // 1. Safe Zone Detection
+    // 1. Safe Zone Detection (Auto-hide speech bubbles in Safe Zone & update indicator)
     if (me) {
       const inSafe = isInSafeZone(me.x, me.y) || !!me.seatSlot;
       const badge = document.getElementById('safeZoneBadge');
       if (badge) badge.classList.toggle('hidden', !inSafe);
+      const speechLayer = document.getElementById('speechLayer');
+      if (speechLayer) speechLayer.classList.toggle('safe-hidden', inSafe);
     }
 
     // 2. Halloween Vampire AI
