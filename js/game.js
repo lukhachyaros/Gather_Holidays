@@ -43,6 +43,15 @@ import {
   getBgmVolume,
 } from './audio.js';
 import { MinigameManager } from './minigames.js';
+import {
+  initCasino,
+  openRoulette,
+  openDuckDerby,
+  openBlackjack,
+  openSlotMachine,
+  openPlinko,
+  getChips,
+} from './casino.js';
 
 let rtc = null;
 let minigames = null;
@@ -333,6 +342,7 @@ try {
   world = new World(scene);
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
   initAudio();
+  initCasino(world, toast);
 } catch (e) {
   console.error(e);
   document.addEventListener('DOMContentLoaded', () => toast('Trình duyệt không hỗ trợ WebGL'));
@@ -2588,6 +2598,17 @@ function updateHud() {
   if ($('btnView')) $('btnView').textContent = mode === 'fps' ? '👁️ FPS' : '🎥 TPS';
   if (me?.av) me.av.root.visible = mode !== 'fps' && camDist > 0.55;
   updateLockHud();
+
+  if ($('btnCasinoWallet')) {
+    const isCasino = state?.theme === 'casino';
+    $('btnCasinoWallet').classList.toggle('hidden', !isCasino);
+    const countEl = $('btnCasinoWallet').querySelector('.casino-chip-count');
+    if (countEl) countEl.textContent = `$${getChips().toLocaleString()}`;
+    $('btnCasinoWallet').onclick = () => {
+      claimFreeChips();
+      updateHud();
+    };
+  }
 }
 
 // ---------- Seat & Hotspot Proximity / Interaction ----------
@@ -2823,121 +2844,21 @@ function triggerInteract(target = activeTarget) {
         emitOp({ k: 'firework', x: h.x, y: h.y, kind: 'cracker', by: me.name });
         toast('🧨 Pháo nổ lách tách rộn ràng góc sân!');
         break;
-      case 'roulette': {
-        const rt = world.casinoObjs.find(o => o.userData?.type === 'roulette');
-        if (rt?.userData.isSpinning) {
-          toast('🎡 Vòng quay Roulette đang quay tít, vui lòng đợi kết quả!');
-          return;
-        }
-        playSfx('roulette_spin', 'casino');
-        me.av?.playEmote('interact');
-        toast('🎡 Bạn đã đặt cược và quay bánh xe Roulette má hồng!');
-        rt?.userData.spin(() => {
-          const num = Math.floor(Math.random() * 37);
-          const isRed = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36].includes(num);
-          const colName = num === 0 ? '🟢 Số 0 Xanh Lá' : isRed ? `🔴 Số ${num} ĐỎ` : `⚫ Số ${num} ĐEN`;
-          const parity = num === 0 ? 'Nhà cái thắng' : (num % 2 === 0 ? 'Chẵn (Even)' : 'Lẻ (Odd)');
-          playSfx('slot_win', 'casino');
-          toast(`🎡 Kết Quả Roulette: [${colName}] · ${parity}!`);
-        });
+      case 'roulette':
+        openRoulette();
         break;
-      }
-      case 'duck_derby': {
-        const dd = world.casinoObjs.find(o => o.userData?.type === 'duck_derby');
-        if (dd?.userData.isRacing) {
-          toast('🦆 Cuộc đua Duck Derby đang diễn ra gay cấn!');
-          return;
-        }
-        playSfx('duck_quack', 'casino');
-        me.av?.playEmote('interact');
-        toast('🦆 Đã nổ súng xuất phát! 4 chú vịt đang bơi hết tốc lực quanh kênh nước...');
-        dd?.userData.startRace(winner => {
-          playSfx('plinko_win', 'casino');
-          toast(`🏆 VÔ ĐỊCH DUCK DERBY: #${winner.num} ${winner.name} đã cán đích xuất sắc!`);
-        });
+      case 'duck_derby':
+        openDuckDerby();
         break;
-      }
-      case 'blackjack': {
-        playSfx('blackjack_deal', 'casino');
-        me.av?.playEmote('interact');
-        const suits = ['♠', '♥', '♦', '♣'];
-        const values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
-        const drawCard = () => {
-          const val = values[Math.floor(Math.random() * values.length)];
-          const suit = suits[Math.floor(Math.random() * suits.length)];
-          const numVal = ['J', 'Q', 'K'].includes(val) ? 10 : val === 'A' ? 11 : parseInt(val, 10);
-          return { str: `${val}${suit}`, val: numVal, isAce: val === 'A' };
-        };
-        const calcScore = cards => {
-          let score = cards.reduce((s, c) => s + c.val, 0);
-          let aces = cards.filter(c => c.isAce).length;
-          while (score > 21 && aces > 0) {
-            score -= 10;
-            aces--;
-          }
-          return score;
-        };
-        const pCards = [drawCard(), drawCard()];
-        const dCards = [drawCard(), drawCard()];
-        const pScore = calcScore(pCards);
-        const dScore = calcScore(dCards);
-        const pStr = pCards.map(c => c.str).join(' ');
-        const dStr = dCards.map(c => c.str).join(' ');
-        let resultMsg = '';
-        if (pScore === 21) {
-          playSfx('slot_win', 'casino');
-          resultMsg = '💥 BLACKJACK 21 ĐIỂM! BẠN THẮNG 3:2!';
-        } else if (pScore > 21) {
-          resultMsg = 'Quắc rồi (Bust)! Nhà cái thắng.';
-        } else if (dScore > 21 || pScore > dScore) {
-          playSfx('slot_win', 'casino');
-          resultMsg = '🎉 BẠN CHIẾN THẮNG!';
-        } else if (pScore === dScore) {
-          resultMsg = 'Hòa (Push)! Hoàn tiền cược.';
-        } else {
-          resultMsg = 'Nhà cái thắng.';
-        }
-        toast(`🃏 Xì Dách: Bạn [${pStr}] (${pScore}đ) vs Dealer [${dStr}] (${dScore}đ) -> ${resultMsg}`);
+      case 'blackjack':
+        openBlackjack();
         break;
-      }
-      case 'slot_machine': {
-        const sm = world.casinoObjs.find(o => o.userData?.type === 'slot_machine');
-        if (sm?.userData.isSpinning) {
-          toast('🎰 Máy Slot đang quay, vui lòng chờ trong giây lát!');
-          return;
-        }
-        playSfx('slot_lever', 'casino');
-        me.av?.playEmote('interact');
-        toast('🎰 Gạt cần quay hũ Slot 777! Ba cuộn quay đang lăn...');
-        sm?.userData.pullLever(() => {
-          const symbols = ['7️⃣', '💎', '🍒', '🔔', '🍀', '⭐'];
-          const r1 = symbols[Math.floor(Math.random() * symbols.length)];
-          const r2 = symbols[Math.floor(Math.random() * symbols.length)];
-          const r3 = symbols[Math.floor(Math.random() * symbols.length)];
-          if (r1 === r2 && r2 === r3) {
-            playSfx('slot_win', 'casino');
-            world.spawnFireworksShow(h.x, h.y);
-            toast(`💥 💥 JACKPOT TRÚNG LỚN: [ ${r1} ${r2} ${r3} ]! Chúc mừng tân vương cờ bạc!`);
-          } else if (r1 === r2 || r2 === r3 || r1 === r3) {
-            playSfx('slot_win', 'casino');
-            toast(`✨ Trúng cặp đôi [ ${r1} | ${r2} | ${r3} ]! Thưởng mini x5!`);
-          } else {
-            toast(`🎰 Kết quả: [ ${r1} | ${r2} | ${r3} ] · Chúc bạn may mắn lần sau!`);
-          }
-        });
+      case 'slot_machine':
+        openSlotMachine();
         break;
-      }
-      case 'plinko': {
-        const pk = world.casinoObjs.find(o => o.userData?.type === 'plinko');
-        playSfx('plinko_peg', 'casino');
-        me.av?.playEmote('interact');
-        toast('⚡ Thả bóng vàng Plinko! Bóng đang nảy ngẫu nhiên qua các hàng đinh chông...');
-        pk?.userData.dropBall(multiplier => {
-          playSfx('plinko_win', 'casino');
-          toast(`🟡 Plinko chạm đáy: Ô THƯỞNG [${multiplier}]! Nhân tài may mắn!`);
-        });
+      case 'plinko':
+        openPlinko();
         break;
-      }
     }
   }
 }
