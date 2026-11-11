@@ -1005,6 +1005,8 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
   initRtc(net.selfId);
   $('roomInfo').textContent = `📍 ${roomTitle}`;
   updateLiveStats();
+  updateCasinoChipsUI();
+  updateTitleUI();
 
   initPlayer('yt', onMediaEnded, onPlayerStateChanged);
 
@@ -1130,6 +1132,7 @@ async function start() {
   updateMediaDialog();
   updateLiveStats();
   updateCasinoChipsUI();
+  updateTitleUI();
   updateAdminUIStatus();
   broadcastMyRoomToLobby();
 
@@ -4707,6 +4710,7 @@ function updateCasinoChipsUI() {
 
 $('btnEnterCode').onclick = openCodeDialog;
 $('btnCasinoWallet').onclick = openCodeDialog;
+if ($('statWalletBtn')) $('statWalletBtn').onclick = openCodeDialog;
 window.addEventListener('gh_open_code_dialog', openCodeDialog);
 
 $('btnSubmitCode').onclick = () => {
@@ -4875,11 +4879,25 @@ function selectTitle(titleItem) {
   }
   localStorage.setItem('gh_selected_title', chosenTitle);
   syncMyAppearance();
+  updateTitleUI();
   toast(`👑 Bạn đã trang bị danh hiệu: [${chosenTitle || 'Không'}]`);
   closeDialog('dlgTitles');
 }
 
+function updateTitleUI() {
+  const t = me?.title || localStorage.getItem('gh_selected_title') || '';
+  const lbl = $('statTitleLabel');
+  if (lbl) {
+    lbl.textContent = t || 'Danh Hiệu';
+  }
+  const btn = $('statTitleBtn');
+  if (btn) {
+    btn.title = t ? `Danh hiệu hiện tại: ${t} (Bấm để xem & đổi danh hiệu)` : 'Bộ Sưu Tập Danh Hiệu (Bấm để chọn danh hiệu)';
+  }
+}
+
 $('btnTitles').onclick = openTitlesDialog;
+if ($('statTitleBtn')) $('statTitleBtn').onclick = openTitlesDialog;
 
 // ============================================================================
 // ROBLOX ADMIN COMMANDS SYSTEM & PASSWORD AUTHENTICATION ("grinding shit")
@@ -6806,4 +6824,8 @@ function executeAdminCommand(raw) {
       return false;
   }
 }
+
+// Initial UI refresh for top-right wallet and title badges
+updateCasinoChipsUI();
+updateTitleUI();
 

@@ -113,15 +113,15 @@ button.danger-btn:hover:not(:disabled){background:#991b1b}
   position:fixed;top:10px;right:10px;
   background:rgba(15,23,42,.84);backdrop-filter:blur(10px);
   border:1px solid rgba(56,189,248,.32);
-  padding:4px 6px 4px 11px;border-radius:12px;
+  padding:3px 6px 3px 6px;border-radius:12px;
   font-size:12px;font-weight:600;
-  display:inline-flex;align-items:center;gap:7px;
+  display:inline-flex;align-items:center;gap:6px;
   z-index:15;box-shadow:0 6px 20px rgba(0,0,0,.4)
 }
 #statsCorner .sep{opacity:.35}
 #statPlayers{color:#4ade80;cursor:pointer}
 #statPlayers:hover{text-decoration:underline}
-#statFps{color:#facc15;min-width:56px;text-align:right}
+#statFps{color:#facc15;min-width:54px;text-align:right}
 #lockLabel{color:#38bdf8;cursor:pointer;white-space:nowrap}
 .help-btn{
   padding:3px 7px;font-size:11.5px;border-radius:7px;
@@ -129,6 +129,54 @@ button.danger-btn:hover:not(:disabled){background:#991b1b}
   height:24px;line-height:1
 }
 .help-btn:hover{background:rgba(56,189,248,.25);border-color:#38bdf8}
+
+/* Top-Right Status Interactive Pills: Wallet & Titles */
+.stat-pill-btn{
+  display:inline-flex;align-items:center;gap:4.5px;
+  padding:2px 8px;border-radius:8px;
+  font-size:11.5px;font-weight:700;
+  cursor:pointer;user-select:none;outline:none;
+  transition:all .15s ease-out;line-height:1.2;
+}
+.stat-pill-btn:hover{transform:translateY(-1px)}
+.stat-pill-btn .pill-icon{font-size:12.5px;line-height:1}
+
+.stat-pill-btn.wallet-pill{
+  background:rgba(234,179,8,.16);
+  border:1px solid rgba(250,204,21,.38);
+  color:#fef08a;
+}
+.stat-pill-btn.wallet-pill:hover{
+  background:rgba(234,179,8,.32);
+  border-color:#facc15;
+  box-shadow:0 0 10px rgba(250,204,21,.35);
+}
+
+.stat-pill-btn.title-pill{
+  background:rgba(168,85,247,.16);
+  border:1px solid rgba(192,132,252,.38);
+  color:#f3e8ff;
+  max-width:145px;
+}
+.stat-pill-btn.title-pill:hover{
+  background:rgba(168,85,247,.32);
+  border-color:#c084fc;
+  box-shadow:0 0 10px rgba(192,132,252,.35);
+}
+.stat-pill-btn .title-val{
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:85px;display:inline-block;
+}
+
+@media (max-width:860px){
+  #statsCorner{padding:3px 5px;gap:5px}
+  .stat-pill-btn.title-pill{max-width:105px}
+  .stat-pill-btn .title-val{max-width:60px}
+}
+@media (max-width:680px){
+  #lockLabel{display:none}
+  #statsCorner .sep-lock{display:none}
+}
 
 /* Collapsible Keybind Guide Card */
 #hud{
