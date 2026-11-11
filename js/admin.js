@@ -8,10 +8,6 @@ import { G, part, mat } from './props.js';
    1. BẢO MẬT & XÁC THỰC TÀI KHOẢN ADMIN ĐƯỢC CẤP RIÊNG
    ========================================================================= */
 
-// Danh sách tài khoản Admin được cấp phép (lưu dưới dạng SHA-256 hash an toàn)
-// Tài khoản mặc định ban đầu:
-// Username: admin
-// Password mặc định: GatherAdmin2026@
 const ADMIN_ACCOUNTS = [
   {
     user: 'admin',
@@ -48,6 +44,7 @@ function initAuth() {
   if (savedToken) {
     overlay.classList.add('hidden');
     app.classList.remove('hidden');
+    setupStudio();
   }
 
   async function handleLogin() {
@@ -84,12 +81,21 @@ function initAuth() {
   });
 }
 
+function showToast(msg) {
+  const t = document.getElementById('adminToast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  setTimeout(() => { t.classList.add('hidden'); }, 3000);
+}
+
 /* =========================================================================
    2. KHỞI TẠO 3D VIEWPORT & CAMERA ORBIT CONTROLS
    ========================================================================= */
 
-let scene, camera, renderer, gridHelper, boneHelpers = [];
+let scene, camera, renderer, gridHelper;
 let targetModel = null;
+let currentPresetKey = 'human_rig';
 let currentMode = 'avatar'; // 'avatar' | 'props'
 let selectedObject = null;
 let activeAnimations = [];
@@ -97,12 +103,13 @@ let mixer = null;
 let isPlaying = false;
 let animClock = new THREE.Clock();
 let recordedKeyframes = [];
+let avatarInstance = null;
 
 function setupStudio() {
   const container = document.getElementById('viewport3D');
   if (scene) return; // Đã khởi tạo
 
-  const w = container.clientWidth || window.innerWidth - 680;
+  const w = container.clientWidth || window.innerWidth - 700;
   const h = container.clientHeight || window.innerHeight - 100;
 
   scene = new THREE.Scene();
@@ -111,7 +118,7 @@ function setupStudio() {
   camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
   camera.position.set(0, 1.8, 3.8);
 
-  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
@@ -160,7 +167,9 @@ function setupStudio() {
     requestAnimationFrame(animate);
     const delta = animClock.getDelta();
 
-    if (mixer && isPlaying) {
+    if (avatarInstance && isPlaying) {
+      avatarInstance.update(delta);
+    } else if (mixer && isPlaying) {
       mixer.update(delta);
       updateScrubberUI();
     }
@@ -245,6 +254,8 @@ function clearTargetModel() {
   }
   selectedObject = null;
   mixer = null;
+  avatarInstance = null;
+  isPlaying = false;
   recordedKeyframes = [];
   updateKeyframeListUI();
   updateHierarchyUI([]);
@@ -253,23 +264,33 @@ function clearTargetModel() {
 
 async function loadModelPreset(type) {
   clearTargetModel();
+  currentPresetKey = type;
+  const nameInput = document.getElementById('modelCustomName');
 
   if (type === 'human_rig') {
     currentMode = 'avatar';
-    const av = new Avatar(null, { name: 'AdminRig', hue: 200, costume: 'default' });
-    targetModel = av.root;
-    targetModel.userData = { isAvatar: true, avatarInstance: av };
+    nameInput.value = 'HumanRig_Character';
+    document.getElementById('avatarOptionsGroup').style.display = 'block';
+    document.getElementById('boneQuickPoses').style.display = 'block';
+
+    avatarInstance = new Avatar(null, { name: 'AdminRig', hue: 200, costume: 'default' });
+    targetModel = avatarInstance.root;
+    targetModel.name = 'HumanRig_Root';
     scene.add(targetModel);
 
-    // Thu thập các khớp xương rig
-    setupRigHierarchy(av);
-    populateClips(['Idle', 'wave', 'handshake', 'hug', 'cheer_jump', 'flex', 'dab']);
+    setupRigHierarchy(avatarInstance);
+    populateClips(['Idle', 'wave', 'handshake', 'hug', 'trickOrTreat', 'cheer_jump', 'flex', 'dab', 'starfish', 'head_heart', 'kneel']);
   }
   else if (type === 'robot_expressive') {
     currentMode = 'avatar';
+    nameInput.value = 'RobotExpressive_Model';
+    document.getElementById('avatarOptionsGroup').style.display = 'none';
+    document.getElementById('boneQuickPoses').style.display = 'none';
+
     const loader = new GLTFLoader();
     loader.load('./assets/models/RobotExpressive.glb', (gltf) => {
       targetModel = gltf.scene;
+      targetModel.name = 'RobotExpressive_Root';
       targetModel.scale.set(0.65, 0.65, 0.65);
       scene.add(targetModel);
 
@@ -284,8 +305,13 @@ async function loadModelPreset(type) {
   }
   else if (type === 'pumpkin_hat') {
     currentMode = 'props';
+    nameInput.value = 'Pumpkin_Hat_Prop';
+    document.getElementById('avatarOptionsGroup').style.display = 'none';
+    document.getElementById('boneQuickPoses').style.display = 'none';
+
     targetModel = new THREE.Group();
-    // Tạo quả bí ngô mẫu
+    targetModel.name = 'Pumpkin_Hat_Root';
+
     const pumpkinMat = new THREE.MeshStandardMaterial({ color: 0xff6600, roughness: 0.6 });
     const stemMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.9 });
     const baseP = part(targetModel, G.sph(), pumpkinMat, [0, 0.5, 0], [1, 0.75, 1]);
@@ -299,7 +325,13 @@ async function loadModelPreset(type) {
   }
   else if (type === 'gift_box') {
     currentMode = 'props';
+    nameInput.value = 'Christmas_GiftBox_Prop';
+    document.getElementById('avatarOptionsGroup').style.display = 'none';
+    document.getElementById('boneQuickPoses').style.display = 'none';
+
     targetModel = new THREE.Group();
+    targetModel.name = 'GiftBox_Root';
+
     const boxMat = new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.4 });
     const ribbonMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.3, roughness: 0.3 });
     const b = part(targetModel, G.box(), boxMat, [0, 0.5, 0], [0.8, 0.8, 0.8]);
@@ -315,7 +347,13 @@ async function loadModelPreset(type) {
   }
   else if (type === 'pine_tree') {
     currentMode = 'props';
+    nameInput.value = 'Christmas_PineTree_Prop';
+    document.getElementById('avatarOptionsGroup').style.display = 'none';
+    document.getElementById('boneQuickPoses').style.display = 'none';
+
     targetModel = new THREE.Group();
+    targetModel.name = 'PineTree_Root';
+
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 });
     const leafMat = new THREE.MeshStandardMaterial({ color: 0x1b5e20, roughness: 0.7 });
 
@@ -334,6 +372,10 @@ async function loadModelPreset(type) {
   }
   else if (type === 'custom_prop') {
     currentMode = 'props';
+    nameInput.value = 'Custom_NewModel_Prop';
+    document.getElementById('avatarOptionsGroup').style.display = 'none';
+    document.getElementById('boneQuickPoses').style.display = 'none';
+
     targetModel = new THREE.Group();
     targetModel.name = 'Custom_Object_Root';
     scene.add(targetModel);
@@ -418,9 +460,17 @@ function updateInspectorUI() {
   document.getElementById('posZ').value = selectedObject.position.z.toFixed(2);
 
   // Góc quay (đổi sang độ)
-  document.getElementById('rotX').value = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.x));
-  document.getElementById('rotY').value = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.y));
-  document.getElementById('rotZ').value = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.z));
+  const degX = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.x));
+  const degY = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.y));
+  const degZ = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.z));
+
+  document.getElementById('rotX').value = degX;
+  document.getElementById('rotY').value = degY;
+  document.getElementById('rotZ').value = degZ;
+
+  document.getElementById('rotSliderX').value = degX;
+  document.getElementById('rotSliderY').value = degY;
+  document.getElementById('rotSliderZ').value = degZ;
 
   // Tỉ lệ scale
   document.getElementById('scaleX').value = selectedObject.scale.x.toFixed(2);
@@ -464,6 +514,14 @@ function populateClips(names) {
 }
 
 function playClip(name) {
+  if (avatarInstance) {
+    avatarInstance.playEmote(name, true);
+    isPlaying = true;
+    document.getElementById('btnAnimPlayPause').textContent = '⏸ Tạm Dừng';
+    document.getElementById('timeDuration').textContent = 'Looping';
+    return;
+  }
+
   if (!mixer || !activeAnimations.length) return;
   const clip = THREE.AnimationClip.findByName(activeAnimations, name);
   if (clip) {
@@ -484,10 +542,73 @@ function updateScrubberUI() {
   document.getElementById('animScrubber').value = ((time / dur) * 100).toFixed(1);
 }
 
+function resetHumanPose() {
+  if (!avatarInstance) return;
+  avatarInstance.emote = null;
+  avatarInstance.animTime = 0;
+  // Reset các khớp xương về 0
+  const bones = [
+    avatarInstance.hips, avatarInstance.spine, avatarInstance.chest, avatarInstance.head,
+    avatarInstance.lShoulder, avatarInstance.rShoulder, avatarInstance.lArm, avatarInstance.rArm,
+    avatarInstance.lHand, avatarInstance.rHand, avatarInstance.lUpLeg, avatarInstance.rUpLeg,
+    avatarInstance.lLeg, avatarInstance.rLeg
+  ];
+  bones.forEach(b => {
+    if (b) {
+      b.rotation.set(0, 0, 0);
+    }
+  });
+  if (avatarInstance.hips) avatarInstance.hips.position.set(0, 0.78, 0);
+  isPlaying = false;
+  document.getElementById('btnAnimPlayPause').textContent = '▶ Xem Diễn Hoạt';
+  updateInspectorUI();
+  showToast('Đã đưa nhân vật về tư thế gốc (T-Pose)!');
+}
+
+function applyQuickPose(poseKey) {
+  if (!avatarInstance) return;
+  resetHumanPose();
+
+  if (poseKey === 'wave_arm') {
+    avatarInstance.rShoulder.rotation.z = THREE.MathUtils.degToRad(-140);
+    avatarInstance.rArm.rotation.z = THREE.MathUtils.degToRad(-40);
+  } else if (poseKey === 'sit_down') {
+    avatarInstance.hips.position.y = 0.42;
+    avatarInstance.lUpLeg.rotation.x = THREE.MathUtils.degToRad(85);
+    avatarInstance.rUpLeg.rotation.x = THREE.MathUtils.degToRad(85);
+    avatarInstance.lLeg.rotation.x = THREE.MathUtils.degToRad(-85);
+    avatarInstance.rLeg.rotation.x = THREE.MathUtils.degToRad(-85);
+  } else if (poseKey === 'salute') {
+    avatarInstance.rShoulder.rotation.z = THREE.MathUtils.degToRad(-100);
+    avatarInstance.rArm.rotation.z = THREE.MathUtils.degToRad(-80);
+    avatarInstance.rHand.rotation.y = THREE.MathUtils.degToRad(45);
+  }
+  updateInspectorUI();
+  showToast(`Đã áp dụng tư thế [${poseKey}]!`);
+}
+
 function bindUIEvents() {
   // Preset selector
   document.getElementById('presetSelector').addEventListener('change', (e) => {
     loadModelPreset(e.target.value);
+  });
+
+  // Costume selector
+  document.getElementById('costumeSelector').addEventListener('change', (e) => {
+    if (avatarInstance) {
+      avatarInstance.applyCostume(e.target.value);
+      showToast(`Đã đổi trang phục: ${e.target.value}`);
+    }
+  });
+
+  // Reset Pose button
+  document.getElementById('btnResetPose').addEventListener('click', resetHumanPose);
+
+  // Quick Poses
+  document.querySelectorAll('.btn-pose').forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyQuickPose(btn.dataset.pose);
+    });
   });
 
   // Thêm khối hình mới
@@ -510,6 +631,7 @@ function bindUIEvents() {
 
       setupGenericHierarchy(targetModel);
       selectPart(newPart, newPart.name);
+      showToast(`Đã thêm khối ${shape}!`);
     });
   });
 
@@ -521,11 +643,34 @@ function bindUIEvents() {
         setupGenericHierarchy(targetModel);
         selectedObject = null;
         updateInspectorUI();
+        showToast('Đã xóa bộ phận được chọn.');
       }
     }
   });
 
-  // Inputs liên kết trực tiếp với 3D
+  // Đồng bộ Rotation giữa Slider và Number Input
+  const bindRotSync = (axis) => {
+    const slider = document.getElementById(`rotSlider${axis}`);
+    const num = document.getElementById(`rot${axis}`);
+
+    const applyRot = (deg) => {
+      if (!selectedObject) return;
+      selectedObject.rotation[axis.toLowerCase()] = THREE.MathUtils.degToRad(deg);
+    };
+
+    slider.addEventListener('input', () => {
+      num.value = slider.value;
+      applyRot(parseFloat(slider.value));
+    });
+
+    num.addEventListener('input', () => {
+      slider.value = num.value;
+      applyRot(parseFloat(num.value));
+    });
+  };
+  ['X', 'Y', 'Z'].forEach(bindRotSync);
+
+  // Position & Scale Inputs
   const updateTransformFromInputs = () => {
     if (!selectedObject) return;
     selectedObject.position.set(
@@ -533,19 +678,13 @@ function bindUIEvents() {
       parseFloat(document.getElementById('posY').value) || 0,
       parseFloat(document.getElementById('posZ').value) || 0
     );
-    selectedObject.rotation.set(
-      THREE.MathUtils.degToRad(parseFloat(document.getElementById('rotX').value) || 0),
-      THREE.MathUtils.degToRad(parseFloat(document.getElementById('rotY').value) || 0),
-      THREE.MathUtils.degToRad(parseFloat(document.getElementById('rotZ').value) || 0)
-    );
     selectedObject.scale.set(
       parseFloat(document.getElementById('scaleX').value) || 1,
       parseFloat(document.getElementById('scaleY').value) || 1,
       parseFloat(document.getElementById('scaleZ').value) || 1
     );
   };
-
-  ['posX', 'posY', 'posZ', 'rotX', 'rotY', 'rotZ', 'scaleX', 'scaleY', 'scaleZ'].forEach(id => {
+  ['posX', 'posY', 'posZ', 'scaleX', 'scaleY', 'scaleZ'].forEach(id => {
     document.getElementById(id).addEventListener('input', updateTransformFromInputs);
   });
 
@@ -571,23 +710,28 @@ function bindUIEvents() {
   // Animation Play/Pause
   const btnPlay = document.getElementById('btnAnimPlayPause');
   btnPlay.addEventListener('click', () => {
-    if (!mixer) {
-      // Nếu là avatar rig, test động tác
-      if (targetModel && targetModel.userData.avatarInstance) {
-        const clipName = document.getElementById('clipSelector').value;
-        const av = targetModel.userData.avatarInstance;
-        av.triggerEmote(clipName);
+    const clipName = document.getElementById('clipSelector').value;
+    if (isPlaying) {
+      if (avatarInstance) {
+        avatarInstance.emote = null;
+      } else if (currentAction) {
+        currentAction.pause();
       }
-      return;
+      isPlaying = false;
+      btnPlay.textContent = '▶ Xem Diễn Hoạt';
+    } else {
+      playClip(clipName);
     }
-    isPlaying = !isPlaying;
-    btnPlay.textContent = isPlaying ? '⏸ Tạm Dừng' : '▶ Phát';
   });
 
   document.getElementById('btnAnimStop').addEventListener('click', () => {
-    if (currentAction) currentAction.stop();
+    if (avatarInstance) {
+      resetHumanPose();
+    } else if (currentAction) {
+      currentAction.stop();
+    }
     isPlaying = false;
-    btnPlay.textContent = '▶ Phát';
+    btnPlay.textContent = '▶ Xem Diễn Hoạt';
     document.getElementById('animScrubber').value = 0;
     document.getElementById('timeCurrent').textContent = '0.00s';
   });
@@ -622,7 +766,7 @@ function bindUIEvents() {
   // Chụp Keyframe & Tạo Animation mới
   document.getElementById('btnCaptureKeyframe').addEventListener('click', () => {
     if (!selectedObject) {
-      alert('Vui lòng chọn một bộ phận/khớp xương cần lưu khung hình.');
+      alert('Vui lòng chọn một bộ phận hoặc khớp xương cần lưu khung hình.');
       return;
     }
     const frameData = {
@@ -634,70 +778,202 @@ function bindUIEvents() {
     };
     recordedKeyframes.push(frameData);
     updateKeyframeListUI();
+    showToast(`Đã chụp Frame ${recordedKeyframes.length} (${frameData.targetName})`);
   });
 
-  document.getElementById('btnSaveNewAnimation').addEventListener('click', () => {
-    const name = document.getElementById('newAnimName').value.trim() || `CustomAnim_${Date.now().toString().slice(-4)}`;
+  document.getElementById('btnClearKeyframes').addEventListener('click', () => {
+    recordedKeyframes = [];
+    updateKeyframeListUI();
+    showToast('Đã xóa tất cả keyframes đã lưu.');
+  });
+
+  // Thử chạy Animation tự tạo
+  document.getElementById('btnTestAnimation').addEventListener('click', () => {
     if (recordedKeyframes.length < 2) {
-      alert('Cần ít nhất 2 Keyframe để tạo chuyển động hoàn chỉnh.');
+      alert('Cần ít nhất 2 Keyframe để chạy thử chuyển động.');
+      return;
+    }
+    let curIdx = 0;
+    const interval = setInterval(() => {
+      if (curIdx >= recordedKeyframes.length) {
+        clearInterval(interval);
+        showToast('Hoàn thành chạy thử animation!');
+        return;
+      }
+      const kf = recordedKeyframes[curIdx];
+      if (selectedObject) {
+        selectedObject.rotation.set(...kf.rot);
+        selectedObject.position.set(...kf.pos);
+        updateInspectorUI();
+      }
+      curIdx++;
+    }, 450);
+  });
+
+  // Xuất file Animation đặt tên theo model/animation
+  document.getElementById('btnSaveNewAnimation').addEventListener('click', () => {
+    const modelName = document.getElementById('modelCustomName').value.trim() || 'Model';
+    const animName = document.getElementById('newAnimName').value.trim() || 'CustomMotion';
+
+    if (recordedKeyframes.length < 2) {
+      alert('Cần chụp ít nhất 2 Keyframe để tạo file animation hoàn chỉnh.');
       return;
     }
 
-    // Xuất cấu hình animation dạng JSON
     const animConfig = {
-      name,
+      modelName,
+      animationName: animName,
       fps: 30,
-      duration: recordedKeyframes[recordedKeyframes.length - 1].time,
-      keyframes: recordedKeyframes
+      totalDuration: recordedKeyframes[recordedKeyframes.length - 1].time,
+      keyframes: recordedKeyframes,
+      createdAt: new Date().toISOString()
     };
 
-    const blob = new Blob([JSON.stringify(animConfig, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${name}.anim.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    alert(`Đã xuất Animation [${name}] thành công!`);
+    const fileName = `${modelName}_${animName}.anim.json`;
+    downloadJSON(animConfig, fileName);
+    showToast(`Đã xuất Animation [${fileName}] thành công!`);
   });
 
-  // Xuất toàn bộ Model ra JSON
+  // 1. Lưu chỉnh sửa vào kho trình duyệt (LocalStorage)
+  document.getElementById('btnSaveToStorage').addEventListener('click', () => {
+    if (!targetModel) return;
+    const modelName = document.getElementById('modelCustomName').value.trim() || 'Custom_Model';
+
+    let exportData = null;
+    if (avatarInstance) {
+      // Lưu toàn bộ cấu hình nhân vật (Costume, Hue, Pos/Rot từng khớp)
+      exportData = exportAvatarConfig(avatarInstance, modelName);
+    } else {
+      exportData = targetModel.toJSON();
+    }
+
+    try {
+      localStorage.setItem(`gather_model_${modelName}`, JSON.stringify(exportData));
+      showToast(`Đã lưu "${modelName}" vào kho dữ liệu game!`);
+    } catch (e) {
+      alert('Không đủ dung lượng bộ nhớ: ' + e.message);
+    }
+  });
+
+  // 2. Xuất toàn bộ Model ra file JSON đặt tên cụ thể theo Model
   document.getElementById('btnExportJSON').addEventListener('click', () => {
     if (!targetModel) return;
-    const modelData = targetModel.toJSON();
-    const blob = new Blob([JSON.stringify(modelData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `GatherModel_${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const modelName = document.getElementById('modelCustomName').value.trim() || 'Gather_Model';
+
+    let exportData = null;
+    if (avatarInstance) {
+      exportData = exportAvatarConfig(avatarInstance, modelName);
+    } else {
+      exportData = targetModel.toJSON();
+    }
+
+    const fileName = `${modelName}.model.json`;
+    downloadJSON(exportData, fileName);
+    showToast(`Đã xuất file [${fileName}] thành công!`);
   });
 
-  // Nạp Model/JSON vào
+  // 3. Nạp Model/JSON vào
   const fileIn = document.getElementById('fileImporter');
   document.getElementById('btnImportJSON').addEventListener('click', () => fileIn.click());
   fileIn.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
+    // Tự động lấy tên file làm tên model
+    const baseName = file.name.replace(/\.[^/.]+$/, "");
+    document.getElementById('modelCustomName').value = baseName;
+
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target.result);
-        const loader = new THREE.ObjectLoader();
-        const obj = loader.parse(json);
-        clearTargetModel();
-        targetModel = obj;
-        scene.add(targetModel);
-        setupGenericHierarchy(targetModel);
-        alert('Đã tải mô hình JSON thành công!');
+
+        if (json.type === 'AvatarRigConfig') {
+          // Nạp cấu hình avatar rig
+          loadModelPreset('human_rig');
+          setTimeout(() => {
+            applyAvatarConfig(avatarInstance, json);
+            showToast(`Đã nạp nhân vật [${baseName}] thành công!`);
+          }, 100);
+        } else {
+          // Nạp Three.js Object JSON thông thường
+          const loader = new THREE.ObjectLoader();
+          const obj = loader.parse(json);
+          clearTargetModel();
+          targetModel = obj;
+          scene.add(targetModel);
+          setupGenericHierarchy(targetModel);
+          showToast(`Đã nạp mô hình [${baseName}] thành công!`);
+        }
       } catch (err) {
         alert('Lỗi khi đọc file: ' + err.message);
       }
     };
     reader.readAsText(file);
   });
+}
+
+function exportAvatarConfig(av, modelName) {
+  const bonesData = {};
+  const bones = [
+    { k: 'hips', obj: av.hips },
+    { k: 'spine', obj: av.spine },
+    { k: 'chest', obj: av.chest },
+    { k: 'head', obj: av.head },
+    { k: 'lShoulder', obj: av.lShoulder },
+    { k: 'rShoulder', obj: av.rShoulder },
+    { k: 'lArm', obj: av.lArm },
+    { k: 'rArm', obj: av.rArm },
+    { k: 'lHand', obj: av.lHand },
+    { k: 'rHand', obj: av.rHand },
+    { k: 'lUpLeg', obj: av.lUpLeg },
+    { k: 'rUpLeg', obj: av.rUpLeg },
+    { k: 'lLeg', obj: av.lLeg },
+    { k: 'rLeg', obj: av.rLeg }
+  ];
+
+  bones.forEach(b => {
+    if (b.obj) {
+      bonesData[b.k] = {
+        pos: b.obj.position.toArray(),
+        rot: [b.obj.rotation.x, b.obj.rotation.y, b.obj.rotation.z],
+        scale: b.obj.scale.toArray()
+      };
+    }
+  });
+
+  return {
+    type: 'AvatarRigConfig',
+    modelName: modelName,
+    costume: av.costumeKey || 'default',
+    hue: av.hue || 200,
+    bones: bonesData,
+    exportedAt: new Date().toISOString()
+  };
+}
+
+function applyAvatarConfig(av, config) {
+  if (!av || !config.bones) return;
+  if (config.costume) av.applyCostume(config.costume);
+
+  for (const [key, data] of Object.entries(config.bones)) {
+    if (av[key]) {
+      if (data.pos) av[key].position.fromArray(data.pos);
+      if (data.rot) av[key].rotation.set(...data.rot);
+      if (data.scale) av[key].scale.fromArray(data.scale);
+    }
+  }
+  updateInspectorUI();
+}
+
+function downloadJSON(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function updateKeyframeListUI() {
@@ -710,7 +986,7 @@ function updateKeyframeListUI() {
   recordedKeyframes.forEach((kf, idx) => {
     const pill = document.createElement('div');
     pill.className = 'frame-pill';
-    pill.textContent = `Frame ${idx + 1} (${kf.time.toFixed(1)}s)`;
+    pill.textContent = `F${idx + 1}: ${kf.targetName} (${kf.time.toFixed(1)}s)`;
     container.appendChild(pill);
   });
 }

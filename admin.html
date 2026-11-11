@@ -59,9 +59,14 @@
         <span class="badge-role">ADMINISTRATOR</span>
       </div>
       <div class="admin-header-actions">
-        <button id="btnSwitchMode" class="btn-sub"><span id="activeModeText">Chế độ: Nhân Vật</span></button>
-        <button id="btnExportJSON" class="btn-sub" title="Xuất file JSON cấu hình">💾 Xuất Dữ Liệu</button>
-        <button id="btnImportJSON" class="btn-sub" title="Tải file JSON vào studio">📂 Nạp Cấu Hình</button>
+        <!-- Đặt tên file xuất cụ thể theo Model -->
+        <div class="filename-input-wrap">
+          <span class="file-icon">🏷️</span>
+          <input type="text" id="modelCustomName" placeholder="Tên file model..." value="HumanRig_Custom">
+        </div>
+        <button id="btnSaveToStorage" class="btn-sub primary-action" title="Lưu chỉnh sửa vào bộ nhớ trình duyệt">💾 Lưu Vào Kho Game</button>
+        <button id="btnExportJSON" class="btn-sub" title="Tải file JSON về máy theo đúng tên model">⬇️ Xuất File Model</button>
+        <button id="btnImportJSON" class="btn-sub" title="Tải file JSON vào studio">📂 Nạp File Model</button>
         <input type="file" id="fileImporter" accept=".json,.glb,.gltf" style="display:none">
         <button id="btnAdminLogout" class="btn-danger">Đăng Xuất</button>
       </div>
@@ -73,13 +78,13 @@
       <aside class="admin-sidebar left-panel">
         <div class="panel-section">
           <div class="section-title">
-            <span>📦 Thư viện Model & Khối</span>
-            <span class="tag" id="targetTypeTag">Avatar</span>
+            <span>📦 Thư viện Model</span>
+            <span class="tag" id="targetTypeTag">Nhân vật</span>
           </div>
 
           <!-- Selector chọn đối tượng làm việc -->
           <div class="panel-group">
-            <label class="group-label">Chọn đối tượng mẫu:</label>
+            <label class="group-label">Chọn đối tượng làm việc:</label>
             <select id="presetSelector" class="admin-select">
               <optgroup label="Nhân vật (Avatars)">
                 <option value="human_rig" selected>Người mẫu chuẩn (Human Rig + Bones)</option>
@@ -91,6 +96,23 @@
                 <option value="pine_tree">Cây Thông Noel</option>
                 <option value="custom_prop">+ Tạo Vật Thể Mới Rỗng</option>
               </optgroup>
+            </select>
+          </div>
+
+          <!-- Trang phục / Phụ kiện nhân vật (Nếu đang là Avatar) -->
+          <div class="panel-group" id="avatarOptionsGroup">
+            <label class="group-label">Trang phục nhân vật (Costume):</label>
+            <select id="costumeSelector" class="admin-select-sm">
+              <option value="default">Mặc định (Casual)</option>
+              <option value="santa">Ông già Noel (Santa Claus)</option>
+              <option value="reindeer">Tuần Lộc Giáng Sinh</option>
+              <option value="elf">Yêu Tinh Giáng Sinh (Elf)</option>
+              <option value="witch">Phù Thủy Halloween</option>
+              <option value="vampire">Ma Cà Rồng (Vampire)</option>
+              <option value="skeleton">Bộ Xương (Skeleton)</option>
+              <option value="ghost">Bóng Ma (Ghost)</option>
+              <option value="ao_dai_nam">Áo Dài Tết Nam</option>
+              <option value="ao_dai_nu">Áo Dài Tết Nữ</option>
             </select>
           </div>
 
@@ -124,28 +146,31 @@
       <main class="admin-viewport-container">
         <div id="viewport3D" class="viewport-canvas"></div>
 
+        <!-- Thông báo Toast trạng thái -->
+        <div id="adminToast" class="admin-toast hidden"></div>
+
         <!-- Thanh công cụ nhanh đè lên viewport -->
         <div class="viewport-toolbar">
           <button id="btnResetCamera" class="btn-vp-tool" title="Đặt lại góc nhìn">🎥 Camera</button>
           <button id="btnToggleGrid" class="btn-vp-tool active" title="Bật/Tắt Lưới sàn">📏 Lưới</button>
           <button id="btnToggleWireframe" class="btn-vp-tool" title="Khung dây (Wireframe)">🕸 Khung Dây</button>
-          <button id="btnToggleBones" class="btn-vp-tool active" title="Khớp xương">🦴 Khớp Xương</button>
+          <button id="btnResetPose" class="btn-vp-tool" title="Đưa nhân vật về tư thế chữ T / Reset pose">🧍 Tư thế gốc</button>
         </div>
 
         <!-- Thanh điều khiển Timeline Animation bên dưới viewport -->
         <div class="animation-timeline-bar">
           <div class="timeline-controls">
-            <button id="btnAnimPlayPause" class="btn-anim-play">▶ Phát</button>
+            <button id="btnAnimPlayPause" class="btn-anim-play">▶ Xem Diễn Hoạt</button>
             <button id="btnAnimStop" class="btn-anim-ctrl">⏹ Dừng</button>
             <label class="inline-time-label">
-              <span>Diễn hoạt:</span>
+              <span>Động tác:</span>
               <select id="clipSelector" class="admin-select-sm">
                 <!-- Danh sách clip animation -->
               </select>
             </label>
             <label class="inline-time-label">
               <span>Tốc độ:</span>
-              <input type="range" id="animSpeed" min="0.1" max="2.5" step="0.1" value="1.0">
+              <input type="range" id="animSpeed" min="0.2" max="2.0" step="0.1" value="1.0">
               <span id="speedVal">1.0x</span>
             </label>
           </div>
@@ -165,22 +190,45 @@
             <span class="tag active-part-name" id="selectedPartLabel">Chưa chọn</span>
           </div>
 
-          <!-- Tọa độ Transform (Position, Rotation, Scale) -->
+          <!-- Quick Bone Pose Presets cho nhân vật -->
+          <div class="panel-group" id="boneQuickPoses">
+            <label class="group-label">Tư thế nhanh cho khớp xương (Quick Poses):</label>
+            <div class="quick-pose-btns">
+              <button class="btn-pose" data-pose="tpose">T-Pose</button>
+              <button class="btn-pose" data-pose="wave_arm">Giơ Tay</button>
+              <button class="btn-pose" data-pose="sit_down">Ngồi Xuống</button>
+              <button class="btn-pose" data-pose="salute">Chào Chúc</button>
+            </div>
+          </div>
+
+          <!-- Tọa độ Transform (Position, Rotation, Scale) có Slider mượt mà -->
+          <div class="panel-group">
+            <label class="group-label">Góc xoay khớp/khối (Rotation):</label>
+            <div class="transform-sliders">
+              <div class="slider-control">
+                <span class="ax-badge x">X°</span>
+                <input type="range" id="rotSliderX" min="-180" max="180" step="1" value="0">
+                <input type="number" id="rotX" min="-180" max="180" step="1" value="0" class="mini-val">
+              </div>
+              <div class="slider-control">
+                <span class="ax-badge y">Y°</span>
+                <input type="range" id="rotSliderY" min="-180" max="180" step="1" value="0">
+                <input type="number" id="rotY" min="-180" max="180" step="1" value="0" class="mini-val">
+              </div>
+              <div class="slider-control">
+                <span class="ax-badge z">Z°</span>
+                <input type="range" id="rotSliderZ" min="-180" max="180" step="1" value="0">
+                <input type="number" id="rotZ" min="-180" max="180" step="1" value="0" class="mini-val">
+              </div>
+            </div>
+          </div>
+
           <div class="panel-group">
             <label class="group-label">Vị trí (Position X, Y, Z):</label>
             <div class="coord-3d">
               <div class="axis"><span class="ax-label x">X</span><input type="number" id="posX" step="0.05" value="0"></div>
               <div class="axis"><span class="ax-label y">Y</span><input type="number" id="posY" step="0.05" value="0"></div>
               <div class="axis"><span class="ax-label z">Z</span><input type="number" id="posZ" step="0.05" value="0"></div>
-            </div>
-          </div>
-
-          <div class="panel-group">
-            <label class="group-label">Góc xoay (Rotation độ):</label>
-            <div class="coord-3d">
-              <div class="axis"><span class="ax-label x">X°</span><input type="number" id="rotX" step="5" value="0"></div>
-              <div class="axis"><span class="ax-label y">Y°</span><input type="number" id="rotY" step="5" value="0"></div>
-              <div class="axis"><span class="ax-label z">Z°</span><input type="number" id="rotZ" step="5" value="0"></div>
             </div>
           </div>
 
@@ -217,14 +265,18 @@
               <span>🎬 Tạo Động Tác (Animation Builder)</span>
             </div>
             <div class="anim-builder-inputs">
-              <input type="text" id="newAnimName" placeholder="Tên animation mới (ví dụ: dance, wave_2)...">
+              <input type="text" id="newAnimName" placeholder="Tên animation mới (ví dụ: my_dance, salute)...">
               <div class="anim-btns">
-                <button id="btnCaptureKeyframe" class="btn-action">📸 Lưu Khung Hình (Keyframe)</button>
-                <button id="btnSaveNewAnimation" class="btn-action primary">✨ Xuất Animation Mới</button>
+                <button id="btnCaptureKeyframe" class="btn-action">📸 Chụp Khung Hình</button>
+                <button id="btnTestAnimation" class="btn-action">▶ Thử Chạy</button>
               </div>
+              <button id="btnSaveNewAnimation" class="btn-action primary">✨ Xuất File Animation Theo Tên</button>
             </div>
             <div class="keyframe-list-wrapper">
-              <label class="group-label">Các khung hình đã chụp (Frames):</label>
+              <div class="kf-header">
+                <label class="group-label">Các khung hình đã chụp (Keyframes):</label>
+                <button id="btnClearKeyframes" class="btn-link-danger">Xóa hết</button>
+              </div>
               <div id="keyframesList" class="keyframes-list">
                 <span class="empty-hint">Chưa có keyframe nào được ghi lại.</span>
               </div>
