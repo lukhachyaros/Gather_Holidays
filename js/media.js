@@ -207,11 +207,17 @@ function create(id) {
           player.playVideo?.();
         }
       },
-      onError: () => {
-        // If a video is restricted or fails to load, advance to next in queue after 1.5s
-        setTimeout(() => {
-          if (current?.vid && current.kind !== 'web') endedCb?.(current);
-        }, 1500);
+      onError: (e) => {
+        // Automatically hide YouTube surface and advance to next track on any embedding or playback error
+        console.warn('YouTube Player error code:', e?.data);
+        try {
+          player?.stopVideo?.();
+        } catch {}
+        const y = ytEl();
+        if (y) y.style.display = 'none';
+        if (current?.vid && current.kind !== 'web') {
+          setTimeout(() => endedCb?.(current), 400);
+        }
       },
     },
   });
@@ -279,17 +285,18 @@ export function apply(media, force = false) {
     const w = webEl();
     if (w) w.src = 'about:blank';
   }
+  if (!media || !media.vid) {
+    loadedKey = '';
+    setSurface('none');
+    try {
+      player?.stopVideo?.();
+    } catch {}
+    return;
+  }
   setSurface('yt');
 
   if (!ready || !player) {
     pending = media;
-    return;
-  }
-  if (!media || !media.vid) {
-    loadedKey = '';
-    try {
-      player.stopVideo?.();
-    } catch {}
     return;
   }
 

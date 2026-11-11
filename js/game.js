@@ -1089,6 +1089,26 @@ async function start() {
     pumpkinHat: me.pumpkinHat,
   });
   me.av.label.visible = false;
+
+  // Apply saved equipped items from Boutique Shop
+  try {
+    const eq = getEquipped?.() || {};
+    if (eq.accessory) {
+      me.accessory = eq.accessory;
+      me.av.setAccessory(eq.accessory);
+    }
+    if (eq.aura) {
+      me.aura = eq.aura;
+      me.av.setAura(eq.aura);
+    }
+    if (eq.nametag) {
+      me.nametagStyle = eq.nametag;
+      me.av.setName(me.name, me.title, eq.nametag);
+    }
+  } catch (err) {
+    console.warn('Error loading equipped items:', err);
+  }
+
   scene.add(me.av.root);
 
   // Immediately synchronize 3D world before starting animation loop
@@ -1904,7 +1924,7 @@ function applyOp(op, senderId = null) {
     }
     case 'love_wishing_toss': {
       toast(`💖 ${op.by} vừa tung đồng xu ước nguyện và nhận ban phúc: [${op.blessing.title}]!`);
-      playSfx('jackpot_voice', 'casino');
+      playSfx('plinko_win', 'casino');
       break;
     }
     case 'admin_laser': {
@@ -4614,7 +4634,7 @@ $('btnSubmitPassage').onclick = () => {
     fb.style.color = '#86efac';
     fb.textContent = '🎉 CHÍNH XÁC! Phong ấn cổ xưa đã được hóa giải thành công!';
     fb.classList.remove('hidden');
-    playSfx('jackpot_voice');
+    playSfx('plinko_win', 'casino');
     setTimeout(() => {
       closeDialog('dlgSecretPassage');
       enterSecretCasino();
@@ -4651,7 +4671,7 @@ $('btnRedeemFoundCode').onclick = () => {
   const res = redeemCode(activeFoundNoteCode);
   closeDialog('dlgNote');
   if (res.ok || res.success) {
-    playSfx('jackpot_voice');
+    playSfx('plinko_win', 'casino');
     toast(`🎉 ${res.msg}`);
     updateCasinoChipsUI();
   } else {
@@ -4699,7 +4719,7 @@ $('btnSubmitCode').onclick = () => {
     $('codeErr').classList.add('hidden');
     $('codeSuccess').textContent = res.msg;
     $('codeSuccess').classList.remove('hidden');
-    playSfx('jackpot_voice');
+    playSfx('plinko_win', 'casino');
     toast(`🎉 ${res.msg}`);
     updateCasinoChipsUI();
     setTimeout(() => closeDialog('dlgCode'), 1500);
@@ -4962,7 +4982,7 @@ $('btnSubmitAdminAuth').onclick = () => {
   if (verifyAdminPassword(val)) {
     $('adminAuthErr').classList.add('hidden');
     $('adminAuthSuccess').classList.remove('hidden');
-    playSfx('jackpot_voice');
+    playSfx('plinko_win');
     toast('✨ XÁC THỰC THÀNH CÔNG! Chào mừng Quản Trị Viên Tối Cao!');
     setTimeout(() => {
       closeDialog('dlgAdminAuth');
@@ -5012,7 +5032,7 @@ function renderCasinoShopGrid() {
             ? `<button class="shop-item-btn unequip" data-action="unequip" data-id="${it.id}" style="width:100%;background:rgba(239,68,68,0.2);border:1px solid #ef4444;color:#fca5a5;padding:6px;border-radius:6px;cursor:pointer">Đang dùng (Tháo)</button>`
             : `<button class="shop-item-btn equip" data-action="equip" data-id="${it.id}" style="width:100%;background:rgba(34,197,94,0.2);border:1px solid #22c55e;color:#86efac;padding:6px;border-radius:6px;cursor:pointer">Trang bị</button>`}
         ` : `
-          <button class="shop-item-btn buy" data-action="buy" data-id="${it.id}" style="width:100%;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#fff;font-weight:700;padding:6px;border-radius:6px;cursor:pointer">🪙 ${it.price.toLocaleString()} Chips</button>
+          <button class="shop-item-btn buy" data-action="buy" data-id="${it.id}" style="width:100%;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#fff;font-weight:700;padding:6px;border-radius:6px;cursor:pointer">🪙 ${it.price.toLocaleString()} Xu</button>
         `}
       </div>
     `;
@@ -5024,7 +5044,7 @@ function renderCasinoShopGrid() {
       if (action === 'buy') {
         const res = buyShopItem(id);
         if (res.ok) {
-          playSfx('jackpot_voice', 'casino');
+          playSfx('plinko_win', 'casino');
           toast(`🎉 Bạn đã mua thành công: ${it.name}!`);
           renderCasinoShopGrid();
         } else {
@@ -5724,7 +5744,7 @@ function spawnBlackHole(byAdmin = 'Admin') {
 
 function spawnConfettiShower(byAdmin = 'Admin') {
   toast(`🎉 ${byAdmin} BẮN PHÁO HOA GIẤY CẦU VỒNG TOÀN SERVER!`);
-  playSfx('jackpot_voice', 'casino');
+  playSfx('plinko_win', 'casino');
 
   const confettiCount = 90;
   const colors = [0xef4444, 0x3b82f6, 0x10b981, 0xfacc15, 0xec4899, 0x8b5cf6, 0x06b6d4];
@@ -6111,7 +6131,7 @@ function executeAdminCommand(raw) {
   if (cmd === 'admin' || cmd === 'auth' || cmd === 'login') {
     const inputPass = args.join(' ');
     if (verifyAdminPassword(inputPass)) {
-      playSfx('jackpot_voice');
+      playSfx('plinko_win');
       toast('✨ XÁC THỰC THÀNH CÔNG! Đã kích hoạt quyền Quản Trị Viên Tối Cao (ADMIN)!');
       return true;
     } else {
@@ -6375,10 +6395,11 @@ function executeAdminCommand(raw) {
     }
 
     // === 4. FUN & TROLL ===
+    case 'xu':
     case 'chips': {
       const num = parseInt(args[0], 10) || 1000;
       addChips(num);
-      playSfx('jackpot_voice');
+      playSfx('plinko_win');
       updateCasinoChipsUI();
       toast(`🪙 Admin: Đã cấp thêm ${num.toLocaleString()} xu vào ví!`);
       return true;

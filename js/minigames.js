@@ -547,92 +547,155 @@ export class MinigameManager {
   }
 
   // --------------------------------------------------------------------------
-  // TET: MYTHICAL GOLDEN DRAGON (KIM LONG) ARTICULATION
+  // TET: MYTHICAL GOLDEN DRAGON (KIM LONG) ARTICULATION - MATCHING IMAGE 2
   // --------------------------------------------------------------------------
   spawnGoldenDragon() {
     this.dragonGroup = new THREE.Group();
     this.group.add(this.dragonGroup);
 
-    const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.85, roughness: 0.2 });
-    const darkGoldMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.8, roughness: 0.25 });
-    const spineMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, metalness: 0.5, roughness: 0.3 });
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
-    const hornMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.25, metalness: 0.3 });
+    // Color palette based directly on image_2.png:
+    // Bright Mai Flower Yellow (#facc15 / #fde047), Fiery Crimson (#dc2626 / #ef4444)
+    const brightGoldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3, metalness: 0.25 });
+    const maiYellowMat = new THREE.MeshStandardMaterial({ color: 0xfde047, roughness: 0.25, metalness: 0.2 });
+    const darkGoldMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.35, metalness: 0.3 });
+    const crimsonMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.35, metalness: 0.2 });
+    const darkCrimsonMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.4, metalness: 0.25 });
+    const blackMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const fangMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
 
-    // Majestic Dragon Head (2.5x scale)
+    // Majestic Dragon Head (Origami Low-Poly Style from image_2.png)
     const head = new THREE.Group();
-    // Snout & upper jaw
-    const snout = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 2.2), goldMat);
-    snout.position.set(0, 0, 0.4);
-    // Lower jaw
-    const lowerJaw = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 1.8), darkGoldMat);
-    lowerJaw.position.set(0, -0.65, 0.4);
 
-    // Glowing ruby eyes
-    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), eyeMat);
-    const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), eyeMat);
-    eyeL.position.set(-0.75, 0.45, 0.5);
-    eyeR.position.set(0.75, 0.45, 0.5);
+    // Central Snout & Diamond Facets (Mũi & Mặt Vàng Hoa Mai)
+    const snoutCore = new THREE.Mesh(new THREE.ConeGeometry(0.85, 2.2, 4), brightGoldMat);
+    snoutCore.rotation.y = Math.PI / 4;
+    snoutCore.rotation.x = Math.PI / 2.2;
+    snoutCore.position.set(0, 0, 0.6);
+    head.add(snoutCore);
 
-    // Ivory fangs
-    [-0.55, 0.55].forEach(fx => {
-      const fangUpper = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.45, 6), fangMat);
-      fangUpper.position.set(fx, -0.45, 1.1);
+    // Cheek facets (2 má vàng hoa mai đa giác)
+    [-0.55, 0.55].forEach(cx => {
+      const cheek = new THREE.Mesh(new THREE.ConeGeometry(0.65, 1.6, 4), maiYellowMat);
+      cheek.position.set(cx, 0.15, 0.4);
+      cheek.rotation.z = cx > 0 ? -0.4 : 0.4;
+      cheek.rotation.x = Math.PI / 2.3;
+      head.add(cheek);
+    });
+
+    // Chin / Lower Jaw (Cằm dưới vàng viền đỏ)
+    const chin = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 4), darkGoldMat);
+    chin.position.set(0, -0.65, 0.6);
+    chin.rotation.x = Math.PI / 2.1;
+    head.add(chin);
+
+    // Black Nostril Diamonds (2 lỗ mũi hình thoi đen)
+    [-0.22, 0.22].forEach(nx => {
+      const nostril = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.3, 4), blackMat);
+      nostril.position.set(nx, 0.08, 1.45);
+      nostril.rotation.x = Math.PI / 2;
+      head.add(nostril);
+    });
+
+    // Intense Stylized Diamond Eyes (Đôi mắt hình thoi viền đỏ đồng tử đen)
+    [-0.52, 0.52].forEach(ex => {
+      const eyeSocket = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.6, 4), crimsonMat);
+      eyeSocket.position.set(ex, 0.45, 0.65);
+      eyeSocket.rotation.z = ex > 0 ? -0.5 : 0.5;
+      eyeSocket.rotation.x = Math.PI / 2.2;
+
+      const eyePupil = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.4, 4), blackMat);
+      eyePupil.position.set(ex > 0 ? 0.05 : -0.05, 0.05, 0.12);
+      eyeSocket.add(eyePupil);
+
+      head.add(eyeSocket);
+    });
+
+    // Central Forehead Crest Spikes (Chỏm sừng trung tâm màu đỏ giữa trán)
+    const centerHorn = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.4, 4), crimsonMat);
+    centerHorn.position.set(0, 1.25, 0.1);
+    centerHorn.rotation.x = -0.3;
+    head.add(centerHorn);
+
+    // Two Majestic Curved Crimson Horns (Đôi sừng rồng đỏ uốn lượn vút cao như ảnh 2)
+    [-0.65, 0.65].forEach(hx => {
+      const mainHorn = new THREE.Mesh(new THREE.ConeGeometry(0.26, 1.9, 5), crimsonMat);
+      mainHorn.position.set(hx, 1.45, -0.15);
+      mainHorn.rotation.x = -0.45;
+      mainHorn.rotation.z = hx > 0 ? 0.45 : -0.45;
+
+      // Horn tip sharp branch
+      const tipBranch = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1.1, 4), darkCrimsonMat);
+      tipBranch.position.set(hx > 0 ? 0.25 : -0.25, 0.75, 0.1);
+      tipBranch.rotation.z = hx > 0 ? 0.65 : -0.65;
+      mainHorn.add(tipBranch);
+
+      head.add(mainHorn);
+    });
+
+    // Red Side Spikes & Flaring Mane (Các gai nhọn bờm đỏ xòe 2 bên má y hệt ảnh 2)
+    [-1, 1].forEach(side => {
+      [
+        { y: 0.85, z: 0.1, len: 1.1, rotZ: 0.8 },
+        { y: 0.45, z: 0.2, len: 1.3, rotZ: 1.2 },
+        { y: 0.05, z: 0.3, len: 0.9, rotZ: 1.5 },
+      ].forEach(sp => {
+        const maneSpike = new THREE.Mesh(new THREE.ConeGeometry(0.2, sp.len, 4), crimsonMat);
+        maneSpike.position.set(side * 0.9, sp.y, sp.z);
+        maneSpike.rotation.z = side * -sp.rotZ;
+        maneSpike.rotation.x = -0.2;
+        head.add(maneSpike);
+      });
+    });
+
+    // Long Flowing Red Whiskers (Đôi râu rồng đỏ dài uốn lượn mềm mại từ mép)
+    [-0.55, 0.55].forEach(wx => {
+      const whiskerBase = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.03, 1.6, 6), crimsonMat);
+      whiskerBase.position.set(wx, -0.35, 1.05);
+      whiskerBase.rotation.x = Math.PI / 2.3;
+      whiskerBase.rotation.z = wx > 0 ? -0.55 : 0.55;
+
+      const whiskerCurl = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.015, 1.2, 5), crimsonMat);
+      whiskerCurl.position.set(wx > 0 ? 0.25 : -0.25, -0.7, 0.2);
+      whiskerCurl.rotation.z = wx > 0 ? 0.7 : -0.7;
+      whiskerBase.add(whiskerCurl);
+
+      head.add(whiskerBase);
+    });
+
+    // Ivory Fangs (Răng nanh trắng ngà)
+    [-0.38, 0.38].forEach(fx => {
+      const fangUpper = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.45, 4), fangMat);
+      fangUpper.position.set(fx, -0.4, 1.1);
       fangUpper.rotation.x = Math.PI;
       head.add(fangUpper);
     });
 
-    // Imperial Jade horns (Double-branched antlers)
-    [-0.65, 0.65].forEach(hx => {
-      const hornBase = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.6, 8), hornMat);
-      hornBase.position.set(hx, 1.1, -0.4);
-      hornBase.rotation.x = -0.45;
-      hornBase.rotation.z = hx > 0 ? 0.35 : -0.35;
-
-      const hornBranch = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.85, 6), hornMat);
-      hornBranch.position.set(hx > 0 ? 0.35 : -0.35, 0.65, 0.1);
-      hornBranch.rotation.z = hx > 0 ? 0.6 : -0.6;
-      hornBase.add(hornBranch);
-      head.add(hornBase);
-    });
-
-    // Flaming Whiskers (Râu rồng uốn lượn)
-    const whiskerMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
-    [-0.72, 0.72].forEach(wx => {
-      const whisker = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, 1.8, 6), whiskerMat);
-      whisker.position.set(wx, -0.2, 1.1);
-      whisker.rotation.x = Math.PI / 2.6;
-      whisker.rotation.z = wx > 0 ? -0.4 : 0.4;
-      head.add(whisker);
-    });
-
-    head.add(snout, lowerJaw, eyeL, eyeR);
     this.dragonGroup.add(head);
 
-    // Orbiting Glowing Dragon Pearl (Dạ Minh Châu)
+    // Orbiting Glowing Dragon Pearl (Dạ Minh Châu hộ thân)
     const pearlGroup = new THREE.Group();
     const pearlMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       emissive: 0x38bdf8,
-      emissiveIntensity: 1.8,
+      emissiveIntensity: 2.2,
       roughness: 0.1,
     });
     const pearl = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 16), pearlMat);
-    const pearlLight = new THREE.PointLight(0x38bdf8, 3.5, 12);
+    const pearlLight = new THREE.PointLight(0x38bdf8, 3.8, 14);
     pearlGroup.add(pearl, pearlLight);
     this.dragonGroup.add(pearlGroup);
 
-    // 14 Majestic Body Segments with Dorsal Spines (Vây lưng rồng)
+    // 14 Majestic Body Segments (Thân rồng vàng tươi hoa mai xen kẽ vây lưng đỏ)
     const bodySegments = [];
     for (let i = 0; i < 14; i++) {
       const segGroup = new THREE.Group();
-      const radius = Math.max(0.42, 1.15 - i * 0.055);
-      const segMesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 12), i % 2 === 0 ? goldMat : darkGoldMat);
+      const radius = Math.max(0.42, 1.18 - i * 0.055);
+      const segMesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 12), i % 2 === 0 ? brightGoldMat : maiYellowMat);
       segGroup.add(segMesh);
 
-      // Dorsal spine fin
-      const spine = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.35, radius * 1.1, 4), spineMat);
+      // Dorsal spine fin (Vây lưng đỏ rực)
+      const spine = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.38, radius * 1.2, 4), crimsonMat);
       spine.position.set(0, radius * 0.95, 0);
       segGroup.add(spine);
 
@@ -641,8 +704,8 @@ export class MinigameManager {
       bodySegments.push(segGroup);
     }
 
-    // Dragon Tail Flukes (Đuôi rồng xòe quạt lộng lẫy)
-    const tailFluke = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 4), spineMat);
+    // Dragon Tail Flukes (Đuôi rồng xòe quạt đỏ vàng lộng lẫy)
+    const tailFluke = new THREE.Mesh(new THREE.ConeGeometry(0.95, 1.9, 4), crimsonMat);
     tailFluke.position.set(0, 0, -1.2);
     tailFluke.rotation.x = -Math.PI / 2;
     bodySegments[bodySegments.length - 1].add(tailFluke);

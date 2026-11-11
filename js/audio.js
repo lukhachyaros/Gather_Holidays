@@ -536,7 +536,7 @@ export function playSfx(name, theme = currentTheme) {
       }
       case 'jackpot_voice': {
         const audio = new Audio('assets/jackpot.mp3');
-        audio.volume = Math.min(1.0, bgmVolume * 2.2);
+        audio.volume = Math.max(0.04, Math.min(0.28, bgmVolume * 0.45));
         audio.play().catch(() => {});
         break;
       }
