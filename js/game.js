@@ -32,7 +32,7 @@ import {
 import { World, TILE } from './world.js';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js';
 import { emojiSprite } from './props.js';
-import { RtcManager } from './rtc.js';
+import { RtcManager } from './rtc.js?v=20261111_trystero';
 import {
   initAudio,
   playBgm,
@@ -70,7 +70,7 @@ let myAvatarCustom = loadAvatarCustomization();
 let rtc = null;
 let minigames = null;
 
-function initRtc(selfId) {
+function initRtc(selfId, roomId) {
   if (rtc) {
     try {
       rtc.destroy();
@@ -78,6 +78,7 @@ function initRtc(selfId) {
   }
   rtc = new RtcManager({
     selfId,
+    roomId: roomId || state?.room || 'quang-truong-noel',
     sendSignal: (targetId, signal) => {
       net?.send('rtc_signal', signal, targetId);
     },
@@ -105,6 +106,7 @@ function initRtc(selfId) {
     },
     toast,
   });
+  window.__gh_rtc = rtc;
 }
 
 // Unlock remote WebRTC audio playback on user gesture
@@ -1040,7 +1042,8 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
   };
 
   net = await connect(roomName, handlers);
-  initRtc(net.selfId);
+  window.__gh_net = net;
+  initRtc(net.selfId, roomName);
   $('roomInfo').textContent = `📍 ${roomTitle}`;
   updateLiveStats();
   updateCasinoChipsUI();

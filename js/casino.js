@@ -654,7 +654,7 @@ export function openRoulette() {
     peerBets.clear();
     renderGrid();
   }
-}
+  }
 
 // ============================================================================
 // 2. DUCK DERBY (ĐUA VỊT CAO SU TRỰC TIẾP)
