@@ -195,11 +195,17 @@ function profileRadius(s) {
   return PROFILE[PROFILE.length - 1][1];
 }
 
-/** Xương sống: s=0 là đầu, s=1 là chóp đuôi; sóng lan từ đầu về đuôi. */
-function spine(s, t, out) {
-  const ph = t * 1.5;
-  const lat = 0.55 * smooth(0.12, 0.55, s) * Math.sin(TAU * 1.2 * s - ph);
-  const bob = 0.12 * smooth(0.1, 0.6, s) * Math.sin(TAU * 1.6 * s - ph * 1.3 + 1.1);
+/** Xương sống: s=0 là đầu, s=1 là chóp đuôi; sóng lan từ đầu về đuôi.
+ * moveIntensity: 0 khi đứng yên (chỉ thở nhẹ), 1 khi bay bình thường, >1 khi bay nhanh (uốn lượn mạnh).
+ */
+function spine(s, t, out, moveIntensity = 1.0) {
+  const ph = t * (0.8 + 1.2 * moveIntensity);
+  // Biên độ uốn lượn ngang (lat): mở rộng mạnh khi đang di chuyển (1.1), co gọn khi đứng yên (0.12)
+  const latAmp = (0.12 + 0.98 * moveIntensity) * smooth(0.12, 0.55, s);
+  const lat = latAmp * Math.sin(TAU * 1.35 * s - ph);
+  // Nhấp nhô dọc (bob)
+  const bobAmp = (0.04 + 0.22 * moveIntensity) * smooth(0.1, 0.6, s);
+  const bob = bobAmp * Math.sin(TAU * 1.8 * s - ph * 1.3 + 1.1);
   const y = 0.62 + 1.0 * Math.exp(-s * 9) + 1.55 * s * s * s + bob;
   return out.set(lat, y, (0.5 - s) * LEN);
 }
@@ -207,10 +213,10 @@ function spine(s, t, out) {
 const _fa = new THREE.Vector3();
 const _fb = new THREE.Vector3();
 /** Hệ trục tại s: P (tâm), T (hướng về đuôi), S (ngang), U (lên). */
-function frameAt(s, t, P, T, S, U) {
-  spine(s, t, P);
-  spine(Math.min(s + 0.004, 1), t, _fb);
-  spine(Math.max(s - 0.004, 0), t, _fa);
+function frameAt(s, t, P, T, S, U, moveIntensity = 1.0) {
+  spine(s, t, P, moveIntensity);
+  spine(Math.min(s + 0.004, 1), t, _fb, moveIntensity);
+  spine(Math.max(s - 0.004, 0), t, _fa, moveIntensity);
   T.subVectors(_fb, _fa).normalize();
   S.set(T.z, 0, -T.x).normalize();
   U.crossVectors(T, S);
@@ -377,10 +383,12 @@ export function createDragon(options = {}) {
   const S = new THREE.Vector3();
   const U = new THREE.Vector3();
 
+  let moveIntensity = 1.0;
+
   function updateBody(t) {
     const ry = 0.92;
     for (let i = 0; i <= R; i++) {
-      frameAt(i / R, t, P, T, S, U);
+      frameAt(i / R, t, P, T, S, U, moveIntensity);
       const r = rad[i];
       for (let j = 0; j <= N; j++) {
         const c = COS[j];
@@ -424,10 +432,10 @@ export function createDragon(options = {}) {
   function updateFins(t) {
     for (let k = 0; k < DORSAL; k++) {
       const s = 0.035 + 0.96 * (k / (DORSAL - 1));
-      frameAt(s, t, P, T, S, U);
+      frameAt(s, t, P, T, S, U, moveIntensity);
       const r = profileRadius(s);
       const tailW = smooth(0.7, 1.0, s);
-      const lean = 0.55 + 0.3 * tailW * Math.sin(t * 3 + finPhase[k] + s * 9);
+      const lean = (0.55 + 0.3 * tailW * Math.sin(t * 3 + finPhase[k] + s * 9)) * (0.3 + 0.7 * moveIntensity);
       _dir.copy(U).addScaledVector(T, lean).normalize();
       _base.copy(P).addScaledVector(U, r * 0.84);
       const h =
@@ -435,10 +443,10 @@ export function createDragon(options = {}) {
       const w = 0.11 + 0.05 * smooth(0.85, 1, s);
       setBlade(fins, k, _base, S, _dir, h, w, 0.035);
     }
-    frameAt(1, t, P, T, S, U);
+    frameAt(1, t, P, T, S, U, moveIntensity);
     for (let k = 0; k < FAN; k++) {
       const a = (k / (FAN - 1) - 0.5) * 2.3;
-      const sway = 0.25 * Math.sin(t * 2.4 + k * 0.9);
+      const sway = 0.25 * Math.sin(t * 2.4 + k * 0.9) * (0.2 + 0.8 * moveIntensity);
       _dir
         .set(0, 0, 0)
         .addScaledVector(T, Math.cos(a) * 0.9)
@@ -475,7 +483,7 @@ export function createDragon(options = {}) {
       for (const side of [-1, 1]) {
         for (let k = 0; k < TUFTS; k++) {
           const s = spot + (k - (TUFTS - 1) / 2) * 0.014;
-          frameAt(s, t, P, T, S, U);
+          frameAt(s, t, P, T, S, U, moveIntensity);
           const r = profileRadius(s);
           _base.copy(P).addScaledVector(S, side * r * 0.95).addScaledVector(U, r * 0.08);
           _dir.copy(U).multiplyScalar(0.9).addScaledVector(T, 0.7).addScaledVector(S, side * 0.35);
@@ -810,8 +818,8 @@ export function createDragon(options = {}) {
   const _hm = new THREE.Matrix4();
 
   function updateHead(t) {
-    frameAt(0, t, P, T, S, U);
-    _f.set(-T.x * 0.8 + 0.14 * Math.sin(t * 0.45), -0.08 + 0.05 * Math.sin(t * 0.9 + 0.5), 1).normalize();
+    frameAt(0, t, P, T, S, U, moveIntensity);
+    _f.set(-T.x * 0.8 + 0.14 * Math.sin(t * 0.45) * moveIntensity, -0.08 + 0.05 * Math.sin(t * 0.9 + 0.5) * moveIntensity, 1).normalize();
     _r.crossVectors(UP, _f).normalize();
     _u.crossVectors(_f, _r);
     _hm.makeBasis(_r, _u, _f);
@@ -819,10 +827,10 @@ export function createDragon(options = {}) {
     head.position.copy(P).addScaledVector(_f, 0.28);
     head.position.y += 0.04;
 
-    jawPivot.rotation.x = 0.34 + 0.12 * Math.sin(t * 1.4) + 0.06 * Math.sin(t * 3.1);
+    jawPivot.rotation.x = 0.34 + (0.12 * Math.sin(t * 1.4) + 0.06 * Math.sin(t * 3.1)) * (0.2 + 0.8 * moveIntensity);
     for (const w of whiskers) {
-      w.holder.rotation.y = w.sx * 0.06 * Math.sin(t * 1.7 + w.sx);
-      w.holder.rotation.z = 0.05 * Math.sin(t * 1.3 + w.sx * 2);
+      w.holder.rotation.y = w.sx * 0.06 * Math.sin(t * 1.7 + w.sx) * (0.3 + 0.7 * moveIntensity);
+      w.holder.rotation.z = 0.05 * Math.sin(t * 1.3 + w.sx * 2) * (0.3 + 0.7 * moveIntensity);
     }
 
     pearl.position.copy(head.position).addScaledVector(_f, 1.55);
@@ -832,9 +840,11 @@ export function createDragon(options = {}) {
     pearlMat.emissiveIntensity = 1.5 + 0.25 * Math.sin(t * 5);
   }
 
-  function update(dt = 0) {
+  function update(dt = 0, speed = 1.0) {
     dt = clamp(dt, 0, 0.1);
-    time += dt;
+    // Smoothly interpolate moveIntensity towards target speed (0 = idle, 1.5 = moving fast)
+    moveIntensity += (speed - moveIntensity) * Math.min(1, dt * 6);
+    time += dt * (0.4 + 0.9 * moveIntensity);
     updateBody(time);
     updateFins(time);
     updateSideFlames(time);

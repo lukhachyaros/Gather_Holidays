@@ -192,45 +192,13 @@ export class World {
     this.setDayNightTime(this.timeOfDay);
     this.initParticles(th.particles);
 
-    // Tet Night Sky with Stars & Glowing Moon
+    // Tet Night Sky with Glowing Moon (Optimized: Removed heavy stars for maximum performance)
     if (this.nightSkyGroup) {
       this.scene.remove(this.nightSkyGroup);
       this.nightSkyGroup = null;
     }
     if (key === 'tet') {
       this.nightSkyGroup = new THREE.Group();
-
-      // Starfield (380 celestial stars with twinkling attributes)
-      const starCount = 380;
-      const positions = new Float32Array(starCount * 3);
-      const starColors = new Float32Array(starCount * 3);
-      const cWhite = new THREE.Color('#ffffff');
-      const cGold = new THREE.Color('#fef08a');
-      const cCyan = new THREE.Color('#bae6fd');
-      for (let i = 0; i < starCount; i++) {
-        const theta = Math.random() * 2.0 * Math.PI;
-        const phi = Math.acos(2.0 * Math.random() - 1.0);
-        const r = 90 + Math.random() * 55;
-        const sinPhi = Math.sin(phi);
-        positions[i * 3] = r * sinPhi * Math.cos(theta);
-        positions[i * 3 + 1] = Math.max(14, Math.abs(r * Math.cos(phi))); // Upper celestial dome
-        positions[i * 3 + 2] = r * sinPhi * Math.sin(theta);
-        const pick = i % 3 === 0 ? cGold : i % 3 === 1 ? cCyan : cWhite;
-        starColors[i * 3] = pick.r;
-        starColors[i * 3 + 1] = pick.g;
-        starColors[i * 3 + 2] = pick.b;
-      }
-      const starGeo = new THREE.BufferGeometry();
-      starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
-      const starMat = new THREE.PointsMaterial({
-        size: 1.6,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.92,
-      });
-      const stars = new THREE.Points(starGeo, starMat);
-      this.nightSkyGroup.add(stars);
 
       // Glowing Lunar Moon Sphere
       const moonGroup = new THREE.Group();

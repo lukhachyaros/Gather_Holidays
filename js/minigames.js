@@ -1145,8 +1145,10 @@ export class MinigameManager {
         this.dragon.head.rotation.z = this.dragonRoll;
 
         // Update procedural Dragon animation (spine wave, whiskers, jaw, fins, legs)
+        // Passes dynamic speed: isMoving = 1.4 (strong undulating wave), idle = 0.0 (stationary, no wave)
         if (this.dragon.update) {
-          this.dragon.update(dt);
+          const moveSpeedParam = isMoving ? (keys.forward ? 1.4 : 1.0) : 0.0;
+          this.dragon.update(dt, moveSpeedParam);
         }
 
         // Mount local player avatar on dragon neck facing forward
@@ -1203,9 +1205,9 @@ export class MinigameManager {
           this.dragon.group.rotation.y = Math.atan2(dx, dz);
         }
 
-        // Update procedural Dragon animation (spine wave, whiskers, jaw, fins, legs)
+        // Autonomous sky patrol animation (graceful moderate swimming wave)
         if (this.dragon.update) {
-          this.dragon.update(dt);
+          this.dragon.update(dt, 0.85);
         }
       }
     }
