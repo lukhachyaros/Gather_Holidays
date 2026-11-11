@@ -326,6 +326,20 @@ let mouseSens = parseFloat(localStorage.getItem('gh_sens') || '1.0');
 if (Number.isNaN(mouseSens) || mouseSens < 0.2 || mouseSens > 3.0) mouseSens = 1.0;
 let lockMode = localStorage.getItem('gh_lock_mode') || 'click';
 
+// Admin state variables
+let adminSpeedMultiplier = 1.0;
+let adminJumpPower = 8.2;
+let adminFlying = false;
+let adminNoclip = false;
+let adminGodMode = false;
+window.adminGodMode = false;
+let isFrozen = false;
+let isJailed = false;
+let jailedPos = null;
+let currentGravity = 20;
+const adminBanList = new Set();
+const adminMuteList = new Set();
+
 const isHost = () => !!(state && net && state.hostId === net.selfId);
 
 // FPS Counter state
@@ -905,8 +919,12 @@ async function start() {
     state.map = buildThemeMap(offOfficial.theme);
   }
 
+  // Immediately synchronize 3D world before starting animation loop
+  world.sync(state, roomName);
+
   $('topTheme').value = state.theme;
   $('topTheme').classList.toggle('hidden', roomName === SECRET_CASINO_ROOM);
+  $('statFps').textContent = '⚡ 60 FPS';
   playBgm(state.theme);
   minigames?.setTheme(state.theme);
   net.send('hello', pubInfo());
@@ -3486,212 +3504,231 @@ function loop(now) {
     loopRunning = false;
     return;
   }
-  const dt = Math.min(0.05, (now - last) / 1000);
-  last = now;
 
-  // 1. Update FPS & Live Stats
-  frameCount++;
-  if (now - fpsLastTime >= 500) {
-    currentFps = Math.round((frameCount * 1000) / (now - fpsLastTime));
-    $('statFps').textContent = `⚡ ${currentFps} FPS`;
-    frameCount = 0;
-    fpsLastTime = now;
-  }
+  // Always schedule next frame first so animation loop never dies from temporary glitches
+  requestAnimationFrame(loop);
 
-  // 2. Update Cooldown Badge on HUD
-  const cb = $('cooldownBadge');
-  if (now < cooldownUntil) {
-    cb.textContent = `⏳ Hồi chiêu: ${((cooldownUntil - now) / 1000).toFixed(1)}s`;
-    cb.classList.remove('hidden');
-  } else {
-    cb.classList.add('hidden');
-  }
+  try {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
 
-  // 3. Player Locomotion & Sitting State
-  if (isFrozen) {
-    me.loco = 'idle';
-  } else if (isJailed && jailedPos) {
-    me.x = jailedPos.x;
-    me.y = jailedPos.y;
-    me.loco = 'idle';
-  } else {
-    const k = keys;
-    const isUp = k.has('w') || k.has('KeyW') || k.has('ư') || k.has('arrowup') || k.has('ArrowUp');
-    const isDown = k.has('s') || k.has('KeyS') || k.has('arrowdown') || k.has('ArrowDown');
-    const isLeft = k.has('a') || k.has('KeyA') || k.has('arrowleft') || k.has('ArrowLeft');
-    const isRight = k.has('d') || k.has('KeyD') || k.has('arrowright') || k.has('ArrowRight');
-    const fwd = (isUp ? 1 : 0) - (isDown ? 1 : 0);
-    const str = (isRight ? 1 : 0) - (isLeft ? 1 : 0);
-    const running = k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight');
-    let dx = -Math.sin(yaw) * fwd + Math.cos(yaw) * str,
-      dz = -Math.cos(yaw) * fwd - Math.sin(yaw) * str;
-    const moving = !!(dx || dz);
-
-    if (moving && me.seatSlot) {
-      leaveSeat();
+    // 1. Update FPS & Live Stats
+    frameCount++;
+    if (now - fpsLastTime >= 500) {
+      currentFps = Math.round((frameCount * 1000) / (now - fpsLastTime));
+      const fpsEl = $('statFps');
+      if (fpsEl) fpsEl.textContent = `⚡ ${currentFps} FPS`;
+      frameCount = 0;
+      fpsLastTime = now;
     }
 
-    if (moving && !me.seatSlot) {
-      const l = Math.hypot(dx, dz),
-        sp = (running ? RUN : WALK) * dt * (adminSpeedMultiplier || 1.0);
-      dx = (dx / l) * sp;
-      dz = (dz / l) * sp;
-      if (adminNoclip || free(me.x + dx, me.y, me.h)) me.x += dx;
-      if (adminNoclip || free(me.x, me.y + dz, me.h)) me.y += dz;
-      // Hard coordinate clamp against any glitching out of map
-      me.x = Math.max(0.15, Math.min(state.map.w - 1.15, me.x));
-      me.y = Math.max(0.15, Math.min(state.map.h - 1.15, me.y));
+    // 2. Update Cooldown Badge on HUD
+    const cb = $('cooldownBadge');
+    if (cb) {
+      if (now < cooldownUntil) {
+        cb.textContent = `⏳ Hồi chiêu: ${((cooldownUntil - now) / 1000).toFixed(1)}s`;
+        cb.classList.remove('hidden');
+      } else {
+        cb.classList.add('hidden');
+      }
     }
 
-    if (adminFlying) {
-      me.vy = 0;
-      if (k.has(' ') || k.has('Space')) me.h += 8 * dt;
-      else if (k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight')) me.h = Math.max(0, me.h - 8 * dt);
-    }
+    // 3. Player Locomotion & Sitting State
+    let moving = false;
+    let running = false;
+    let floorH = getStandHeight(me.x, me.y);
 
-    // Auto-resolve any slight penetration with colliders so player never gets stuck against item tables or obstacles
-    if (!adminNoclip && !me.seatSlot && world?.features?.colliders) {
-      for (const c of world.features.colliders) {
-        const colH = c.r > 0.6 ? 1.05 : 0.85;
-        if (me.h >= colH - 0.15) continue; // Standing on top of object!
-        const d = Math.hypot(me.x - c.x, me.y - c.y);
-        const minD = c.r * 0.75 + RADIUS;
-        if (d < minD && d > 0.0001) {
-          const overlap = minD - d;
-          const pushFactor = Math.min(overlap, dt * 8);
-          const px = ((me.x - c.x) / d) * pushFactor;
-          const py = ((me.y - c.y) / d) * pushFactor;
-          if (!isSolid(tileAt(Math.floor(me.x + px + 0.5), Math.floor(me.y + py + 0.5)))) {
-            me.x += px;
-            me.y += py;
+    if (isFrozen) {
+      me.loco = 'idle';
+    } else if (isJailed && jailedPos) {
+      me.x = jailedPos.x;
+      me.y = jailedPos.y;
+      me.loco = 'idle';
+    } else {
+      const k = keys;
+      const isUp = k.has('w') || k.has('KeyW') || k.has('ư') || k.has('arrowup') || k.has('ArrowUp');
+      const isDown = k.has('s') || k.has('KeyS') || k.has('arrowdown') || k.has('ArrowDown');
+      const isLeft = k.has('a') || k.has('KeyA') || k.has('arrowleft') || k.has('ArrowLeft');
+      const isRight = k.has('d') || k.has('KeyD') || k.has('arrowright') || k.has('ArrowRight');
+      const fwd = (isUp ? 1 : 0) - (isDown ? 1 : 0);
+      const str = (isRight ? 1 : 0) - (isLeft ? 1 : 0);
+      running = k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight');
+      let dx = -Math.sin(yaw) * fwd + Math.cos(yaw) * str,
+        dz = -Math.cos(yaw) * fwd - Math.sin(yaw) * str;
+      moving = !!(dx || dz);
+
+      if (moving && me.seatSlot) {
+        leaveSeat();
+      }
+
+      if (moving && !me.seatSlot) {
+        const l = Math.hypot(dx, dz),
+          sp = (running ? RUN : WALK) * dt * (adminSpeedMultiplier || 1.0);
+        dx = (dx / l) * sp;
+        dz = (dz / l) * sp;
+        if (adminNoclip || free(me.x + dx, me.y, me.h)) me.x += dx;
+        if (adminNoclip || free(me.x, me.y + dz, me.h)) me.y += dz;
+        // Hard coordinate clamp against any glitching out of map
+        me.x = Math.max(0.15, Math.min(state.map.w - 1.15, me.x));
+        me.y = Math.max(0.15, Math.min(state.map.h - 1.15, me.y));
+      }
+
+      if (adminFlying) {
+        me.vy = 0;
+        if (k.has(' ') || k.has('Space')) me.h += 8 * dt;
+        else if (k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight')) me.h = Math.max(0, me.h - 8 * dt);
+      }
+
+      // Auto-resolve any slight penetration with colliders so player never gets stuck against item tables or obstacles
+      if (!adminNoclip && !me.seatSlot && world?.features?.colliders) {
+        for (const c of world.features.colliders) {
+          const colH = c.r > 0.6 ? 1.05 : 0.85;
+          if (me.h >= colH - 0.15) continue; // Standing on top of object!
+          const d = Math.hypot(me.x - c.x, me.y - c.y);
+          const minD = c.r * 0.75 + RADIUS;
+          if (d < minD && d > 0.0001) {
+            const overlap = minD - d;
+            const pushFactor = Math.min(overlap, dt * 8);
+            const px = ((me.x - c.x) / d) * pushFactor;
+            const py = ((me.y - c.y) / d) * pushFactor;
+            if (!isSolid(tileAt(Math.floor(me.x + px + 0.5), Math.floor(me.y + py + 0.5)))) {
+              me.x += px;
+              me.y += py;
+            }
           }
         }
       }
-    }
 
-    if (mode === 'fps') me.r = yaw + Math.PI;
-    else if (moving && !me.seatSlot) me.r = lerpAngle(me.r, Math.atan2(dx, dz), Math.min(1, dt * 14));
+      if (mode === 'fps') me.r = yaw + Math.PI;
+      else if (moving && !me.seatSlot) me.r = lerpAngle(me.r, Math.atan2(dx, dz), Math.min(1, dt * 14));
 
-    // Parkour & Vertical physics with stand-on-obstacle landing
-    if (!adminFlying) {
-      const floorH = getStandHeight(me.x, me.y);
-      if (floorH === Infinity) {
-        me.x = Math.max(1, Math.min(state.map.w - 2, me.x));
-        me.y = Math.max(1, Math.min(state.map.h - 2, me.y));
-        me.h = 0;
-        me.vy = 0;
-      } else if (me.h > floorH || me.vy > 0) {
-        me.vy -= (currentGravity || GRAVITY) * dt;
-        me.h += me.vy * dt;
-        if (me.h <= floorH) {
+      // Parkour & Vertical physics with stand-on-obstacle landing
+      if (!adminFlying) {
+        floorH = getStandHeight(me.x, me.y);
+        if (floorH === Infinity) {
+          me.x = Math.max(1, Math.min(state.map.w - 2, me.x));
+          me.y = Math.max(1, Math.min(state.map.h - 2, me.y));
+          me.h = 0;
+          me.vy = 0;
+          floorH = 0;
+        } else if (me.h > floorH || me.vy > 0) {
+          me.vy -= (currentGravity || GRAVITY) * dt;
+          me.h += me.vy * dt;
+          if (me.h <= floorH) {
+            me.h = floorH;
+            me.vy = 0;
+          }
+        } else if (me.h < floorH) {
           me.h = floorH;
           me.vy = 0;
         }
-      } else if (me.h < floorH) {
-        me.h = floorH;
-        me.vy = 0;
       }
     }
-  }
 
-  // Check Couple Sofa Pairing & Campfire Proximity
-  let myLean = 0;
-  if (me.seatSlot) {
-    const partner = findCouplePartner();
-    if (partner) {
-      myLean = me.seatSlot.lean || 0;
-      if (now - lastCoupleHeart > 2200) {
-        lastCoupleHeart = now;
-        floaters.push({ e: '💕', who: net.selfId, t: Date.now() });
+    // Check Couple Sofa Pairing & Campfire Proximity
+    let myLean = 0;
+    if (me.seatSlot) {
+      const partner = findCouplePartner();
+      if (partner) {
+        myLean = me.seatSlot.lean || 0;
+        if (now - lastCoupleHeart > 2200) {
+          lastCoupleHeart = now;
+          floaters.push({ e: '💕', who: net?.selfId || 'me', t: Date.now() });
+        }
+      }
+      me.loco = partner ? 'couple_sit' : 'sit';
+    } else {
+      const isAirborne = me.h > floorH + 0.08 || me.vy > 0.5;
+      me.loco = isAirborne ? 'jump' : moving ? (running ? 'run' : 'walk') : 'idle';
+    }
+
+    // Show/hide campfire action bar when sitting on campfire log or standing near campfire
+    const nearCampfire =
+      state.theme === 'christmas' &&
+      (me.seatSlot?.campfire ||
+        world?.features?.hotspots?.some(h => h.type === 'campfire' && Math.hypot(h.x - me.x, h.y - me.y) <= h.radius));
+    $('campfireBar')?.classList.toggle('hidden', !nearCampfire);
+
+    // Update my 3D Avatar
+    const av = me.av;
+    if (av?.root) {
+      av.root.position.set(me.x * TILE, me.h, me.y * TILE);
+      av.root.rotation.y = me.r;
+      av.setLocomotion(me.loco, { lean: myLean });
+      av.update(dt);
+    }
+
+    // 4. Contextual [E] Prompt Update
+    activeTarget = findNearestInteractable();
+    const promptEl = $('interactPrompt');
+    if (promptEl) {
+      if (activeTarget) {
+        promptEl.textContent = activeTarget.prompt;
+        promptEl.classList.remove('hidden');
+      } else {
+        promptEl.classList.add('hidden');
       }
     }
-    me.loco = partner ? 'couple_sit' : 'sit';
-  } else {
-    const isAirborne = me.h > floorH + 0.08 || me.vy > 0.5;
-    me.loco = isAirborne ? 'jump' : moving ? (running ? 'run' : 'walk') : 'idle';
-  }
 
-  // Show/hide campfire action bar when sitting on campfire log or standing near campfire
-  const nearCampfire =
-    state.theme === 'christmas' &&
-    (me.seatSlot?.campfire ||
-      world.features.hotspots.some(h => h.type === 'campfire' && Math.hypot(h.x - me.x, h.y - me.y) <= h.radius));
-  $('campfireBar').classList.toggle('hidden', !nearCampfire);
-
-  // Update my 3D Avatar
-  const av = me.av;
-  av.root.position.set(me.x * TILE, me.h, me.y * TILE);
-  av.root.rotation.y = me.r;
-  av.setLocomotion(me.loco, { lean: myLean });
-  av.update(dt);
-
-  // 4. Contextual [E] Prompt Update
-  activeTarget = findNearestInteractable();
-  const promptEl = $('interactPrompt');
-  if (activeTarget) {
-    promptEl.textContent = activeTarget.prompt;
-    promptEl.classList.remove('hidden');
-  } else {
-    promptEl.classList.add('hidden');
-  }
-
-  // 6. Network Position Sync
-  const cur = {
-    x: me.x,
-    y: me.y,
-    r: me.r,
-    a: me.loco,
-    h: me.h,
-    seatId: me.seatSlot?.id || null,
-    lean: myLean,
-  };
-  if (
-    now - lastSend > 85 &&
-    (cur.a !== sent.a ||
-      cur.seatId !== sent.seatId ||
-      cur.lean !== sent.lean ||
-      Math.abs(cur.x - sent.x) > 0.005 ||
-      Math.abs(cur.y - sent.y) > 0.005 ||
-      Math.abs(cur.r - sent.r) > 0.02 ||
-      cur.h !== sent.h)
-  ) {
-    net.send('pos', cur);
-    sent = cur;
-    lastSend = now;
-  }
-
-  // 7. Update Peers
-  peers.forEach(p => {
-    const a = Math.min(1, dt * 10);
-    p.x += (p.tx - p.x) * a;
-    p.y += (p.ty - p.y) * a;
-    p.h += ((p.th || 0) - p.h) * a;
-    p.r = lerpAngle(p.r, p.tr ?? p.r, a);
-    if (p.av) {
-      p.av.root.position.set(p.x * TILE, p.h, p.y * TILE);
-      p.av.root.rotation.y = p.r;
-      p.av.setLocomotion(p.a, { lean: p.lean || 0 });
-      p.av.update(dt);
+    // 6. Network Position Sync
+    const cur = {
+      x: me.x,
+      y: me.y,
+      r: me.r,
+      a: me.loco,
+      h: me.h,
+      seatId: me.seatSlot?.id || null,
+      lean: myLean,
+    };
+    if (
+      net &&
+      now - lastSend > 85 &&
+      (cur.a !== sent.a ||
+        cur.seatId !== sent.seatId ||
+        cur.lean !== sent.lean ||
+        Math.abs(cur.x - sent.x) > 0.005 ||
+        Math.abs(cur.y - sent.y) > 0.005 ||
+        Math.abs(cur.r - sent.r) > 0.02 ||
+        cur.h !== sent.h)
+    ) {
+      net.send('pos', cur);
+      sent = cur;
+      lastSend = now;
     }
-  });
 
-  updateFloaters();
-  if (rtc && me) {
-    rtc.updatePeerDistances(me, peers);
+    // 7. Update Peers
+    peers.forEach(p => {
+      const a = Math.min(1, dt * 10);
+      p.x += (p.tx - p.x) * a;
+      p.y += (p.ty - p.y) * a;
+      p.h += ((p.th || 0) - p.h) * a;
+      p.r = lerpAngle(p.r, p.tr ?? p.r, a);
+      if (p.av) {
+        p.av.root.position.set(p.x * TILE, p.h, p.y * TILE);
+        p.av.root.rotation.y = p.r;
+        p.av.setLocomotion(p.a, { lean: p.lean || 0 });
+        p.av.update(dt);
+      }
+    });
+
+    updateFloaters();
+    if (rtc && me) {
+      rtc.updatePeerDistances(me, peers);
+    }
+    world?.sync(state, roomName);
+    world?.update(dt, { x: me.x * TILE, z: me.y * TILE });
+    minigames?.update(dt);
+    updateCamera(dt);
+    if (world?.bgColor && renderer) renderer.setClearColor(world.bgColor, 1);
+    if (renderer && scene && camera) renderer.render(scene, camera);
+
+    // Update HTML speech bubbles on top of TV screen & 3D world
+    me.av?.updateBubble(camera);
+    peers.forEach(p => p.av?.updateBubble(camera));
+    updateSeatLabels();
+  } catch (err) {
+    console.error('Lỗi game loop:', err);
   }
-  world.sync(state, roomName);
-  world.update(dt, { x: me.x * TILE, z: me.y * TILE });
-  minigames?.update(dt);
-  updateCamera(dt);
-  if (world.bgColor) renderer.setClearColor(world.bgColor, 1);
-  renderer.render(scene, camera);
-
-  // Update HTML speech bubbles on top of TV screen & 3D world
-  me.av?.updateBubble(camera);
-  peers.forEach(p => p.av?.updateBubble(camera));
-  updateSeatLabels();
-
-  requestAnimationFrame(loop);
 }
 
 function updateFloaters() {
@@ -4138,19 +4175,6 @@ function handleAdminTrigger() {
     openAdminAuthDialog();
   }
 }
-
-let adminSpeedMultiplier = 1.0;
-let adminJumpPower = 8.2;
-let adminFlying = false;
-let adminNoclip = false;
-let adminGodMode = false;
-window.adminGodMode = false;
-let isFrozen = false;
-let isJailed = false;
-let jailedPos = null;
-let currentGravity = 20;
-const adminBanList = new Set();
-const adminMuteList = new Set();
 
 let bannerTimeout = null;
 function showAdminServerBanner(text) {
