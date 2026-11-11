@@ -47,18 +47,18 @@
       <h3>🎰 Mật Thất Casino Hoàng Gia (Secret Speakeasy) & Bức Tường Ảo Ảnh</h3>
       <ul>
         <li><b>Bức Tường Ảo Ảnh Đi Xuyên Qua (Illusion Walls):</b> Cổng vào mật thất được giấu kín sau các bức tường bí mật trong góc khuất của cả 4 bản đồ.</li>
-        <li><b>Câu Đố Mật Mã Cấp Độ Bách Khoa:</b> Đòi hỏi tư duy logic đỉnh cao (Mật mã khóa RSA, Định lý Số Dư Trung Hoa, Nghịch Lý Dừng Turing, Thuật toán Gale-Shapley) để mở khóa cổng.</li>
+        <li><b>Câu Đố Mẹo & Phong Ấn Cổ Xưa:</b> Giải các câu đố mẹo dân gian hài hước (Người tuyết mùa đông, con ma sợ môn Lịch sử, Cupid bịt mắt) và phương trình Số Dư Trung Hoa để mở khóa cánh cổng dẫn thẳng vào Mật Thất Casino & Pub.</li>
         <li>Đồng bộ đa người chơi (Multiplayer): Cả phòng cùng quan sát Roulette 3D, đường đua vịt Duck Derby, bàn Blackjack rút bài tính toán, máy Slot kéo cần giật nổ hũ và Plinko thả bi mượt mà.</li>
         <li>Âm thanh Jazz cổ điển chân thực và loa chúc mừng toàn server khi có người nổ Jackpot!</li>
       </ul>
     </td>
     <td width="50%">
-      <h3>🍸 VIP Pub Bar & Cửa Hàng Thời Trang Hoàng Gia (Fashion Boutique)</h3>
+      <h3>👑 Bộ Sưu Tập 47 Danh Hiệu & Tìm Kiếm Trực Quan</h3>
       <ul>
-        <li><b>Hệ Thống Tiêu Dùng Chip Cờ Bạc:</b> Sử dụng số chip thắng cược để tậu các phụ kiện độc quyền tại quầy VIP Pub Bar.</li>
-        <li><b>Bộ Sưu Tập Phụ Kiện 3D:</b> Vương Miện Hoàng Gia, Mũ Cao Bồi, Nón Ảo Thuật Gia, Tai Mèo Dễ Thương, Kính Râm Siêu Ngầu, Mặt Nạ Hacker, Nón Phi Hành Gia, Vòng Thiên Thần, Cánh Ác Ma.</li>
-        <li><b>Hào Quang Nguyên Tố:</b> Hào Quang Hoàng Kim, Rực Lửa, Băng Giá, Trái Tim Lãng Mạn, Sấm Sét.</li>
-        <li><b>Nametag VIP:</b> Đổi màu tên, viền neon phát sáng và hiệu ứng cầu vồng động rực rỡ.</li>
+        <li><b>Kho 47 Danh Hiệu Phong Phú:</b> Tuyển tập danh hiệu độc lạ (Faker, Sơn Tùng MTP, Hieuthuhai, Main Character, Báo thủ, Rick Astley, SpongeBob, Yasuo, Allain,...).</li>
+        <li><b>Thanh Tìm Kiếm Real-Time:</b> Gõ từ khóa để lọc ngay lập tức danh hiệu yêu thích trên giao diện grid trực quan.</li>
+        <li><b>Danh Hiệu GAY - Rainbow RGB 24/7:</b> Hiệu ứng dải màu quang phổ biến đổi liên tục 24/7 cả trên thẻ huy hiệu lẫn nhãn tên nhân vật trong không gian 3D.</li>
+        <li><b>Splash Screen Thương Hiệu:</b> Màn hình chào với logo chính thức, hiệu ứng nhịp đập ánh sáng và thanh tải tiến trình mượt mà.</li>
       </ul>
     </td>
   </tr>
