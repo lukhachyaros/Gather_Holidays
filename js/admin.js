@@ -16,13 +16,13 @@ const ADMIN_ACCOUNTS = [
   {
     user: 'admin',
     // SHA-256 của 'GatherAdmin2026@'
-    hash: '5731b8a786227fc64a51ebbb22d326fbe7fbba678396c0ca8ef00ae09e53ce86',
+    hash: '5865b7b99b036a851472e1e1e085fa22239cd64c70d67974febfbff2eaabfd83',
     role: 'SuperAdmin'
   },
   {
     user: 'builder',
     // SHA-256 của 'Builder3D!Pro'
-    hash: 'f04faae9484379ca269b61d365fdfeb547d6f51cb3298c8c51a0ae652df5c832',
+    hash: '01ae2a73cca8695cfbf7f930ca38d7984aed9fa1ff296d1a9ae6996b26600ee6',
     role: '3DModeler'
   }
 ];
