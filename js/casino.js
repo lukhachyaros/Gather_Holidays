@@ -1352,3 +1352,102 @@ export function openPlinko() {
     playSfx('plinko_peg', 'casino');
   };
 }
+
+// ============================================================================
+// VIP PUB & FASHION BOUTIQUE SHOP SYSTEM (CHIP SINK ECONOMY)
+// ============================================================================
+export const CASINO_SHOP_ITEMS = [
+  // 1. Phụ kiện thời trang
+  { id: 'crown', name: 'Vương Miện Hoàng Gia', icon: '👑', price: 1500, category: 'accessory', desc: 'Đính đá ruby đỏ quyền lực của giới quý tộc' },
+  { id: 'cowboy_hat', name: 'Nón Cao Bồi Viễn Tây', icon: '🤠', price: 800, category: 'accessory', desc: 'Mũ da phong trần của những tay súng lừng danh' },
+  { id: 'top_hat', name: 'Mũ Ảo Thuật Gia', icon: '🎩', price: 1000, category: 'accessory', desc: 'Mũ lụa đen sang trọng với dải ruy băng lụa đỏ' },
+  { id: 'cat_ears', name: 'Tai Mèo Anime', icon: '🐱', price: 600, category: 'accessory', desc: 'Đôi tai mèo siêu đáng yêu rung rinh theo nhịp chân' },
+  { id: 'shades', name: 'Kính Râm Ngầu Lòi', icon: '🕶️', price: 500, category: 'accessory', desc: 'Kính phi công đen huyền bí phản chiếu ánh đèn neon' },
+  { id: 'hacker_mask', name: 'Mặt Nạ Hacker Anonymous', icon: '🎭', price: 1200, category: 'accessory', desc: 'Nụ cười bí ẩn thách thức mọi rào cản tường lửa' },
+  { id: 'astronaut_helmet', name: 'Mũ Phi Hành Gia NASA', icon: '👨‍🚀', price: 2500, category: 'accessory', desc: 'Kính chắn gió mạ vàng chống bức xạ vũ trụ' },
+  { id: 'halo', name: 'Vòng Hào Quang Thiên Thần', icon: '😇', price: 3000, category: 'accessory', desc: 'Vòng sáng thánh thiện lơ lửng trên đỉnh đầu' },
+  { id: 'devil_wings', name: 'Đôi Cánh Ác Quỷ Obsidian', icon: '🦇', price: 3500, category: 'accessory', desc: 'Đôi cánh dơi hắc ám tỏa khói đen sau lưng' },
+
+  // 2. Hào quang lấp lánh (Auras)
+  { id: 'aura_gold', name: 'Hào Quang Hoàng Kim', icon: '✨', price: 2000, category: 'aura', auraKey: 'gold', desc: 'Bụi vàng hoàng kim bay lượn quanh thân mình' },
+  { id: 'aura_fire', name: 'Hào Quang Bão Lửa', icon: '🔥', price: 2500, category: 'aura', auraKey: 'fire', desc: 'Ngọn lửa đỏ rực thiêu đốt quanh bước chân' },
+  { id: 'aura_frost', name: 'Hào Quang Băng Tuyết', icon: '❄️', price: 2500, category: 'aura', auraKey: 'frost', desc: 'Hạt sương băng giá xanh biếc xoay tròn mát lạnh' },
+  { id: 'aura_hearts', name: 'Hào Quang Trái Tim', icon: '💖', price: 1800, category: 'aura', auraKey: 'hearts', desc: 'Những trái tim hồng tình yêu bay bổng nồng nàn' },
+  { id: 'aura_lightning', name: 'Hào Quang Sấm Sét Tím', icon: '⚡', price: 3000, category: 'aura', auraKey: 'lightning', desc: 'Tia sét tím năng lượng plasma cuộn trào uy lực' },
+
+  // 3. Nametag phong cách VIP
+  { id: 'tag_gold', name: 'Nametag Vàng Hoàng Kim', icon: '🥇', price: 1000, category: 'nametag', style: { color: '#facc15', border: '#eab308' }, desc: 'Khung viền vàng bóng loáng rực rỡ' },
+  { id: 'tag_emerald', name: 'Nametag Ngọc Lục Bảo', icon: '💎', price: 1000, category: 'nametag', style: { color: '#34d399', border: '#10b981' }, desc: 'Viền ngọc lục bảo thanh nhã lấp lánh' },
+  { id: 'tag_amethyst', name: 'Nametag Thạch Anh Tím', icon: '🔮', price: 1200, category: 'nametag', style: { color: '#c084fc', border: '#a855f7' }, desc: 'Sắc tím hoàng gia huyền bí sang trọng' },
+  { id: 'tag_ice', name: 'Nametag Băng Giá Cực Quang', icon: '🧊', price: 1200, category: 'nametag', style: { color: '#38bdf8', border: '#0284c7' }, desc: 'Viền xanh băng tuyết giá lạnh Bắc Cực' },
+  { id: 'tag_rainbow', name: 'Nametag Cầu Vồng Siêu Cấp', icon: '🌈', price: 5000, category: 'nametag', style: { rainbow: true, border: '#f43f5e' }, desc: 'Chữ đổi 7 sắc cầu vồng rực rỡ độc nhất vô nhị' },
+];
+
+export function getInventory() {
+  try {
+    return JSON.parse(localStorage.getItem('gh_casino_inventory') || '[]');
+  } catch {
+    return [];
+  }
+}
+
+export function saveInventory(inv) {
+  localStorage.setItem('gh_casino_inventory', JSON.stringify(inv));
+}
+
+export function getEquipped() {
+  try {
+    return JSON.parse(localStorage.getItem('gh_casino_equipped') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+export function saveEquipped(eq) {
+  localStorage.setItem('gh_casino_equipped', JSON.stringify(eq));
+}
+
+export function buyShopItem(itemId) {
+  const item = CASINO_SHOP_ITEMS.find(it => it.id === itemId);
+  if (!item) return { ok: false, msg: 'Vật phẩm không tồn tại!' };
+
+  const inv = getInventory();
+  if (inv.includes(itemId)) {
+    return { ok: false, msg: 'Bạn đã sở hữu vật phẩm này rồi!' };
+  }
+
+  if (!spendChips(item.price)) {
+    return { ok: false, msg: `Bạn không đủ xu! Cần ${item.price.toLocaleString()} Chips.` };
+  }
+
+  inv.push(itemId);
+  saveInventory(inv);
+  playSfx('jackpot_voice', 'casino');
+  return { ok: true, msg: `🎉 Bạn đã mua thành công [${item.name}]!` };
+}
+
+export function equipShopItem(itemId) {
+  const item = CASINO_SHOP_ITEMS.find(it => it.id === itemId);
+  if (!item) return { ok: false, msg: 'Vật phẩm không tồn tại!' };
+
+  const inv = getInventory();
+  if (!inv.includes(itemId)) {
+    return { ok: false, msg: 'Bạn chưa mua vật phẩm này!' };
+  }
+
+  const eq = getEquipped();
+  eq[item.category] = itemId;
+  saveEquipped(eq);
+  playSfx('plinko_win', 'casino');
+  return { ok: true, msg: `✨ Đã trang bị [${item.name}]!` };
+}
+
+export function unequipShopItem(category) {
+  const eq = getEquipped();
+  if (eq[category]) {
+    delete eq[category];
+    saveEquipped(eq);
+    return { ok: true, msg: `Đã tháo trang bị!` };
+  }
+  return { ok: false, msg: 'Chưa có trang bị nào ở vị trí này!' };
+}

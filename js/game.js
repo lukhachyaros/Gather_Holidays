@@ -56,6 +56,12 @@ import {
   redeemCode,
   handleCasinoBroadcast,
   VALID_CODES,
+  CASINO_SHOP_ITEMS,
+  getInventory,
+  getEquipped,
+  buyShopItem,
+  equipShopItem,
+  unequipShopItem,
 } from './casino.js';
 
 let rtc = null;
@@ -365,6 +371,7 @@ try {
   initAudio();
   initCasino(world, toast, emitOp, () => me, () => peers);
   initMobileControls();
+  setupBuilderToolsInteraction();
 } catch (e) {
   console.error(e);
   document.addEventListener('DOMContentLoaded', () => toast('Trình duyệt không hỗ trợ WebGL'));
@@ -1084,6 +1091,10 @@ const pubInfo = () => ({
   costume: me.costume,
   pumpkinHat: me.pumpkinHat,
   heldItem: me.heldItem,
+  accessory: me.accessory || null,
+  aura: me.aura || null,
+  nametagStyle: me.nametagStyle || null,
+  isAdmin: typeof isAdminVerified === 'function' ? isAdminVerified() : false,
   seatId: me.seatSlot?.id || null,
 });
 
@@ -1264,10 +1275,13 @@ async function addOrUpdatePeer(id, d) {
   broadcastMyRoomToLobby();
 
   if (p.av) {
-    p.av.setName(p.name, p.title);
+    p.av.setName(p.name, p.title, p.nametagStyle);
     p.av.applyCostume(p.costume);
     p.av.setPumpkinHat(p.pumpkinHat);
     p.av.setHeldItem(p.heldItem);
+    p.av.setAccessory(p.accessory);
+    p.av.setAura(p.aura);
+    p.av.setAdminAura?.(!!p.isAdmin);
     return;
   }
   if (p.loading) return;
@@ -1282,6 +1296,10 @@ async function addOrUpdatePeer(id, d) {
     pumpkinHat: p.pumpkinHat,
   });
   p.av.setHeldItem(p.heldItem);
+  p.av.setAccessory(p.accessory);
+  p.av.setAura(p.aura);
+  p.av.setAdminAura?.(!!p.isAdmin);
+  if (p.nametagStyle) p.av.setName(p.name, p.title, p.nametagStyle);
   scene.add(p.av.root);
   p.loading = false;
   if (isNew) {
@@ -1471,12 +1489,6 @@ const handlers = {
 function applyOp(op, senderId = null) {
   switch (op.k) {
     case 'theme': {
-      // Only accept theme changes initiated by the Room Host
-      if (senderId && state.hostId && senderId !== state.hostId && op.byHost !== state.hostId) return;
-      if (op.theme === 'casino' && roomName !== SECRET_CASINO_ROOM) {
-        toast('⚠️ Casino là căn phòng mật thất bí mật, không thể đổi chủ đề phòng sang Casino!');
-        return;
-      }
       if (THEMES[op.theme]) {
         state.theme = op.theme;
         state.map = buildThemeMap(op.theme);
@@ -1484,9 +1496,10 @@ function applyOp(op, senderId = null) {
         if ($('topTheme')) $('topTheme').value = op.theme;
         leaveSeat();
         playBgm(op.theme);
+        world.sync(state, roomName);
         minigames?.setTheme(op.theme);
         broadcastMyRoomToLobby();
-        toast(`🗺️ Chủ phòng đã chuyển chủ đề sang: ${THEMES[op.theme].name}`);
+        toast(op.theme === 'casino' ? '🎰 Cả phòng đã cùng bước vào Mật Thất Casino Hoàng Gia!' : `🗺️ Chủ phòng đã chuyển chủ đề sang: ${THEMES[op.theme].name}`);
       }
       break;
     }
@@ -1824,6 +1837,36 @@ function applyOp(op, senderId = null) {
       }
       break;
     }
+    case 'admin_limb_state': {
+      if (op.target === me?.name || op.target === 'all') {
+        me.av?.setLimbState?.(op.limbs);
+        playSfx('splat', 'halloween');
+      }
+      peers.forEach(p => {
+        if (op.target === p.name || op.target === 'all') {
+          p.av?.setLimbState?.(op.limbs);
+        }
+      });
+      break;
+    }
+    case 'admin_block_place': {
+      world.addBuilderBlock(op.block);
+      playSfx('plinko_peg', 'casino');
+      break;
+    }
+    case 'admin_block_remove': {
+      world.removeBuilderBlock(op.blockId);
+      break;
+    }
+    case 'admin_summon_mob': {
+      spawnMobAttack(op.mob || 'bat', op.target, op.by);
+      break;
+    }
+    case 'love_wishing_toss': {
+      toast(`💖 ${op.by} vừa tung đồng xu ước nguyện và nhận ban phúc: [${op.blessing.title}]!`);
+      playSfx('jackpot_voice', 'casino');
+      break;
+    }
     case 'admin_reset_all': {
       adminSpeedMultiplier = 1.0;
       adminJumpPower = 8.2;
@@ -1836,15 +1879,18 @@ function applyOp(op, senderId = null) {
       jailedPos = null;
       currentGravity = 20;
       adminSpinUntil = 0;
+      world.clearBuilderBlocks();
       document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active');
       if (me?.av) {
         me.av.root.scale.set(1, 1, 1);
         me.av.root.visible = true;
+        me.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
       }
       peers.forEach(p => {
         if (p.av) {
           p.av.root.scale.set(1, 1, 1);
           p.av.root.visible = true;
+          p.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
         }
       });
       toast('✨ Tất cả hiệu ứng troll đã được khôi phục về trạng thái ban đầu!');
@@ -3207,11 +3253,14 @@ function triggerInteract(target = activeTarget) {
         openDialog('dlgCostume');
         break;
       case 'heart_tree':
-      case 'love_fountain':
         playSfx('wishing_fountain', 'valentine');
         refreshRecipients();
         $('cardStyle').value = 'love';
         openDialog('dlgCard');
+        break;
+      case 'love_fountain':
+        playSfx('wishing_fountain', 'valentine');
+        openLoveWishingDialog(h.id);
         break;
       case 'mai_tree':
         pickAndOpenLixi();
@@ -3243,6 +3292,10 @@ function triggerInteract(target = activeTarget) {
         break;
       case 'plinko':
         openPlinko();
+        break;
+      case 'casino_pub':
+        playSfx('pop');
+        openCasinoShopDialog();
         break;
       case 'secret_passage':
         playSfx('wishing_fountain', 'valentine');
@@ -3634,8 +3687,8 @@ function getStandHeight(x, y) {
   if (world?.features?.colliders) {
     for (const c of world.features.colliders) {
       const d = Math.hypot(x - c.x, y - c.y);
-      if (d < c.r * 0.75 + RADIUS) {
-        const colH = c.r > 0.6 ? 1.05 : 0.85;
+      if (d < c.r * 0.65 + RADIUS * 0.5) {
+        const colH = c.r > 0.6 ? 1.0 : 0.82;
         maxH = Math.max(maxH, colH);
       }
     }
@@ -3647,11 +3700,11 @@ function getStandHeight(x, y) {
       if (s.kind === 'couple') {
         const dx = Math.abs(x - s.x);
         const dy = Math.abs(y - s.y);
-        if (dx < 0.52 && dy < 0.38) {
+        if (dx < 0.45 && dy < 0.32) {
           maxH = Math.max(maxH, 0.48);
         }
       } else {
-        if (Math.hypot(x - s.x, y - s.y) < 0.36) {
+        if (Math.hypot(x - s.x, y - s.y) < 0.32) {
           maxH = Math.max(maxH, 0.44);
         }
       }
@@ -3695,13 +3748,13 @@ const free = (x, y, currentH = 0) => {
     }
   }
 
-  // Colliders (tables, tree base, fountain, stage)
+  // Colliders (tables, tree base, fountain, stage) with 0 air gap
   if (world?.features?.colliders) {
     for (const c of world.features.colliders) {
-      const colH = c.r > 0.6 ? 1.05 : 0.85;
+      const colH = c.r > 0.6 ? 1.0 : 0.82;
       if (currentH >= colH - 0.22) continue; // Can jump/stand on top!
 
-      const minD = c.r * 0.75 + RADIUS;
+      const minD = c.r * 0.62 + RADIUS * 0.4;
       const nextD = Math.hypot(x - c.x, y - c.y);
       if (nextD < minD) {
         const curD = Math.hypot(me.x - c.x, me.y - c.y);
@@ -3723,8 +3776,8 @@ const free = (x, y, currentH = 0) => {
       if (s.kind === 'couple') {
         const dx = Math.abs(x - s.x);
         const dy = Math.abs(y - s.y);
-        const limitX = 0.46 + RADIUS * 0.75;
-        const limitY = 0.28 + RADIUS * 0.75;
+        const limitX = 0.38 + RADIUS * 0.4;
+        const limitY = 0.22 + RADIUS * 0.4;
         if (dx < limitX && dy < limitY) {
           const curDx = Math.abs(me.x - s.x);
           const curDy = Math.abs(me.y - s.y);
@@ -4133,39 +4186,49 @@ function updateCamera(dt = 0.016) {
 let lastRoomBeforeCasino = null;
 
 function enterSecretCasino() {
-  if (roomName === SECRET_CASINO_ROOM) {
+  if (state?.theme === 'casino') {
     toast('🎰 Bạn đang ở trong Mật Thất Casino rồi!');
     return;
   }
+  toast('🌀 Bức màn bí mật hé mở... Đang dịch chuyển vào Mật Thất Casino Hoàng Gia!');
+  leaveSeat();
   lastRoomBeforeCasino = {
     id: roomName,
     title: roomTitle,
     theme: state?.theme || 'christmas',
   };
-  toast('🌀 Bức màn bí mật hé mở... Đang dịch chuyển vào Mật Thất Casino Hoàng Gia!');
-  leaveSeat();
-  joinRoomConfig({
-    id: SECRET_CASINO_ROOM,
-    title: '🎰 Mật Thất Casino Hoàng Gia (Secret Speakeasy)',
-    theme: 'casino',
-    passHash: '',
-  });
+  state.theme = 'casino';
+  state.map = buildThemeMap('casino');
+  world.sync(state, roomName);
+  me.x = 14.5;
+  me.y = 18.5;
+  me.h = 0;
+  me.vy = 0;
+  if (me.av?.root) {
+    me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
+  }
+  playBgm('casino');
+  minigames?.setTheme('casino');
+  emitOp({ k: 'theme', theme: 'casino', isSecretChamber: true, byHost: state?.hostId || net?.selfId });
 }
 
 function exitSecretCasino() {
-  const returnRoom = lastRoomBeforeCasino || {
-    id: 'quang-truong-noel',
-    title: 'Quảng Trường Giáng Sinh',
-    theme: 'christmas',
-  };
+  const returnTheme = lastRoomBeforeCasino?.theme || 'christmas';
   toast('🚪 Bạn đã bước qua cánh cửa cổ kính trở về thế giới bên trên!');
   leaveSeat();
-  joinRoomConfig({
-    id: returnRoom.id,
-    title: returnRoom.title,
-    theme: returnRoom.theme,
-    passHash: '',
-  });
+  state.theme = returnTheme;
+  state.map = buildThemeMap(returnTheme);
+  world.sync(state, roomName);
+  me.x = 14.5;
+  me.y = 18.5;
+  me.h = 0;
+  me.vy = 0;
+  if (me.av?.root) {
+    me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
+  }
+  playBgm(returnTheme);
+  minigames?.setTheme(returnTheme);
+  emitOp({ k: 'theme', theme: returnTheme, byHost: state?.hostId || net?.selfId });
 }
 
 let activeFoundNoteCode = '';
@@ -4173,35 +4236,45 @@ let activeFoundNoteCode = '';
 const PASSAGE_RIDDLES = {
   christmas: {
     icon: '🎄',
-    title: 'Phong Ấn Cổ Thụ Tuyết',
-    sub: 'Giải mật mã dãy số ma thuật để mở cánh cổng dẫn vào Mật Thất Casino',
-    question: 'Dãy số ma thuật ẩn giấu dưới gốc Thông Tuyết Noel: 3, 6, 12, 24, ? — Con số tiếp theo để mở khóa phong ấn là gì?',
-    options: ['36', '48', '30', '42'],
+    title: 'Phong Ấn Mật Mã RSA (Số Học Bách Khoa)',
+    sub: 'Giải phương trình đồng dư số nguyên tố để mở khóa Mật Thất Casino',
+    question: 'Hệ mã hóa RSA chọn 2 số nguyên tố p = 61, q = 53 (n = 3233), và khóa công khai e = 17. Để tìm khóa giải mã bí mật d sao cho e·d ≡ 1 (mod φ(n)), ta giải: 17d ≡ 1 (mod 3120). Giá trị của d là:',
+    options: ['d = 1847', 'd = 2753', 'd = 3119', 'd = 2171'],
     correct: 1,
   },
   halloween: {
     icon: '🎃',
-    title: 'Ngọn Lửa Huyền Bí Vùng Bí Ngô',
-    sub: 'Giải câu đố bí ngô ngàn năm để bước vào Mật Thất Casino',
-    question: 'Thứ gì càng ăn càng lớn, uống nước thì chết, không có cánh nhưng nhảy múa trong đêm tối soi đường vào mật thất?',
-    options: ['Bóng Đêm', 'Ngọn Lửa', 'Cơn Gió Lạnh', 'Dung Nham Đá'],
+    title: 'Nghịch Lý Máy Turing & Định Lý Gödel',
+    sub: 'Vận dụng logic toán học để phá vỡ phong ấn nghịch lý ngàn năm',
+    question: 'Trong Khoa học máy tính lý thuyết, giả sử tồn tại thuật toán H quyết định bài toán Dừng (Halting Problem). Xét máy Turing nghịch lý D: D(⟨D⟩) dừng khi và chỉ khi H(D, ⟨D⟩) báo không dừng. Mệnh đề logic nào sau đây chứng minh tính bất khả quy (undecidable)?',
+    options: [
+      'Tràn bộ nhớ stack do không gian trạng thái của máy Turing quá lớn',
+      'Máy D tự mâu thuẫn: D dừng khi và chỉ khi D không dừng, dẫn đến giả thiết H tồn tại là sai',
+      'Độ phức tạp tính toán NP-Complete luôn quy về được đa thức P',
+      'Định lý Church-Turing chỉ áp dụng cho ngôn ngữ chính quy Automata hữu hạn',
+    ],
     correct: 1,
   },
   tet: {
     icon: '🐉',
-    title: 'Phong Ấn Kim Long Tứ Linh',
-    sub: 'Giải mật thư truyền thuyết nghìn năm để mở cánh cổng Speakeasy',
-    question: 'Trong Tứ Linh (Long - Lân - Quy - Phụng), linh vật nào uốn lượn mang pháo hoa tài lộc và canh giữ kho báu hoàng gia?',
-    options: ['Huyền Vũ (Rùa)', 'Bạch Hổ (Hổ Trắng)', 'Kim Long (Rồng Vàng)', 'Chu Tước (Phượng Hoàng)'],
-    correct: 2,
+    title: 'Định Lý Số Dư Trung Hoa (Toán Tin Bách Khoa)',
+    sub: 'Giải hệ phương trình đồng dư Sun Tzu để mở cánh cổng Speakeasy',
+    question: 'Tìm số nguyên dương nhỏ nhất x thỏa mãn hệ phương trình đồng dư sau:\nx ≡ 2 (mod 3)\nx ≡ 3 (mod 5)\nx ≡ 2 (mod 7)\nGiá trị nhỏ nhất của x là:',
+    options: ['x = 23', 'x = 38', 'x = 53', 'x = 128'],
+    correct: 0,
   },
   valentine: {
     icon: '🏹',
-    title: 'Mũi Tên Trái Tim Thần Cupid',
-    sub: 'Giải câu đố tình yêu đích thực để đánh thức mật thất ẩn',
-    question: 'Thứ gì vô hình nhưng nặng ngàn cân, có thể chữa lành mọi vết thương và mở khóa được cả những trái tim sắt đá nhất?',
-    options: ['Kim Cương Lấp Lánh', 'Tình Yêu Đích Thực', 'Kho Báu Hoàng Gia', 'Thuốc Ma Thuật'],
-    correct: 1,
+    title: 'Lý Thuyết Trò Chơi & Thuật Toán Gale-Shapley',
+    sub: 'Cân bằng Nash & Ghép cặp hôn nhân bền vững Nobel Kinh Tế',
+    question: 'Trong Thuật toán Ghép cặp Bền vững Gale-Shapley (Deferred Acceptance) với tập n nam và n nữ có danh sách ưu tiên nghiêm ngặt. Khi phía chủ động cầu hôn là phía nam, phát biểu nào sau đây đúng về trạng thái bền vững đạt được?',
+    options: [
+      'Tạo ra kết quả tối ưu cho nữ (female-optimal) và tồi nhất cho nam',
+      'Thuật toán có thể lặp vô hạn và không bao giờ hội tụ',
+      'Luôn đạt trạng thái tối ưu cho bên đề xuất (male-optimal) và tồi nhất cho bên chấp thuận (female-pessimal)',
+      'Chỉ tồn tại duy nhất một cặp đôi ghép được không phụ thuộc danh sách ưu tiên',
+    ],
+    correct: 2,
   },
 };
 
@@ -4532,7 +4605,8 @@ function updateAdminUIStatus() {
       btnAdmin.title = 'Bảng Quản Trị Viên (ĐÃ XÁC THỰC) - Phím [;]';
       if (me) {
         me.title = '👑 ADMIN';
-        me.av?.setName(me.name, me.title);
+        me.av?.setName(me.name, me.title, me.nametagStyle);
+        me.av?.setAdminAura?.(true);
         syncMyAppearance();
       }
     } else {
@@ -4542,6 +4616,9 @@ function updateAdminUIStatus() {
       btnAdmin.style.boxShadow = 'none';
       btnAdmin.style.color = '#fca5a5';
       btnAdmin.title = 'Nhấn để xác thực quyền Admin với mật mã "grinding shit" - Phím [;]';
+      if (me) {
+        me.av?.setAdminAura?.(false);
+      }
     }
   }
 }
@@ -4615,6 +4692,383 @@ $('btnSubmitAdminAuth').onclick = () => {
 $('inAdminPass').onkeydown = e => {
   if (e.key === 'Enter') $('btnSubmitAdminAuth').click();
 };
+
+// ============================================================================
+// VIP PUB & FASHION BOUTIQUE SHOP
+// ============================================================================
+let activeShopCategory = 'accessory';
+
+function renderCasinoShopGrid() {
+  const grid = $('shopItemGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  if ($('shopWalletChips')) {
+    $('shopWalletChips').textContent = (getChips() || 0).toLocaleString();
+  }
+
+  const inv = getInventory();
+  const equipped = getEquipped();
+  const items = CASINO_SHOP_ITEMS.filter(it => it.category === activeShopCategory);
+
+  items.forEach(it => {
+    const isOwned = inv.includes(it.id);
+    const isEquipped = equipped[activeShopCategory] === it.id;
+
+    const card = document.createElement('div');
+    card.className = `shop-item-card ${isEquipped ? 'equipped' : ''}`;
+    card.innerHTML = `
+      <div class="shop-item-icon" style="font-size:32px;text-align:center;margin-bottom:6px">${it.icon || '✨'}</div>
+      <div class="shop-item-name" style="font-weight:700;color:#fde047;font-size:14px">${it.name}</div>
+      <div class="shop-item-desc" style="font-size:11.5px;color:#cbd5e1;margin:4px 0 10px 0;min-height:32px">${it.desc}</div>
+      <div class="shop-item-footer">
+        ${isOwned ? `
+          ${isEquipped 
+            ? `<button class="shop-item-btn unequip" data-action="unequip" data-id="${it.id}" style="width:100%;background:rgba(239,68,68,0.2);border:1px solid #ef4444;color:#fca5a5;padding:6px;border-radius:6px;cursor:pointer">Đang dùng (Tháo)</button>`
+            : `<button class="shop-item-btn equip" data-action="equip" data-id="${it.id}" style="width:100%;background:rgba(34,197,94,0.2);border:1px solid #22c55e;color:#86efac;padding:6px;border-radius:6px;cursor:pointer">Trang bị</button>`}
+        ` : `
+          <button class="shop-item-btn buy" data-action="buy" data-id="${it.id}" style="width:100%;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#fff;font-weight:700;padding:6px;border-radius:6px;cursor:pointer">🪙 ${it.price.toLocaleString()} Chips</button>
+        `}
+      </div>
+    `;
+
+    card.querySelector('button')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const action = e.target.getAttribute('data-action');
+      const id = e.target.getAttribute('data-id');
+      if (action === 'buy') {
+        const res = buyShopItem(id);
+        if (res.ok) {
+          playSfx('jackpot_voice', 'casino');
+          toast(`🎉 Bạn đã mua thành công: ${it.name}!`);
+          renderCasinoShopGrid();
+        } else {
+          toast(res.msg || '⚠️ Không thể mua vật phẩm!');
+        }
+      } else if (action === 'equip') {
+        equipShopItem(id);
+        if (activeShopCategory === 'accessory') {
+          me.accessory = id;
+          me.av?.setAccessory?.(id);
+        } else if (activeShopCategory === 'aura') {
+          me.aura = id;
+          me.av?.setAura?.(id);
+        } else if (activeShopCategory === 'nametag') {
+          me.nametagStyle = id;
+          me.av?.setName?.(me.name, me.title, id);
+        }
+        syncMyAppearance();
+        toast(`✨ Đã trang bị: ${it.name}!`);
+        renderCasinoShopGrid();
+      } else if (action === 'unequip') {
+        unequipShopItem(activeShopCategory);
+        if (activeShopCategory === 'accessory') {
+          me.accessory = null;
+          me.av?.setAccessory?.(null);
+        } else if (activeShopCategory === 'aura') {
+          me.aura = null;
+          me.av?.setAura?.(null);
+        } else if (activeShopCategory === 'nametag') {
+          me.nametagStyle = null;
+          me.av?.setName?.(me.name, me.title, null);
+        }
+        syncMyAppearance();
+        toast(`Đã tháo ${it.name}`);
+        renderCasinoShopGrid();
+      }
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+function openCasinoShopDialog() {
+  openDialog('dlgCasinoShop');
+  renderCasinoShopGrid();
+}
+
+$('tabShopAccessory')?.addEventListener('click', () => {
+  activeShopCategory = 'accessory';
+  $('tabShopAccessory').classList.add('active');
+  $('tabShopAura').classList.remove('active');
+  $('tabShopNametag').classList.remove('active');
+  renderCasinoShopGrid();
+});
+$('tabShopAura')?.addEventListener('click', () => {
+  activeShopCategory = 'aura';
+  $('tabShopAura').classList.add('active');
+  $('tabShopAccessory').classList.remove('active');
+  $('tabShopNametag').classList.remove('active');
+  renderCasinoShopGrid();
+});
+$('tabShopNametag')?.addEventListener('click', () => {
+  activeShopCategory = 'nametag';
+  $('tabShopNametag').classList.add('active');
+  $('tabShopAccessory').classList.remove('active');
+  $('tabShopAura').classList.remove('active');
+  renderCasinoShopGrid();
+});
+
+// ============================================================================
+// VALENTINE LOVE WISHING FOUNTAIN
+// ============================================================================
+const LOVE_BLESSINGS = [
+  {
+    title: 'Hào Quang Trái Tim Vĩnh Cửu',
+    desc: 'Thần Tình Yêu ban tặng hào quang trái tim lấp lánh tỏa sáng quanh người bạn!',
+    apply() {
+      me.aura = 'hearts';
+      me.av?.setAura?.('hearts');
+      syncMyAppearance();
+    }
+  },
+  {
+    title: 'Đôi Cánh Tình Thần Cupid (+45% Tốc Độ)',
+    desc: 'Lực hút tình yêu nâng bước chân bạn, tăng 45% tốc độ di chuyển trong 30 giây!',
+    apply() {
+      adminSpeedMultiplier = 1.45;
+      setTimeout(() => { if (adminSpeedMultiplier === 1.45) adminSpeedMultiplier = 1.0; }, 30000);
+    }
+  },
+  {
+    title: 'Lì Xì Tình Nhân May Mắn (+200 Chips)',
+    desc: 'Đồng xu chạm đáy suối thiêng nhân đôi phước lộc, ban tặng bạn +200 xu Casino!',
+    apply() {
+      addChips(200);
+      updateCasinoChipsUI();
+    }
+  },
+  {
+    title: 'Danh Hiệu Tình Yêu: "Tình Yêu Bất Diệt"',
+    desc: 'Khắc ghi tên bạn lên đài vinh danh những trái tim chung thủy nhất vũ trụ!',
+    apply() {
+      me.title = '💖 Tình Yêu Bất Diệt';
+      me.av?.setName(me.name, me.title, me.nametagStyle);
+      syncMyAppearance();
+    }
+  },
+  {
+    title: 'Hôn Gió Ngọt Ngào & Tình Yêu Thăng Hoa',
+    desc: 'Một nụ hôn gió ngọt ngào thổi bùng những cánh hồng rực rỡ khắp sân suối!',
+    apply() {
+      me.av?.playEmote('kiss');
+    }
+  }
+];
+
+function openLoveWishingDialog(fountainId) {
+  const box = $('wishingCardBox');
+  if (box) box.classList.add('hidden');
+  openDialog('dlgLoveWishing');
+}
+
+$('btnTossLoveCoin')?.addEventListener('click', () => {
+  playSfx('wishing_fountain', 'valentine');
+  playSfx('coin', 'casino');
+  me.av?.playEmote?.('interact');
+  world.spawnFireworksShow?.(me.x, me.y);
+
+  const blessing = LOVE_BLESSINGS[Math.floor(Math.random() * LOVE_BLESSINGS.length)];
+  blessing.apply();
+
+  const box = $('wishingCardBox');
+  const titleEl = $('wishingResultTitle');
+  const descEl = $('wishingResultDesc');
+  if (box && titleEl && descEl) {
+    titleEl.textContent = `✨ ${blessing.title}`;
+    descEl.textContent = blessing.desc;
+    box.classList.remove('hidden');
+  }
+
+  emitOp({ k: 'love_wishing_toss', by: me.name, blessing: { title: blessing.title, desc: blessing.desc } });
+  toast(`💖 ${blessing.title}: ${blessing.desc}`);
+});
+
+// ============================================================================
+// ROBLOX STYLE BUILDER TOOLS (:btools / :build)
+// ============================================================================
+let adminBuilderMode = false;
+const builderRaycaster = new THREE.Raycaster();
+const builderMouse = new THREE.Vector2();
+
+function setupBuilderToolsInteraction() {
+  if (!renderer?.domElement) return;
+  const canvas = renderer.domElement;
+  canvas.addEventListener('click', (e) => {
+    if (!adminBuilderMode || !isAdminVerified()) return;
+    if (document.pointerLockElement) return;
+
+    const rect = canvas.getBoundingClientRect();
+    builderMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    builderMouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    builderRaycaster.setFromCamera(builderMouse, camera);
+
+    const blockMeshes = Array.from(world.builderBlocks.values());
+    const blockIntersects = builderRaycaster.intersectObjects(blockMeshes, true);
+
+    if (e.altKey && blockIntersects.length > 0) {
+      let topHit = blockIntersects[0].object;
+      while (topHit.parent && !topHit.userData.blockId && topHit.parent !== world.builderBlocksGroup) {
+        topHit = topHit.parent;
+      }
+      const bId = topHit.userData.blockId;
+      if (bId) {
+        world.removeBuilderBlock(bId);
+        emitOp({ k: 'admin_block_remove', blockId: bId });
+        playSfx('wood');
+        toast('🧱 Đã xóa khối xây dựng!');
+        return;
+      }
+    }
+
+    const groundTargets = world.groundMesh ? [world.groundMesh, ...blockMeshes] : blockMeshes;
+    const hits = builderRaycaster.intersectObjects(groundTargets, true);
+    if (hits.length > 0) {
+      const pt = hits[0].point;
+      const bColors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#facc15', '#06b6d4'];
+      const chosenColor = bColors[Math.floor(Math.random() * bColors.length)];
+      const block = {
+        id: 'block_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+        x: Math.round(pt.x * 2) / 2,
+        y: Math.max(0.5, Math.round(pt.y * 2) / 2 + 0.5),
+        z: Math.round(pt.z * 2) / 2,
+        color: chosenColor,
+        size: 1.0,
+      };
+      world.addBuilderBlock(block);
+      emitOp({ k: 'admin_block_place', block });
+      playSfx('plinko_peg', 'casino');
+      toast('🧱 Đã đặt khối 3D! (Giữ Alt + Click khối để Xóa)');
+    }
+  });
+}
+
+// ============================================================================
+// ADMIN MOB ATTACK & HUNT SYSTEM (:summon / :attack)
+// ============================================================================
+function spawnMobAttack(mobType = 'bat', targetName, byAdmin = 'Admin') {
+  toast(`🦇 ${byAdmin} đã triệu hồi QUÁI VẬT BÓNG ĐÊM săn đuổi [${targetName || 'mọi người'}]!`);
+  playSfx('spooky_laugh', 'halloween');
+
+  const mobGroup = new THREE.Group();
+  
+  const bodyGeo = new THREE.SphereGeometry(0.35, 12, 12);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x180024, roughness: 0.4 });
+  const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+  bodyMesh.position.y = 0.35;
+  mobGroup.add(bodyMesh);
+
+  const eyeGeo = new THREE.SphereGeometry(0.08, 8, 8);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.14, 0.45, 0.28);
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.14, 0.45, 0.28);
+  mobGroup.add(leftEye, rightEye);
+
+  const fangGeo = new THREE.ConeGeometry(0.05, 0.16, 6);
+  const fangMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const leftFang = new THREE.Mesh(fangGeo, fangMat);
+  leftFang.rotation.x = Math.PI;
+  leftFang.position.set(-0.1, 0.24, 0.3);
+  const rightFang = new THREE.Mesh(fangGeo, fangMat);
+  rightFang.rotation.x = Math.PI;
+  rightFang.position.set(0.1, 0.24, 0.3);
+  mobGroup.add(leftFang, rightFang);
+
+  const wingShape = new THREE.Shape();
+  wingShape.moveTo(0, 0);
+  wingShape.lineTo(0.6, 0.4);
+  wingShape.lineTo(0.9, 0.1);
+  wingShape.lineTo(0.5, -0.2);
+  wingShape.lineTo(0, 0);
+  const wingGeo = new THREE.ShapeGeometry(wingShape);
+  const wingMat = new THREE.MeshStandardMaterial({ color: 0x3b0764, side: THREE.DoubleSide });
+
+  const leftWing = new THREE.Mesh(wingGeo, wingMat);
+  leftWing.position.set(-0.25, 0.35, 0);
+  leftWing.rotation.y = Math.PI;
+
+  const rightWing = new THREE.Mesh(wingGeo, wingMat);
+  rightWing.position.set(0.25, 0.35, 0);
+
+  mobGroup.add(leftWing, rightWing);
+
+  mobGroup.position.set(me.x * TILE, me.h + 3.0, me.y * TILE);
+  scene.add(mobGroup);
+
+  const startTime = performance.now();
+  const maxDuration = 12000;
+
+  const anim = () => {
+    const elapsed = performance.now() - startTime;
+    if (elapsed > maxDuration) {
+      scene.remove(mobGroup);
+      return;
+    }
+
+    const wingFlap = Math.sin(elapsed * 0.02) * 0.7;
+    leftWing.rotation.z = wingFlap;
+    rightWing.rotation.z = -wingFlap;
+
+    let tx = me.x * TILE;
+    let ty = me.h + 0.8;
+    let tz = me.y * TILE;
+
+    if (targetName && targetName !== me.name && targetName !== 'all') {
+      const pEntry = findPeerByName(targetName);
+      if (pEntry) {
+        tx = pEntry[1].x * TILE;
+        ty = (pEntry[1].h || 0) + 0.8;
+        tz = pEntry[1].y * TILE;
+      }
+    }
+
+    const dx = tx - mobGroup.position.x;
+    const dy = ty - mobGroup.position.y;
+    const dz = tz - mobGroup.position.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+    if (dist > 0.45) {
+      mobGroup.position.x += (dx / dist) * 0.22;
+      mobGroup.position.y += (dy / dist) * 0.22;
+      mobGroup.position.z += (dz / dist) * 0.22;
+      mobGroup.lookAt(tx, ty, tz);
+      requestAnimationFrame(anim);
+    } else {
+      playSfx('spooky_laugh', 'halloween');
+      playSfx('splat', 'halloween');
+
+      if (targetName === me.name || targetName === 'all' || !targetName) {
+        me.av?.showTomatoSplat?.();
+        document.body.classList.add('earthquake-active');
+        setTimeout(() => document.body.classList.remove('earthquake-active'), 1200);
+
+        if (!adminGodMode && !window.adminGodMode) {
+          toast(`💀 BẠN ĐÃ BỊ QUÁI VẬT CẮN HẾT MÁU! Đang hồi sinh về vị trí xuất phát...`);
+          me.x = 14.5;
+          me.y = 18.5;
+          me.h = 0;
+          me.vy = 0;
+          me.av?.playEmote?.('cry');
+        } else {
+          toast('🛡️ BẬT BẤT TỬ (GOD MODE): Quái cắn không xi nhê!');
+        }
+      }
+
+      peers.forEach(p => {
+        if (targetName === p.name || targetName === 'all') {
+          p.av?.showTomatoSplat?.();
+          p.av?.playEmote?.('scared');
+        }
+      });
+
+      scene.remove(mobGroup);
+    }
+  };
+
+  requestAnimationFrame(anim);
+}
 
 $('btnRunAdminCmd').onclick = () => {
   const cmd = $('inAdminCmd').value.trim();
@@ -5006,7 +5460,70 @@ function executeAdminCommand(raw) {
       return true;
     }
 
+    // === BUILDER TOOLS ===
+    case 'btools':
+    case 'build': {
+      adminBuilderMode = !adminBuilderMode;
+      document.body.classList.toggle('builder-mode-active', adminBuilderMode);
+      toast(adminBuilderMode 
+        ? '🧱 BẬT BUILDER TOOL: Click để ĐẶT khối 3D, Giữ Alt + Click khối để XÓA!' 
+        : '🧱 ĐÃ TẮT BUILDER TOOL');
+      return true;
+    }
+
+    // === MOB ATTACK & HUNT ===
+    case 'summon':
+    case 'attack': {
+      let mobType = 'bat';
+      let targetName = args[0] || me.name;
+      if (args.length >= 2) {
+        mobType = args[0];
+        targetName = args[1];
+      }
+      emitOp({ k: 'admin_summon_mob', mob: mobType, target: targetName, by: me.name });
+      spawnMobAttack(mobType, targetName, me.name);
+      return true;
+    }
+
+    // === LEGO LIMB DETACH TROLLS ===
+    case 'headless': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_limb_state', target: targetName, limbs: { head: false } });
+      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ head: false });
+      toast(`🪓 Đã tháo bay đầu của ${targetName} rớt Lego!`);
+      return true;
+    }
+    case 'disarm': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_limb_state', target: targetName, limbs: { leftArm: false, rightArm: false } });
+      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ leftArm: false, rightArm: false });
+      toast(`🦾 Đã tháo mất 2 cánh tay của ${targetName}!`);
+      return true;
+    }
+    case 'amputate': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_limb_state', target: targetName, limbs: { leftArm: false, rightArm: false, legs: false } });
+      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ leftArm: false, rightArm: false, legs: false });
+      toast(`🦿 Đã tháo rụng tứ chi của ${targetName}!`);
+      return true;
+    }
+    case 'lego': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_limb_state', target: targetName, limbs: { head: false, leftArm: false, rightArm: false, legs: false } });
+      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ head: false, leftArm: false, rightArm: false, legs: false });
+      toast(`🧱 Đã nổ tung người ${targetName} thành các khối Lego rời rạc!`);
+      return true;
+    }
+    case 'rearm': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_limb_state', target: targetName, limbs: { head: true, leftArm: true, rightArm: true, legs: true } });
+      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
+      toast(`✨ Đã lắp ráp lại tứ chi nguyên vẹn cho ${targetName}!`);
+      return true;
+    }
+
     // === 5. RESET COMMANDS ===
+    case 'reset':
     case 'resetall':
     case 'clean': {
       emitOp({ k: 'admin_reset_all', by: me.name });
@@ -5021,18 +5538,22 @@ function executeAdminCommand(raw) {
       jailedPos = null;
       currentGravity = 20;
       adminSpinUntil = 0;
-      document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active');
+      adminBuilderMode = false;
+      document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active', 'builder-mode-active');
+      world.clearBuilderBlocks();
       if (me?.av) {
         me.av.root.scale.set(1, 1, 1);
         me.av.root.visible = true;
+        me.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
       }
       peers.forEach(p => {
         if (p.av) {
           p.av.root.scale.set(1, 1, 1);
           p.av.root.visible = true;
+          p.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
         }
       });
-      toast('✨ Đã đặt lại toàn bộ hiệu ứng troll về mặc định!');
+      toast('✨ Đã đặt lại toàn bộ hiệu ứng troll & khôi phục trạng thái hoàn toàn!');
       return true;
     }
     case 'resetchips': {
