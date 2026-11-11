@@ -158,7 +158,21 @@ export function initCasino(world, toast, emitOp = null, getMe = null, getPeers =
   getPeersRef = getPeers;
 }
 
-export function broadcastCasinoPlay(gameName, detail = '') {
+export let activePlinkoInstance = null;
+export let activeRouletteInstance = null;
+export let activeDuckDerbyInstance = null;
+
+export function updateCasinoTicker(msg) {
+  const tickerEl = document.getElementById('casinoTickerText');
+  if (tickerEl) {
+    tickerEl.textContent = msg;
+    tickerEl.style.animation = 'none';
+    tickerEl.offsetHeight; // trigger reflow
+    tickerEl.style.animation = 'tickerSlideIn 0.3s ease-out';
+  }
+}
+
+export function broadcastCasinoPlay(gameName, detail = '', extra = {}) {
   if (emitOpRef) {
     const me = getMeRef?.();
     emitOpRef({
@@ -167,34 +181,58 @@ export function broadcastCasinoPlay(gameName, detail = '') {
       player: me?.name || 'Người chơi',
       detail,
       isJackpot: false,
+      ...extra,
     });
   }
 }
 
 export function handleCasinoBroadcast(op) {
   if (!op) return;
-  const { game, player, detail, isJackpot } = op;
+  const { game, player, detail, isJackpot, subAction } = op;
   if (isJackpot) {
     toastRef?.(`💥 JACKPOT! ${player} vừa trúng độc đắc ${Number(detail).toLocaleString()} Xu ở trò ${game.toUpperCase()}! 🎉`);
+    updateCasinoTicker(`💥 JACKPOT! ${player} vừa trúng độc đắc ${Number(detail).toLocaleString()} Xu ở ${game.toUpperCase()}! 🎉`);
     playSfx('jackpot_voice', 'casino');
     worldRef?.spawnFireworksShow?.(14.5, 11.5);
   } else {
     if (game === 'roulette') {
       const rt = worldRef?.casinoObjs?.find(o => o.userData?.type === 'roulette');
       rt?.userData?.spinWheel?.();
-      toastRef?.(`🎡 ${player} đang đặt cược và quay Vòng Quay Roulette!`);
+      if (subAction === 'bet') {
+        updateCasinoTicker(`🎡 ${player} vừa đặt cược ${op.amount || 10} Xu vào ô [${op.betKey}]!`);
+        activeRouletteInstance?.onPeerBet?.(player, op.betKey, op.amount || 10);
+      } else if (subAction === 'spin') {
+        updateCasinoTicker(`🎡 ${player} đang quay bánh xe Roulette!`);
+        toastRef?.(`🎡 ${player} đang quay bánh xe Roulette!`);
+        activeRouletteInstance?.onPeerSpin?.(player, op.winningNum);
+      } else {
+        toastRef?.(`🎡 ${player} đang đặt cược và quay Vòng Quay Roulette!`);
+      }
     } else if (game === 'duck_derby') {
       const dd = worldRef?.casinoObjs?.find(o => o.userData?.type === 'duck_derby');
       dd?.userData?.startRace?.();
-      toastRef?.(`🦆 ${player} vừa bấm chuông bắt đầu cuộc đua vịt Duck Derby!`);
+      if (subAction === 'start_race') {
+        updateCasinoTicker(`🦆 ${player} đã bấm còi bắt đầu cuộc đua vịt Duck Derby!`);
+        toastRef?.(`🦆 ${player} vừa bấm chuông bắt đầu cuộc đua vịt Duck Derby!`);
+        activeDuckDerbyInstance?.onPeerStartRace?.(player, op.chosenDuck, op.speeds);
+      } else {
+        toastRef?.(`🦆 ${player} vừa bấm chuông bắt đầu cuộc đua vịt Duck Derby!`);
+      }
     } else if (game === 'slot_machine') {
       const sm = worldRef?.casinoObjs?.find(o => o.userData?.type === 'slot_machine');
       sm?.userData?.pullLever?.();
+      updateCasinoTicker(`🎰 ${player} vừa giật cần quay Slot Machine 777!`);
       toastRef?.(`🎰 ${player} vừa giật cần quay Slot Machine 777!`);
     } else if (game === 'plinko') {
       const pk = worldRef?.casinoObjs?.find(o => o.userData?.type === 'plinko');
       pk?.userData?.dropBall?.();
-      toastRef?.(`⚡ ${player} vừa thả bóng chông Plinko!`);
+      if (subAction === 'drop') {
+        updateCasinoTicker(`🟡 ${player} vừa thả bóng Plinko cược ${op.bet || 25} Xu!`);
+        toastRef?.(`⚡ ${player} vừa thả bóng chông Plinko!`);
+        activePlinkoInstance?.addPeerBall?.(player, op.bet || 25, op.xOffset || 0);
+      } else {
+        toastRef?.(`⚡ ${player} vừa thả bóng chông Plinko!`);
+      }
     }
   }
 }
@@ -225,12 +263,23 @@ function createCasinoModal(title, contentHtml) {
       <div class="casino-body">
         ${contentHtml}
       </div>
+      <div class="casino-live-ticker" id="casinoLiveTicker">
+        <span class="ticker-pulse">🔴 MULTIPLAYER:</span>
+        <span class="ticker-text" id="casinoTickerText">Đang đồng bộ bàn chơi cùng bạn bè trong phòng...</span>
+      </div>
     </div>
   `;
 
   document.body.appendChild(overlay);
 
-  overlay.querySelector('#btnCloseCasinoModal').onclick = () => overlay.remove();
+  const cleanupAndClose = () => {
+    activePlinkoInstance = null;
+    activeRouletteInstance = null;
+    activeDuckDerbyInstance = null;
+    overlay.remove();
+  };
+
+  overlay.querySelector('#btnCloseCasinoModal').onclick = cleanupAndClose;
   const walletBadge = overlay.querySelector('#btnCasinoModalWallet');
   if (walletBadge) {
     walletBadge.onclick = () => {
@@ -299,7 +348,21 @@ export function openRoulette() {
   // Build Betting Grid
   const gridContainer = modal.querySelector('#rouletteGrid');
   const bets = new Map(); // key -> totalBetAmount
+  const peerBets = new Map(); // key -> Array of { player, amount }
   const redNumbers = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+
+  function getBadgesHtml(key) {
+    let html = '';
+    if (bets.has(key)) {
+      html += `<span class="chip-badge">${bets.get(key)} Xu</span>`;
+    }
+    if (peerBets.has(key)) {
+      peerBets.get(key).forEach(pb => {
+        html += `<span class="peer-chip-badge" title="${pb.player}: ${pb.amount} Xu">${pb.player}: ${pb.amount}</span>`;
+      });
+    }
+    return html;
+  }
 
   function renderGrid() {
     gridContainer.innerHTML = '';
@@ -310,7 +373,7 @@ export function openRoulette() {
     const cell0 = document.createElement('div');
     cell0.className = 'roulette-cell cell-green';
     cell0.dataset.bet = '0';
-    cell0.innerHTML = `0 ${bets.has('0') ? `<span class="chip-badge">${bets.get('0')} Xu</span>` : ''}`;
+    cell0.innerHTML = `0 ${getBadgesHtml('0')}`;
     row0.appendChild(cell0);
     gridContainer.appendChild(row0);
 
@@ -324,7 +387,7 @@ export function openRoulette() {
         const cell = document.createElement('div');
         cell.className = `roulette-cell ${isRed ? 'cell-red' : 'cell-black'}`;
         cell.dataset.bet = String(num);
-        cell.innerHTML = `${num} ${bets.has(String(num)) ? `<span class="chip-badge">${bets.get(String(num))} Xu</span>` : ''}`;
+        cell.innerHTML = `${num} ${getBadgesHtml(String(num))}`;
         row.appendChild(cell);
       }
       gridContainer.appendChild(row);
@@ -346,7 +409,7 @@ export function openRoulette() {
       const cell = document.createElement('div');
       cell.className = 'roulette-cell cell-special';
       cell.dataset.bet = sb.id;
-      cell.innerHTML = `${sb.label} ${bets.has(sb.id) ? `<span class="chip-badge">${bets.get(sb.id)} Xu</span>` : ''}`;
+      cell.innerHTML = `${sb.label} ${getBadgesHtml(sb.id)}`;
       sideRow.appendChild(cell);
     });
     gridContainer.appendChild(sideRow);
@@ -362,6 +425,9 @@ export function openRoulette() {
         bets.set(betKey, (bets.get(betKey) || 0) + selectedChipVal);
         playSfx('slot_lever', 'casino');
         renderGrid();
+
+        // Broadcast bet to peers in the room
+        broadcastCasinoPlay('roulette', `cược ${betKey}`, { subAction: 'bet', betKey, amount: selectedChipVal });
       };
     });
   }
@@ -456,28 +522,18 @@ export function openRoulette() {
   }
   drawWheel();
 
-  // Spin Logic
-  modal.querySelector('#btnSpinRoulette').onclick = () => {
-    if (isSpinning) return;
-    if (bets.size === 0) {
-      toastRef?.('⚠️ Vui lòng đặt cược ít nhất vào 1 ô trên bàn!');
-      return;
-    }
-
+  function startSpin(winningNum, isLocal = true, spinnerName = 'Bạn') {
     isSpinning = true;
     modal.querySelector('#btnSpinRoulette').disabled = true;
     modal.querySelector('#btnClearRouletteBets').disabled = true;
-    modal.querySelector('#rouletteResult').innerHTML = '🎡 Bánh xe và bóng đang quay tít...';
+    modal.querySelector('#rouletteResult').innerHTML = `🎡 ${spinnerName} đang quay bánh xe...`;
 
     playSfx('roulette_spin', 'casino');
-    broadcastCasinoPlay('roulette', 'spin');
 
     // Trigger 3D world table spin
     const rt = worldRef?.casinoObjs?.find(o => o.userData?.type === 'roulette');
     rt?.userData?.spinWheel ? rt.userData.spinWheel() : rt?.userData?.spin?.();
 
-    // Random Winning Number (0-36)
-    const winningNum = Math.floor(Math.random() * 37);
     const winIdx = wheelNumbers.indexOf(winningNum);
     const slice = (Math.PI * 2) / wheelNumbers.length;
 
@@ -507,13 +563,45 @@ export function openRoulette() {
         ballAngle = wheelAngle + winIdx * slice + slice / 2;
         ballRadius = 75;
         drawWheel();
-        finishSpin(winningNum);
+        finishSpin(winningNum, isLocal, spinnerName);
       }
     }
     requestAnimationFrame(animate);
+  }
+
+  // Hook for multiplayer synchronization
+  activeRouletteInstance = {
+    onPeerBet: (player, betKey, amount) => {
+      if (!peerBets.has(betKey)) peerBets.set(betKey, []);
+      peerBets.get(betKey).push({ player, amount });
+      renderGrid();
+      playSfx('slot_lever', 'casino');
+    },
+    onPeerSpin: (player, winningNum) => {
+      if (!isSpinning) {
+        startSpin(winningNum, false, player);
+      }
+    },
   };
 
-  function finishSpin(winningNum) {
+  // Spin Logic
+  modal.querySelector('#btnSpinRoulette').onclick = () => {
+    if (isSpinning) return;
+    if (bets.size === 0) {
+      toastRef?.('⚠️ Vui lòng đặt cược ít nhất vào 1 ô trên bàn!');
+      return;
+    }
+
+    // Random Winning Number (0-36)
+    const winningNum = Math.floor(Math.random() * 37);
+
+    // Broadcast spin to all peers in the room
+    broadcastCasinoPlay('roulette', 'spin', { subAction: 'spin', winningNum });
+
+    startSpin(winningNum, true, 'Bạn');
+  };
+
+  function finishSpin(winningNum, isLocal = true, spinnerName = 'Bạn') {
     isSpinning = false;
     modal.querySelector('#btnSpinRoulette').disabled = false;
     modal.querySelector('#btnClearRouletteBets').disabled = false;
@@ -522,7 +610,7 @@ export function openRoulette() {
     const colName = winningNum === 0 ? '🟢 Số 0 XANH' : isRed ? `🔴 Số ${winningNum} ĐỎ` : `⚫ Số ${winningNum} ĐEN`;
     const isEven = winningNum !== 0 && winningNum % 2 === 0;
 
-    // Calculate Payouts
+    // Calculate Payouts for local bets
     let totalWin = 0;
     bets.forEach((betAmt, betKey) => {
       if (betKey === String(winningNum)) {
@@ -555,13 +643,17 @@ export function openRoulette() {
         <span style="color:#4ade80;font-size:16px">🎉 THẮNG LỚN +${totalWin.toLocaleString()} Xu!</span><br>
         Bóng rơi vào <b>${colName}</b>!
       `;
+      updateCasinoTicker(`🎉 ${spinnerName} và bàn Roulette trúng lớn với kết quả [${colName}]!`);
     } else {
       modal.querySelector('#rouletteResult').innerHTML = `
-        Bóng rơi vào <b>${colName}</b>. Chúc bạn may mắn lần sau!
+        Bóng rơi vào <b>${colName}</b>${isLocal ? '. Chúc bạn may mắn lần sau!' : ` (Quay bởi ${spinnerName})`}
       `;
+      updateCasinoTicker(`🎡 Vòng Quay Roulette vừa ra kết quả [${colName}].`);
     }
     bets.clear();
+    peerBets.clear();
     renderGrid();
+  }
   }
 }
 
@@ -721,27 +813,20 @@ export function openDuckDerby() {
   }
   drawTrack();
 
-  modal.querySelector('#btnStartDuckRace').onclick = () => {
-    if (isRacing) return;
-    if (!spendCoins(betAmount)) {
-      toastRef?.('⚠️ Bạn không đủ Xu để đặt cược!');
-      return;
-    }
-
+  function startRace(speeds, isLocal = true, racerName = 'Bạn') {
     isRacing = true;
     modal.querySelector('#btnStartDuckRace').disabled = true;
-    modal.querySelector('#duckRaceToast').innerHTML = '🏁 CÁC CHÚ VỊT ĐANG BƠI RƯỢT ĐUỔI KỊCH TÍNH...';
+    modal.querySelector('#duckRaceToast').innerHTML = `🏁 Cuộc đua của ${racerName} đang diễn ra kịch tính...`;
 
     playSfx('duck_quack', 'casino');
-    broadcastCasinoPlay('duck_derby', ducks[chosenDuckIdx]?.name || 'Vịt');
 
     // Trigger 3D world duck track
     const dd = worldRef?.casinoObjs?.find(o => o.userData?.type === 'duck_derby');
     dd?.userData?.startRace?.();
 
-    ducks.forEach(d => {
+    ducks.forEach((d, i) => {
       d.x = 40;
-      d.speed = 2.2 + Math.random() * 2.5;
+      d.speed = speeds && speeds[i] ? speeds[i] : 2.2 + Math.random() * 2.5;
     });
 
     let winnerIdx = -1;
@@ -764,18 +849,46 @@ export function openDuckDerby() {
       if (!reached) {
         requestAnimationFrame(raceLoop);
       } else {
-        finishRace(winnerIdx);
+        finishRace(winnerIdx, isLocal, racerName);
       }
     }
     requestAnimationFrame(raceLoop);
+  }
+
+  // Multiplayer Hook for Duck Derby
+  activeDuckDerbyInstance = {
+    onPeerStartRace: (player, chosenDuck, speeds) => {
+      if (!isRacing) {
+        startRace(speeds, false, player);
+      }
+    },
   };
 
-  function finishRace(winIdx) {
+  modal.querySelector('#btnStartDuckRace').onclick = () => {
+    if (isRacing) return;
+    if (!spendCoins(betAmount)) {
+      toastRef?.('⚠️ Bạn không đủ Xu để đặt cược!');
+      return;
+    }
+
+    const speeds = ducks.map(() => 2.2 + Math.random() * 2.5);
+
+    // Broadcast race start to all peers in the room
+    broadcastCasinoPlay('duck_derby', ducks[chosenDuckIdx]?.name || 'Vịt', {
+      subAction: 'start_race',
+      chosenDuck: chosenDuckIdx,
+      speeds,
+    });
+
+    startRace(speeds, true, 'Bạn');
+  };
+
+  function finishRace(winIdx, isLocal = true, racerName = 'Bạn') {
     isRacing = false;
     modal.querySelector('#btnStartDuckRace').disabled = false;
 
     const winner = ducks[winIdx];
-    if (winIdx === chosenDuckIdx) {
+    if (isLocal && winIdx === chosenDuckIdx) {
       const payout = Math.floor(betAmount * winner.odds);
       addCoins(payout);
       recordJackpotWin('duck_derby');
@@ -783,10 +896,12 @@ export function openDuckDerby() {
         <span style="color:#4ade80;font-size:16px">🏆 VÔ ĐỊCH: #${winIdx + 1} ${winner.name}!</span>
         Chúc mừng bạn đã đoán trúng và nhận <b>+${payout.toLocaleString()} Xu</b>!
       `;
+      updateCasinoTicker(`🏆 ${racerName} vừa thắng cược ${payout.toLocaleString()} Xu với Vịt #${winIdx + 1}!`);
     } else {
       modal.querySelector('#duckRaceToast').innerHTML = `
-        🏆 Vô địch là: <b>#${winIdx + 1} ${winner.name}</b>. Chúc bạn may mắn ở vòng đua sau!
+        🏆 Vô địch là: <b>#${winIdx + 1} ${winner.name}</b>.${isLocal ? ' Chúc bạn may mắn ở vòng đua sau!' : ` (Đua bởi ${racerName})`}
       `;
+      updateCasinoTicker(`🦆 Cuộc đua Duck Derby kết thúc: Vịt #${winIdx + 1} (${winner.name}) về nhất!`);
     }
   }
 }
@@ -1113,10 +1228,10 @@ export function openSlotMachine() {
       symbols[Math.floor(Math.random() * symbols.length)],
     ];
 
-    // High jackpot chance for fun
-    if (Math.random() < 0.18) {
+    // Balanced jackpot chance (2.5% for 777, 8% for diamonds)
+    if (Math.random() < 0.025) {
       results[0] = results[1] = results[2] = '7️⃣';
-    } else if (Math.random() < 0.3) {
+    } else if (Math.random() < 0.08) {
       results[0] = results[1] = '💎';
     }
 
@@ -1318,28 +1433,44 @@ export function openPlinko() {
       // Draw Ball
       ctx.beginPath();
       ctx.arc(ball.x, ball.y, 6.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#facc15';
+      ctx.fillStyle = ball.color || '#facc15';
       ctx.fill();
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = '#fff';
       ctx.stroke();
+
+      if (ball.isPeer && ball.playerName) {
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 9.5px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(ball.playerName, ball.x, ball.y - 9);
+      }
 
       if (ball.y >= binY) {
         const binIdx = Math.max(0, Math.min(bins.length - 1, Math.floor((ball.x - binStartX) / binWidth)));
         const wonBin = bins[binIdx];
         const payout = Math.floor(ball.bet * wonBin.mult);
 
-        addCoins(payout);
-        if (wonBin.mult >= 25) {
-          recordJackpotWin('plinko');
-        } else {
-          playSfx(wonBin.mult >= 2 ? 'slot_win' : 'plinko_win', 'casino');
-        }
+        if (!ball.isPeer) {
+          addCoins(payout);
+          if (wonBin.mult >= 25) {
+            recordJackpotWin('plinko');
+          } else {
+            playSfx(wonBin.mult >= 2 ? 'slot_win' : 'plinko_win', 'casino');
+          }
 
-        modal.querySelector('#plinkoResultToast').innerHTML = `
-          🟡 Bóng rơi vào ô <b>[${wonBin.mult}x]</b>!
-          ${payout > 0 ? `Nhận <span style="color:#4ade80;font-weight:800">+${payout.toLocaleString()} Xu</span>!` : ''}
-        `;
+          modal.querySelector('#plinkoResultToast').innerHTML = `
+            🟡 Bóng rơi vào ô <b>[${wonBin.mult}x]</b>!
+            ${payout > 0 ? `Nhận <span style="color:#4ade80;font-weight:800">+${payout.toLocaleString()} Xu</span>!` : ''}
+          `;
+          updateCasinoTicker(`🟡 Bạn vừa thả bóng Plinko trúng ô [${wonBin.mult}x] (+${payout.toLocaleString()} Xu)!`);
+        } else {
+          modal.querySelector('#plinkoResultToast').innerHTML = `
+            🟡 <b>${ball.playerName}</b> thả bóng rơi vào ô <b>[${wonBin.mult}x]</b>!
+          `;
+          updateCasinoTicker(`🟡 ${ball.playerName} thả bóng Plinko trúng [${wonBin.mult}x] (+${payout.toLocaleString()} Xu)!`);
+          playSfx('plinko_win', 'casino');
+        }
 
         balls.splice(i, 1);
       }
@@ -1349,22 +1480,41 @@ export function openPlinko() {
   }
   requestAnimationFrame(drawPlinko);
 
+  // Multiplayer Hook for Plinko
+  activePlinkoInstance = {
+    addPeerBall: (playerName, bet, xOffset) => {
+      balls.push({
+        x: 230 + (xOffset || 0),
+        y: 25,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: 0.5,
+        bet: bet || 25,
+        isPeer: true,
+        playerName: playerName || 'Bạn bè',
+        color: '#38bdf8',
+      });
+      playSfx('plinko_peg', 'casino');
+    },
+  };
+
   modal.querySelector('#btnDropPlinko').onclick = () => {
     if (!spendCoins(betAmount)) {
       toastRef?.('⚠️ Bạn không đủ Xu để thả bóng!');
       return;
     }
 
+    const xOff = (Math.random() - 0.5) * 8;
     balls.push({
-      x: 230 + (Math.random() - 0.5) * 6,
+      x: 230 + xOff,
       y: 25,
       vx: (Math.random() - 0.5) * 0.6,
       vy: 0.5,
       bet: betAmount,
+      isPeer: false,
     });
 
-    // Trigger 3D world plinko ball
-    broadcastCasinoPlay('plinko', 'drop');
+    // Trigger 3D world plinko ball and broadcast
+    broadcastCasinoPlay('plinko', 'drop', { subAction: 'drop', bet: betAmount, xOffset: xOff });
     const pk = worldRef?.casinoObjs?.find(o => o.userData?.type === 'plinko');
     pk?.userData?.dropBall?.();
 
