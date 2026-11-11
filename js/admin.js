@@ -872,21 +872,60 @@ function bindUIEvents() {
     showToast(`Đã xuất file [${fileName}] thành công!`);
   });
 
-  // 3. Nạp Model/JSON vào
+  // 3. Nạp Model (Hỗ trợ file .json, .glb, .gltf)
   const fileIn = document.getElementById('fileImporter');
-  document.getElementById('btnImportJSON').addEventListener('click', () => fileIn.click());
+  document.getElementById('btnImportJSON').addEventListener('click', () => {
+    fileIn.value = ''; // Reset input để cho phép chọn lại cùng 1 file
+    fileIn.click();
+  });
+
   fileIn.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     // Tự động lấy tên file làm tên model
     const baseName = file.name.replace(/\.[^/.]+$/, "");
+    const ext = file.name.split('.').pop().toLowerCase();
     document.getElementById('modelCustomName').value = baseName;
 
+    // Xử lý nạp file GLB / GLTF (Binary 3D)
+    if (ext === 'glb' || ext === 'gltf') {
+      const url = URL.createObjectURL(file);
+      const loader = new GLTFLoader();
+      loader.load(url, (gltf) => {
+        clearTargetModel();
+        currentMode = 'avatar';
+        targetModel = gltf.scene;
+        targetModel.name = baseName;
+        scene.add(targetModel);
+
+        if (gltf.animations && gltf.animations.length) {
+          mixer = new THREE.AnimationMixer(targetModel);
+          activeAnimations = gltf.animations;
+          populateClips(gltf.animations.map(a => a.name));
+          playClip(gltf.animations[0].name);
+        }
+        setupGenericHierarchy(targetModel);
+        URL.revokeObjectURL(url);
+        showToast(`Đã nạp file 3D [${file.name}] thành công!`);
+      }, undefined, (err) => {
+        alert('Lỗi nạp file GLB/GLTF: ' + (err.message || 'File không hợp lệ'));
+        URL.revokeObjectURL(url);
+      });
+      return;
+    }
+
+    // Xử lý nạp file JSON / Model Config
     const reader = new FileReader();
     reader.onload = (event) => {
+      const content = (event.target.result || '').trim();
+      if (!content) {
+        alert('File được chọn hoàn toàn rỗng hoặc chưa có dữ liệu!');
+        return;
+      }
+
       try {
-        const json = JSON.parse(event.target.result);
+        const json = JSON.parse(content);
 
         if (json.type === 'AvatarRigConfig') {
           // Nạp cấu hình avatar rig
@@ -894,9 +933,24 @@ function bindUIEvents() {
           setTimeout(() => {
             applyAvatarConfig(avatarInstance, json);
             showToast(`Đã nạp nhân vật [${baseName}] thành công!`);
-          }, 100);
-        } else {
+          }, 120);
+        } else if (json.metadata && json.metadata.type === 'Object') {
           // Nạp Three.js Object JSON thông thường
+          const loader = new THREE.ObjectLoader();
+          const obj = loader.parse(json);
+          clearTargetModel();
+          targetModel = obj;
+          scene.add(targetModel);
+          setupGenericHierarchy(targetModel);
+          showToast(`Đã nạp mô hình [${baseName}] thành công!`);
+        } else if (json.keyframes) {
+          // File Animation Keyframes
+          recordedKeyframes = json.keyframes || [];
+          document.getElementById('newAnimName').value = json.animationName || baseName;
+          updateKeyframeListUI();
+          showToast(`Đã nạp Animation [${baseName}] với ${recordedKeyframes.length} keyframes!`);
+        } else {
+          // Thử nạp với ObjectLoader
           const loader = new THREE.ObjectLoader();
           const obj = loader.parse(json);
           clearTargetModel();
@@ -906,8 +960,11 @@ function bindUIEvents() {
           showToast(`Đã nạp mô hình [${baseName}] thành công!`);
         }
       } catch (err) {
-        alert('Lỗi khi đọc file: ' + err.message);
+        alert('Lỗi định dạng file: File được chọn không phải định dạng JSON hợp lệ (' + err.message + '). Nếu bạn muốn nạp mô hình 3D nguyên bản, hãy chọn file có đuôi .glb hoặc .gltf!');
       }
+    };
+    reader.onerror = () => {
+      alert('Không thể đọc file từ thiết bị của bạn.');
     };
     reader.readAsText(file);
   });
