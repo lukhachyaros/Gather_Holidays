@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { playSfx } from './audio.js';
 import { buildAerialRing } from './props.js';
+import { createDragon } from './dragon.js';
 
 const TILE = 2;
 
@@ -683,334 +684,46 @@ export class MinigameManager {
 
   spawnGoldenDragon(skinKey = null) {
     if (this.dragon?.group) {
-      this.group.remove(this.dragon.group);
+      if (this.dragonInstance?.dispose) {
+        this.dragonInstance.dispose();
+      } else {
+        this.group.remove(this.dragon.group);
+      }
       this.dragon = null;
+      this.dragonInstance = null;
     }
 
     const key = skinKey || this.currentDragonSkin || 'gold';
     const skin = DRAGON_SKINS[key] || DRAGON_SKINS.gold;
 
-    this.dragonGroup = new THREE.Group();
+    // Use the realistic procedural oriental dragon model from dragon.js
+    const dragonSkinColors = {
+      gold: { top: 0xca8a04, side: 0xfacc15, belly: 0xfef08a, skin: 0xfacc15, mane: 0xffffff, fin: 0xdc2626 },
+      jade: { top: 0x047857, side: 0x10b981, belly: 0xa7f3d0, skin: 0x10b981, mane: 0xfde047, fin: 0xfacc15 },
+      ice: { top: 0x0891b2, side: 0x06b6d4, belly: 0xcffafe, skin: 0x22d3ee, mane: 0xffffff, fin: 0x67e8f9 },
+      amethyst: { top: 0x6b21a8, side: 0x9333ea, belly: 0xf3e8ff, skin: 0xa855f7, mane: 0xf43f5e, fin: 0xc084fc },
+      ruby: { top: 0xb91c1c, side: 0xef4444, belly: 0xfee2e2, skin: 0xef4444, mane: 0xfacc15, fin: 0xf97316 },
+      sapphire: { top: 0x1e40af, side: 0x2563eb, belly: 0xdbeafe, skin: 0x3b82f6, mane: 0x38bdf8, fin: 0x60a5fa },
+    };
+
+    const inst = createDragon({
+      quality: 'high',
+      castShadow: true,
+      pearlLight: true,
+      colors: dragonSkinColors[key] || dragonSkinColors.gold,
+    });
+
+    this.dragonInstance = inst;
+    this.dragonGroup = inst.group;
     this.group.add(this.dragonGroup);
-
-    // High quality metallic crystal materials
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: skin.color,
-      roughness: 0.22,
-      metalness: 0.72,
-      emissive: skin.emissive,
-      emissiveIntensity: 0.2,
-    });
-    const bellyMat = new THREE.MeshStandardMaterial({
-      color: skin.darkColor,
-      roughness: 0.35,
-      metalness: 0.55,
-      emissive: skin.emissive,
-      emissiveIntensity: 0.08,
-    });
-    const goldMat = new THREE.MeshStandardMaterial({
-      color: 0xfacc15,
-      roughness: 0.18,
-      metalness: 0.88,
-      emissive: 0xeab308,
-      emissiveIntensity: 0.25,
-    });
-    const antlerMat = new THREE.MeshStandardMaterial({
-      color: 0xffedd5,
-      roughness: 0.2,
-      metalness: 0.4,
-      emissive: 0xfde047,
-      emissiveIntensity: 0.3,
-    });
-    const eyeMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      emissive: skin.accent,
-      emissiveIntensity: 4.2,
-      roughness: 0.05,
-    });
-    const clawMat = new THREE.MeshStandardMaterial({
-      color: 0xf1f5f9,
-      roughness: 0.15,
-      metalness: 0.75,
-    });
-
-    // ========== 1. MAJESTIC DRAGON HEAD ==========
-    const head = new THREE.Group();
-
-    // Crown & Skull
-    const skull = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.75, 1.3, 8), bodyMat);
-    skull.rotation.x = Math.PI / 2;
-    skull.position.set(0, 0.15, 0.1);
-    head.add(skull);
-
-    // Royal Dragon Muzzle / Snout (Tapered, sculpted)
-    const upperSnout = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.48, 1.5), bodyMat);
-    upperSnout.position.set(0, 0.02, 1.25);
-    head.add(upperSnout);
-
-    // Gold Muzzle Plating & Bridge
-    const muzzlePlate = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.12, 1.35), goldMat);
-    muzzlePlate.position.set(0, 0.3, 1.28);
-    head.add(muzzlePlate);
-
-    // Nose Horn / Snout Crest (Sừng mũi rồng uy nghi)
-    const noseHorn = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.65, 5), goldMat);
-    noseHorn.position.set(0, 0.45, 1.8);
-    noseHorn.rotation.x = -0.35;
-    head.add(noseHorn);
-
-    // Nostril Flanges
-    [-0.26, 0.26].forEach(nx => {
-      const nostril = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), bellyMat);
-      nostril.position.set(nx, 0.2, 1.9);
-      head.add(nostril);
-    });
-
-    // Lower Jaw with Beard Base
-    const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.32, 1.3), bellyMat);
-    jaw.position.set(0, -0.38, 1.15);
-    head.add(jaw);
-
-    // Flowing Golden Chin Beard (Chòm râu cằm dài thần thánh)
-    for (let bi = 0; bi < 3; bi++) {
-      const beardSpike = new THREE.Mesh(new THREE.ConeGeometry(0.08 - bi * 0.015, 0.85 + bi * 0.2, 5), goldMat);
-      beardSpike.position.set(0, -0.65 - bi * 0.15, 1.3 - bi * 0.25);
-      beardSpike.rotation.x = 0.55 + bi * 0.1;
-      head.add(beardSpike);
-    }
-
-    // Glowing Eyes with Brow Ridges
-    [-0.48, 0.48].forEach(ex => {
-      // Golden Eye Brow Ridge
-      const brow = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.85, 5), goldMat);
-      brow.position.set(ex, 0.42, 0.55);
-      brow.rotation.z = ex > 0 ? -0.55 : 0.55;
-      brow.rotation.x = Math.PI / 2.3;
-      head.add(brow);
-
-      // Glowing Eye Ball
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 12), eyeMat);
-      eye.position.set(ex > 0 ? ex - 0.04 : ex + 0.04, 0.32, 0.68);
-      head.add(eye);
-
-      // Pupil slit
-      const pupil = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.18, 0.06), new THREE.MeshStandardMaterial({ color: 0x050505 }));
-      pupil.position.set(ex > 0 ? ex - 0.02 : ex + 0.02, 0.32, 0.82);
-      head.add(pupil);
-    });
-
-    // Grand Antler Horns (Sừng hươu nhiều nhánh tỏa đều hai bên)
-    [-0.52, 0.52].forEach(hx => {
-      const hornGroup = new THREE.Group();
-      hornGroup.position.set(hx, 0.65, -0.25);
-
-      // Main beam curving backwards
-      const mainBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.18, 2.8, 7), antlerMat);
-      mainBeam.position.set(0, 1.1, -0.7);
-      mainBeam.rotation.x = -0.75;
-      mainBeam.rotation.z = hx > 0 ? 0.35 : -0.35;
-      hornGroup.add(mainBeam);
-
-      // Tine 1 (Side prong)
-      const tine1 = new THREE.Mesh(new THREE.ConeGeometry(0.09, 1.1, 5), antlerMat);
-      tine1.position.set(hx > 0 ? 0.38 : -0.38, 0.9, -0.4);
-      tine1.rotation.z = hx > 0 ? 0.95 : -0.95;
-      tine1.rotation.x = -0.3;
-      hornGroup.add(tine1);
-
-      // Tine 2 (Top prong)
-      const tine2 = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.85, 5), antlerMat);
-      tine2.position.set(hx > 0 ? 0.22 : -0.22, 1.7, -1.1);
-      tine2.rotation.z = hx > 0 ? 0.7 : -0.7;
-      hornGroup.add(tine2);
-
-      head.add(hornGroup);
-    });
-
-    // Long Flowing Dragon Whiskers (Đôi Râu Rồng uốn lượn phong thủy)
-    [-1, 1].forEach(side => {
-      // Curve segments for elegant whisker
-      const wGroup = new THREE.Group();
-      wGroup.position.set(side * 0.42, 0.02, 1.75);
-
-      const w1 = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 1.2, 6), goldMat);
-      w1.position.set(side * 0.35, -0.2, 0.4);
-      w1.rotation.z = side * -0.75;
-      w1.rotation.x = 0.4;
-      wGroup.add(w1);
-
-      const w2 = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.015, 1.4, 6), goldMat);
-      w2.position.set(side * 0.85, -0.65, 0.8);
-      w2.rotation.z = side * -0.45;
-      w2.rotation.x = 0.75;
-      wGroup.add(w2);
-
-      head.add(wGroup);
-    });
-
-    // Dragon Mane Crest (Bờm tóc rồng uốn lượn từ gáy)
-    for (let mi = 0; mi < 6; mi++) {
-      const mane = new THREE.Mesh(new THREE.ConeGeometry(0.16 - mi * 0.015, 1.1 - mi * 0.08, 5), goldMat);
-      mane.position.set(0, 0.72 - mi * 0.06, -0.15 - mi * 0.32);
-      mane.rotation.x = -0.55;
-      head.add(mane);
-
-      [-0.22, 0.22].forEach(mx => {
-        const sideMane = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.85, 4), bellyMat);
-        sideMane.position.set(mx, 0.62 - mi * 0.06, -0.18 - mi * 0.32);
-        sideMane.rotation.x = -0.55;
-        sideMane.rotation.z = mx > 0 ? 0.4 : -0.4;
-        head.add(sideMane);
-      });
-    }
-
-    // Fangs (Nanh Rồng nhọn trắng)
-    [-0.28, 0.28].forEach(fx => {
-      const fang = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.38, 5), clawMat);
-      fang.position.set(fx, -0.42, 1.45);
-      fang.rotation.x = Math.PI;
-      head.add(fang);
-    });
-
-    // Golden Dragon Saddle / Riding Mount Point
-    const mountPoint = new THREE.Object3D();
-    mountPoint.position.set(0, 0.78, -1.05);
-
-    // Visual Golden Saddle Pad on dragon neck
-    const saddle = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.52, 0.6, 8), goldMat);
-    saddle.position.set(0, 0.32, -1.05);
-    saddle.rotation.x = Math.PI / 2;
-    head.add(saddle);
-    head.add(mountPoint);
-
-    this.dragonGroup.add(head);
-
-    // ========== 2. CELESTIAL DRAGON PEARL (DẠ MINH CHÂU) ==========
-    const pearlGroup = new THREE.Group();
-    const pearlCore = new THREE.Mesh(
-      new THREE.SphereGeometry(0.52, 16, 16),
-      new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        emissive: skin.accent,
-        emissiveIntensity: 3.5,
-        roughness: 0.05,
-        metalness: 0.1,
-      })
-    );
-    const pearlRing = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.06, 8, 24), goldMat);
-    pearlRing.rotation.x = Math.PI / 3;
-    const pearlLight = new THREE.PointLight(skin.accent, 4.0, 16);
-    pearlGroup.add(pearlCore, pearlRing, pearlLight);
-    this.dragonGroup.add(pearlGroup);
-
-    // ========== 3. ARTICULATED SERPENTINE BODY (14 SEGMENTS) ==========
-    const bodySegments = [];
-    const legs = [];
-    const segCount = 14;
-
-    for (let i = 0; i < segCount; i++) {
-      const segGroup = new THREE.Group();
-      const t = i / (segCount - 1);
-      const radius = 0.58 * (1.0 - t * 0.42); // Smooth taper
-
-      // Rounded Torso Cylinder
-      const segMesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(radius, radius * 0.92, 1.45, 10),
-        i % 2 === 0 ? bodyMat : bellyMat
-      );
-      segMesh.rotation.x = Math.PI / 2;
-      segGroup.add(segMesh);
-
-      // Golden Belly Scales (Vảy yếm vàng bụng rồng)
-      const bellyScale = new THREE.Mesh(
-        new THREE.BoxGeometry(radius * 1.15, 0.08, 1.35),
-        goldMat
-      );
-      bellyScale.position.set(0, -radius * 0.72, 0);
-      segGroup.add(bellyScale);
-
-      // Imperial Dorsal Fin (Vây gai lưng phát sáng dọc sống lưng)
-      const dorsal = new THREE.Mesh(
-        new THREE.ConeGeometry(radius * 0.22, radius * 1.6, 4),
-        goldMat
-      );
-      dorsal.position.set(0, radius * 0.95, 0.1);
-      dorsal.rotation.x = -0.35;
-      segGroup.add(dorsal);
-
-      // Flank Scales (Gai vảy sườn hai bên)
-      [-1, 1].forEach(side => {
-        const flank = new THREE.Mesh(
-          new THREE.ConeGeometry(radius * 0.15, radius * 0.95, 4),
-          bellyMat
-        );
-        flank.position.set(side * radius * 0.88, 0, 0);
-        flank.rotation.z = side * -1.2;
-        flank.rotation.x = -0.2;
-        segGroup.add(flank);
-      });
-
-      // 4 Powerful Dragon Claws (Chân rồng ngũ trảo ở đốt 2 và 8)
-      if (i === 2 || i === 8) {
-        [-1, 1].forEach(side => {
-          const legGroup = new THREE.Group();
-          legGroup.position.set(side * (radius + 0.25), -radius * 0.35, 0);
-
-          // Thigh
-          const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.14, 0.9, 7), bodyMat);
-          thigh.rotation.z = side * -0.55;
-          thigh.position.set(side * 0.25, -0.3, 0);
-          legGroup.add(thigh);
-
-          // Foreleg / Shin
-          const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.1, 0.85, 7), goldMat);
-          shin.position.set(side * 0.5, -0.85, 0.15);
-          shin.rotation.z = side * 0.35;
-          legGroup.add(shin);
-
-          // 4 Sharp Eagle Claws (Móng rồng sắc nhọn)
-          [-0.14, -0.04, 0.06, 0.16].forEach(cx => {
-            const claw = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.42, 5), clawMat);
-            claw.position.set(side * 0.52 + cx, -1.25, 0.32);
-            claw.rotation.x = 0.75;
-            legGroup.add(claw);
-          });
-
-          segGroup.add(legGroup);
-          legs.push(legGroup);
-        });
-      }
-
-      segGroup.position.set(0, 0, -(i + 1) * 1.45);
-      this.dragonGroup.add(segGroup);
-      bodySegments.push(segGroup);
-    }
-
-    // ========== 4. MAJESTIC TAIL FAN (ĐUÔI RỒNG PHƯỢNG XÒE QUẠT) ==========
-    const tailFan = new THREE.Group();
-    for (let f = -4; f <= 4; f++) {
-      const a = (f / 4) * 0.65;
-      const tSpike = new THREE.Mesh(
-        new THREE.ConeGeometry(0.16, 2.4 - Math.abs(f) * 0.22, 5),
-        goldMat
-      );
-      tSpike.position.set(Math.sin(a) * 0.9, 0, -1.2 - Math.cos(a) * 0.45);
-      tSpike.rotation.x = -Math.PI / 2.1;
-      tSpike.rotation.y = a;
-      tailFan.add(tSpike);
-    }
-    bodySegments[bodySegments.length - 1].add(tailFan);
 
     this.dragon = {
       group: this.dragonGroup,
-      head,
-      mountPoint,
-      pearlGroup,
-      bodySegments,
-      legs,
-      tailFan,
+      head: inst.head,
+      mountPoint: inst.mountPoint,
+      pearl: inst.pearl,
       skinKey: skin.id,
-      glowUntil: 0,
+      update: inst.update,
     };
   }
 
@@ -1431,6 +1144,11 @@ export class MinigameManager {
         this.dragon.head.rotation.x = this.dragonPitch;
         this.dragon.head.rotation.z = this.dragonRoll;
 
+        // Update procedural Dragon animation (spine wave, whiskers, jaw, fins, legs)
+        if (this.dragon.update) {
+          this.dragon.update(dt);
+        }
+
         // Mount local player avatar on dragon neck facing forward
         const me = this.getMe();
         if (me?.av?.root && this.dragon.mountPoint) {
@@ -1442,21 +1160,6 @@ export class MinigameManager {
           me.y = mountWorld.z / TILE;
           me.h = mountWorld.y;
           me.loco = 'sit';
-        }
-
-        // Animate Legs paddling through celestial wind
-        if (this.dragon.legs) {
-          for (let li = 0; li < this.dragon.legs.length; li++) {
-            this.dragon.legs[li].rotation.x = Math.sin(now * 0.008 + li) * 0.35;
-          }
-        }
-
-        // Undulating serpentine wave across segments
-        for (let s = 0; s < this.dragon.bodySegments.length; s++) {
-          const seg = this.dragon.bodySegments[s];
-          seg.position.x = Math.sin(now * 0.006 + s * 0.55) * (0.5 + s * 0.06);
-          seg.position.y = Math.cos(now * 0.005 + s * 0.55) * (0.3 + s * 0.03);
-          seg.rotation.z = Math.sin(now * 0.006 + s * 0.55) * 0.25;
         }
 
         // Check aerial ring collection
@@ -1500,30 +1203,10 @@ export class MinigameManager {
           this.dragon.group.rotation.y = Math.atan2(dx, dz);
         }
 
-        // Animate legs
-        if (this.dragon.legs) {
-          for (let li = 0; li < this.dragon.legs.length; li++) {
-            this.dragon.legs[li].rotation.x = Math.sin(now * 0.005 + li) * 0.25;
-          }
+        // Update procedural Dragon animation (spine wave, whiskers, jaw, fins, legs)
+        if (this.dragon.update) {
+          this.dragon.update(dt);
         }
-
-        // Serpentine undulation across body segments
-        for (let s = 0; s < this.dragon.bodySegments.length; s++) {
-          const seg = this.dragon.bodySegments[s];
-          seg.position.x = Math.sin(now * 0.004 + s * 0.45) * 0.85;
-          seg.position.y = Math.cos(now * 0.0035 + s * 0.45) * 0.55;
-          seg.rotation.z = Math.sin(now * 0.004 + s * 0.45) * 0.25;
-        }
-      }
-
-      // Orbiting Dạ Minh Châu (Dragon Pearl) ahead of the mouth
-      if (this.dragon.pearlGroup) {
-        const pAngle = now * 0.003;
-        this.dragon.pearlGroup.position.set(
-          Math.sin(pAngle) * 0.8,
-          Math.cos(pAngle * 1.5) * 0.4 + 0.2,
-          2.6 + Math.cos(pAngle) * 0.5
-        );
       }
     }
   }
