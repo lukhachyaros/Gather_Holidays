@@ -32,7 +32,7 @@ import {
 import { World, TILE } from './world.js';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js';
 import { emojiSprite } from './props.js';
-import { RtcManager } from './rtc.js?v=20261111_v3_dest';
+import { RtcManager } from './rtc.js?v=20261111_trystero';
 import {
   initAudio,
   playBgm,
@@ -68,7 +68,7 @@ import {
 let rtc = null;
 let minigames = null;
 
-function initRtc(selfId) {
+function initRtc(selfId, roomId) {
   if (rtc) {
     try {
       rtc.destroy();
@@ -76,6 +76,7 @@ function initRtc(selfId) {
   }
   rtc = new RtcManager({
     selfId,
+    roomId: roomId || state?.room || 'quang-truong-noel',
     sendSignal: (targetId, signal) => {
       net?.send('rtc_signal', signal, targetId);
     },
@@ -1005,7 +1006,7 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
 
   net = await connect(roomName, handlers);
   window.__gh_net = net;
-  initRtc(net.selfId);
+  initRtc(net.selfId, roomName);
   $('roomInfo').textContent = `📍 ${roomTitle}`;
   updateLiveStats();
   updateCasinoChipsUI();
