@@ -550,3 +550,75 @@
   color: #fef08a;
   text-align: center;
 }
+
+/* Admin Broadcast Server Message Banner */
+.admin-server-banner {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, #b91c1c, #991b1b, #b91c1c);
+  border: 2px solid #facc15;
+  border-radius: 12px;
+  padding: 12px 24px;
+  color: #fff;
+  z-index: 9999;
+  box-shadow: 0 0 30px rgba(250, 204, 21, 0.8), 0 10px 25px rgba(0, 0, 0, 0.7);
+  animation: adminBannerDrop 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+@keyframes adminBannerDrop {
+  from { opacity: 0; transform: translate(-50%, -30px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.admin-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+}
+
+/* Titles Selection Card */
+.title-select-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(30, 27, 46, 0.85);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  transition: all 0.15s;
+  cursor: pointer;
+}
+
+.title-select-card:hover {
+  border-color: #facc15;
+  background: rgba(45, 40, 70, 0.95);
+  transform: translateY(-2px);
+}
+
+.title-select-card.active {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.title-badge-preview {
+  font-weight: 800;
+  font-size: 13px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+/* Blinded screen effect for admin troll command */
+body.blinded-screen #game,
+body.blinded-screen #hud,
+body.blinded-screen #topbar {
+  filter: brightness(0) blur(6px) !important;
+  pointer-events: none;
+}
+

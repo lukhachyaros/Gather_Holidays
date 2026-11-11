@@ -443,6 +443,11 @@ export class MinigameManager {
       }
 
       // Outside Safe Zone: TAKE PVP DAMAGE!
+      if (window.adminGodMode) {
+        this.toast('🛡️ BẤT TỬ ADMIN (God Mode): Miễn mọi sát thương!');
+        if (this.floaters) this.floaters.push({ e: '🛡️ GOD MODE', who: 'me', t: Date.now() });
+        return;
+      }
       const dmg = 34;
       this.hp = Math.max(0, this.hp - dmg);
       this.updateHpUI();
@@ -652,7 +657,7 @@ export class MinigameManager {
         const currentDist = Math.hypot(me.x * TILE - vh.worldX, me.y * TILE - vh.worldZ);
         const inSafe = isInSafeZone(me.x, me.y) || !!me.seatSlot;
 
-        if (currentDist < 2.5 && !inSafe) {
+        if (currentDist < 2.5 && !inSafe && !window.adminGodMode) {
           this.executeVampireJumpscare();
         } else {
           this.toast('💨 THOÁT HIỂM NGOẠN MỤC! Bạn đã né được cú vồ của Bá Tước Ma Cà Rồng!');

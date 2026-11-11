@@ -1455,3 +1455,87 @@ export function buildPlinkoBoard() {
   return g;
 }
 
+// ============================================================================
+// 6. SECRET CASINO ENTRANCES & PAPER NOTES
+// ============================================================================
+let pinNoteTex = null;
+function getPinNoteTexture() {
+  if (!pinNoteTex) {
+    pinNoteTex = new THREE.TextureLoader().load('assets/pin_note.jpg');
+    pinNoteTex.colorSpace = THREE.SRGBColorSpace;
+  }
+  return pinNoteTex;
+}
+
+export function buildSecretPaperNote(code) {
+  const g = new THREE.Group();
+  const tex = getPinNoteTexture();
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.65, 0.65, 1);
+  sprite.position.y = 0.95;
+  g.add(sprite);
+
+  // Floating label indicator
+  const lbl = labelSprite('📌 MẢNH GIẤY BÍ MẬT', 'rgba(120,53,15,0.85)', '#fef08a', 0.28);
+  lbl.position.y = 1.45;
+  g.add(lbl);
+
+  g.userData = { type: 'secret_note', code };
+  return g;
+}
+
+export function buildSecretPassage(theme) {
+  const g = new THREE.Group();
+  const colors = {
+    christmas: 0x38bdf8,
+    halloween: 0xa855f7,
+    tet: 0xfacc15,
+    valentine: 0xf43f5e,
+  };
+  const col = colors[theme] || 0xfacc15;
+
+  // Swirling magic ring portal on floor
+  const ringGeom = new THREE.RingGeometry(0.6, 1.15, 24);
+  ringGeom.rotateX(-Math.PI / 2);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: col,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.75,
+  });
+  const ring = new THREE.Mesh(ringGeom, ringMat);
+  ring.position.y = 0.04;
+  g.add(ring);
+
+  // Soft glowing column light
+  const light = new THREE.PointLight(col, 2.2, 5);
+  light.position.y = 1.1;
+  g.add(light);
+
+  // Floating title tag
+  const tag = labelSprite('🗝️ LỐI VÀO MẬT THẤT', 'rgba(15,23,42,0.92)', '#fef08a', 0.42);
+  tag.position.y = 1.95;
+  g.add(tag);
+
+  g.userData = { type: 'secret_passage', ring };
+  return g;
+}
+
+export function buildCasinoExitPortal() {
+  const g = new THREE.Group();
+  // Classic brass framed speakeasy exit door
+  const doorMat = mat('#3b1a0a', { roughness: 0.4 });
+  const brassMat = mat('#f59e0b', { roughness: 0.2, metalness: 0.8 });
+  part(g, G.box(), doorMat, [0, 1.3, 0], [1.4, 2.6, 0.15]);
+  part(g, G.box(), brassMat, [0, 2.6, 0.1], [1.2, 0.35, 0.08]);
+
+  const tag = labelSprite('🚪 LỐI RA THẾ GIỚI TRÊN', 'rgba(15,23,42,0.92)', '#fef08a', 0.45);
+  tag.position.set(0, 2.6, 0.16);
+  g.add(tag);
+
+  g.userData = { type: 'casino_exit' };
+  return g;
+}
+
+

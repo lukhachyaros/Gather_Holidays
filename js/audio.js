@@ -9,7 +9,7 @@ export const BGM_TRACKS = {
   tet: 'https://files.catbox.moe/87vqx2.mp3',
   halloween: 'https://files.catbox.moe/5b1qly.mp3',
   christmas: 'https://files.catbox.moe/n4lzai.mp3',
-  casino: 'https://files.catbox.moe/87vqx2.mp3',
+  casino: 'assets/bgm_casino.mp3',
 };
 
 let audioCtx = null;
@@ -532,6 +532,12 @@ export function playSfx(name, theme = currentTheme) {
         gain.connect(ctx.destination);
         osc.start(now);
         osc.stop(now + 0.1);
+        break;
+      }
+      case 'jackpot_voice': {
+        const audio = new Audio('assets/jackpot.mp3');
+        audio.volume = Math.min(1.0, bgmVolume * 2.2);
+        audio.play().catch(() => {});
         break;
       }
       default:

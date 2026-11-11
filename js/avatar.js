@@ -62,6 +62,18 @@ function textSprite(draw, w, h, worldH) {
   return s;
 }
 
+export function isAdminUser(name) {
+  if (!name) return false;
+  const n = String(name).trim().toLowerCase();
+  return (
+    n.includes('chu0n6') ||
+    n.includes('chuong') ||
+    n.includes('trung') ||
+    n.includes('lukhachyaros') ||
+    n.includes('khoa')
+  );
+}
+
 export class Avatar {
   constructor(_unused, { name, hue = 200, costume = 'default', pumpkinHat = null }) {
     this.root = new THREE.Group();
@@ -309,31 +321,56 @@ export class Avatar {
     this.splatGroup.visible = true;
   }
 
-  setName(name) {
+  setName(name, title = this.title) {
     this.name = name;
+    this.title = title || null;
     if (this.label) this.root.remove(this.label);
+
+    const isAdmin = isAdminUser(name);
+    const displayTitle = isAdmin ? '👑 ADMIN' : this.title;
+
     this.label = textSprite(
       (x, w, h) => {
-        // Sleek modern glassmorphic name pill
-        x.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        // Sleek modern glassmorphic name pill with title support
+        x.fillStyle = isAdmin ? 'rgba(88, 28, 28, 0.92)' : 'rgba(15, 23, 42, 0.88)';
         x.beginPath();
-        x.roundRect(8, 8, w - 16, h - 16, 20);
+        x.roundRect(8, 8, w - 16, h - 16, 22);
         x.fill();
-        x.strokeStyle = 'rgba(56, 189, 248, 0.85)';
-        x.lineWidth = 3.5;
+        x.strokeStyle = isAdmin ? 'rgba(250, 204, 21, 0.95)' : 'rgba(56, 189, 248, 0.85)';
+        x.lineWidth = isAdmin ? 4 : 3;
         x.stroke();
-        x.font = 'bold 32px system-ui, sans-serif';
+
         x.textAlign = 'center';
         x.textBaseline = 'middle';
-        x.fillStyle = '#f8fafc';
-        x.fillText(name, w / 2, h / 2);
+
+        if (displayTitle) {
+          // Render Title badge above name
+          x.font = 'bold 22px system-ui, sans-serif';
+          x.fillStyle = isAdmin ? '#fde047' : '#facc15';
+          x.fillText(displayTitle, w / 2, 28);
+
+          // Render Player Name
+          x.font = 'bold 26px system-ui, sans-serif';
+          x.fillStyle = '#f8fafc';
+          x.fillText(name, w / 2, 60);
+        } else {
+          // Render Name only
+          x.font = 'bold 32px system-ui, sans-serif';
+          x.fillStyle = '#f8fafc';
+          x.fillText(name, w / 2, h / 2);
+        }
       },
-      320,
-      64,
-      0.38
+      360,
+      86,
+      0.44
     );
-    this.label.position.y = HEIGHT + 0.38;
+    this.label.position.y = HEIGHT + 0.42;
     this.root.add(this.label);
+  }
+
+  setTitle(title) {
+    this.title = title;
+    this.setName(this.name, title);
   }
 
   setSpeaking(speaking) {
