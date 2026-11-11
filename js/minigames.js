@@ -553,44 +553,104 @@ export class MinigameManager {
     this.dragonGroup = new THREE.Group();
     this.group.add(this.dragonGroup);
 
-    // Head
-    const head = new THREE.Group();
-    const snout = new THREE.Mesh(
-      new THREE.BoxGeometry(0.75, 0.55, 1.1),
-      new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 })
-    );
-    // Glowing ruby eyes
+    const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.85, roughness: 0.2 });
+    const darkGoldMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.8, roughness: 0.25 });
+    const spineMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, metalness: 0.5, roughness: 0.3 });
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
-    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeMat);
-    const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), eyeMat);
-    eyeL.position.set(-0.35, 0.2, 0.3);
-    eyeR.position.set(0.35, 0.2, 0.3);
+    const hornMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.25, metalness: 0.3 });
+    const fangMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
 
-    // Jade horns
-    const hornMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.3 });
-    const hornL = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.75, 6), hornMat);
-    const hornR = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.75, 6), hornMat);
-    hornL.position.set(-0.32, 0.55, -0.2);
-    hornR.position.set(0.32, 0.55, -0.2);
-    hornL.rotation.x = -0.3;
-    hornR.rotation.x = -0.3;
+    // Majestic Dragon Head (2.5x scale)
+    const head = new THREE.Group();
+    // Snout & upper jaw
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 2.2), goldMat);
+    snout.position.set(0, 0, 0.4);
+    // Lower jaw
+    const lowerJaw = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 1.8), darkGoldMat);
+    lowerJaw.position.set(0, -0.65, 0.4);
 
-    head.add(snout, eyeL, eyeR, hornL, hornR);
+    // Glowing ruby eyes
+    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), eyeMat);
+    const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), eyeMat);
+    eyeL.position.set(-0.75, 0.45, 0.5);
+    eyeR.position.set(0.75, 0.45, 0.5);
+
+    // Ivory fangs
+    [-0.55, 0.55].forEach(fx => {
+      const fangUpper = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.45, 6), fangMat);
+      fangUpper.position.set(fx, -0.45, 1.1);
+      fangUpper.rotation.x = Math.PI;
+      head.add(fangUpper);
+    });
+
+    // Imperial Jade horns (Double-branched antlers)
+    [-0.65, 0.65].forEach(hx => {
+      const hornBase = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.6, 8), hornMat);
+      hornBase.position.set(hx, 1.1, -0.4);
+      hornBase.rotation.x = -0.45;
+      hornBase.rotation.z = hx > 0 ? 0.35 : -0.35;
+
+      const hornBranch = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.85, 6), hornMat);
+      hornBranch.position.set(hx > 0 ? 0.35 : -0.35, 0.65, 0.1);
+      hornBranch.rotation.z = hx > 0 ? 0.6 : -0.6;
+      hornBase.add(hornBranch);
+      head.add(hornBase);
+    });
+
+    // Flaming Whiskers (Râu rồng uốn lượn)
+    const whiskerMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+    [-0.72, 0.72].forEach(wx => {
+      const whisker = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, 1.8, 6), whiskerMat);
+      whisker.position.set(wx, -0.2, 1.1);
+      whisker.rotation.x = Math.PI / 2.6;
+      whisker.rotation.z = wx > 0 ? -0.4 : 0.4;
+      head.add(whisker);
+    });
+
+    head.add(snout, lowerJaw, eyeL, eyeR);
     this.dragonGroup.add(head);
 
-    // 8 Body Segments
+    // Orbiting Glowing Dragon Pearl (Dạ Minh Châu)
+    const pearlGroup = new THREE.Group();
+    const pearlMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0x38bdf8,
+      emissiveIntensity: 1.8,
+      roughness: 0.1,
+    });
+    const pearl = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 16), pearlMat);
+    const pearlLight = new THREE.PointLight(0x38bdf8, 3.5, 12);
+    pearlGroup.add(pearl, pearlLight);
+    this.dragonGroup.add(pearlGroup);
+
+    // 14 Majestic Body Segments with Dorsal Spines (Vây lưng rồng)
     const bodySegments = [];
-    const segMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.7, roughness: 0.3 });
-    for (let i = 0; i < 8; i++) {
-      const seg = new THREE.Mesh(new THREE.SphereGeometry(0.48 - i * 0.025, 8, 8), segMat);
-      seg.position.set(0, 0, -(i + 1) * 0.75);
-      this.dragonGroup.add(seg);
-      bodySegments.push(seg);
+    for (let i = 0; i < 14; i++) {
+      const segGroup = new THREE.Group();
+      const radius = Math.max(0.42, 1.15 - i * 0.055);
+      const segMesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 12), i % 2 === 0 ? goldMat : darkGoldMat);
+      segGroup.add(segMesh);
+
+      // Dorsal spine fin
+      const spine = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.35, radius * 1.1, 4), spineMat);
+      spine.position.set(0, radius * 0.95, 0);
+      segGroup.add(spine);
+
+      segGroup.position.set(0, 0, -(i + 1) * 1.35);
+      this.dragonGroup.add(segGroup);
+      bodySegments.push(segGroup);
     }
+
+    // Dragon Tail Flukes (Đuôi rồng xòe quạt lộng lẫy)
+    const tailFluke = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 4), spineMat);
+    tailFluke.position.set(0, 0, -1.2);
+    tailFluke.rotation.x = -Math.PI / 2;
+    bodySegments[bodySegments.length - 1].add(tailFluke);
 
     this.dragon = {
       group: this.dragonGroup,
       head,
+      pearlGroup,
       bodySegments,
       glowUntil: 0,
     };
@@ -798,11 +858,22 @@ export class MinigameManager {
         this.dragon.group.rotation.y = Math.atan2(dx, dz);
       }
 
-      // Undulate body segments
+      // Animate Orbiting Dạ Minh Châu (Dragon Pearl) ahead of the mouth
+      if (this.dragon.pearlGroup) {
+        const pAngle = now * 0.003;
+        this.dragon.pearlGroup.position.set(
+          Math.sin(pAngle) * 0.8,
+          Math.cos(pAngle * 1.5) * 0.4 + 0.2,
+          2.6 + Math.cos(pAngle) * 0.5
+        );
+      }
+
+      // Majestic wave undulation across 14 segments with dynamic banking
       for (let s = 0; s < this.dragon.bodySegments.length; s++) {
         const seg = this.dragon.bodySegments[s];
-        seg.position.x = Math.sin(now * 0.005 + s * 0.6) * 0.45;
-        seg.position.y = Math.cos(now * 0.004 + s * 0.6) * 0.35;
+        seg.position.x = Math.sin(now * 0.004 + s * 0.45) * 0.85;
+        seg.position.y = Math.cos(now * 0.0035 + s * 0.45) * 0.55;
+        seg.rotation.z = Math.sin(now * 0.004 + s * 0.45) * 0.25;
       }
     }
   }

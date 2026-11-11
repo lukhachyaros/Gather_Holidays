@@ -44,14 +44,43 @@
   </tr>
   <tr>
     <td width="50%">
-      <h3>🎰 Mật Thất Casino Hoàng Gia (Secret Speakeasy)</h3>
+      <h3>🎰 Mật Thất Casino Hoàng Gia (Secret Speakeasy) & Bức Tường Ảo Ảnh</h3>
       <ul>
-        <li><b>Căn phòng bí mật ẩn giấu</b> dưới lòng đất, không hiển thị trên danh sách sảnh chờ công khai.</li>
-        <li>Mỗi bản đồ sở hữu một <b>cổng phong ấn và câu đố logic cổ xưa riêng biệt</b> để giải mã bước vào mật thất.</li>
-        <li>Đồng bộ đa người chơi (Multiplayer): Cả phòng cùng quan sát vòng quay Roulette, đường đua vịt Duck Derby, bàn Blackjack so điểm nhà cái, máy Slot kéo cần giật nổ hũ và Plinko thả bi sắc màu.</li>
-        <li>Hiệu ứng âm thanh chân thực, pháo hoa rực sáng và loa chúc mừng toàn server khi có người nổ Jackpot!</li>
+        <li><b>Bức Tường Ảo Ảnh Đi Xuyên Qua (Illusion Walls):</b> Cổng vào mật thất được giấu kín sau các bức tường bí mật trong góc khuất của cả 4 bản đồ.</li>
+        <li><b>Câu Đố Mật Mã Cấp Độ Bách Khoa:</b> Đòi hỏi tư duy logic đỉnh cao (Mật mã khóa RSA, Định lý Số Dư Trung Hoa, Nghịch Lý Dừng Turing, Thuật toán Gale-Shapley) để mở khóa cổng.</li>
+        <li>Đồng bộ đa người chơi (Multiplayer): Cả phòng cùng quan sát Roulette 3D, đường đua vịt Duck Derby, bàn Blackjack rút bài tính toán, máy Slot kéo cần giật nổ hũ và Plinko thả bi mượt mà.</li>
+        <li>Âm thanh Jazz cổ điển chân thực và loa chúc mừng toàn server khi có người nổ Jackpot!</li>
       </ul>
     </td>
+    <td width="50%">
+      <h3>🍸 VIP Pub Bar & Cửa Hàng Thời Trang Hoàng Gia (Fashion Boutique)</h3>
+      <ul>
+        <li><b>Hệ Thống Tiêu Dùng Chip Cờ Bạc:</b> Sử dụng số chip thắng cược để tậu các phụ kiện độc quyền tại quầy VIP Pub Bar.</li>
+        <li><b>Bộ Sưu Tập Phụ Kiện 3D:</b> Vương Miện Hoàng Gia, Mũ Cao Bồi, Nón Ảo Thuật Gia, Tai Mèo Dễ Thương, Kính Râm Siêu Ngầu, Mặt Nạ Hacker, Nón Phi Hành Gia, Vòng Thiên Thần, Cánh Ác Ma.</li>
+        <li><b>Hào Quang Nguyên Tố:</b> Hào Quang Hoàng Kim, Rực Lửa, Băng Giá, Trái Tim Lãng Mạn, Sấm Sét.</li>
+        <li><b>Nametag VIP:</b> Đổi màu tên, viền neon phát sáng và hiệu ứng cầu vồng động rực rỡ.</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🐉 Thần Rồng Kim Long Khổng Lồ (Tết Giáp Thìn)</h3>
+      <ul>
+        <li>Nâng cấp quy mô Kim Long gấp <b>2.5 lần</b> với độ chi tiết hoành tráng vượt trội.</li>
+        <li>Thân rồng gồm <b>14 đốt uốn lượn</b> mềm mại kèm vây lưng, sừng ngọc bích, hàm răng ngà và đôi râu lửa bập bùng.</li>
+        <li>Quả cầu <b>Dạ Minh Châu</b> thần bí bay lượn hộ thân quanh đầu rồng tạo nên khung cảnh Tết đầy uy nghi.</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>⛲ Suối Nguyện Ước Tình Yêu (Valentine Wishing Fountain)</h3>
+      <ul>
+        <li>Cơ chế đặc quyền độc nhất vô nhị chỉ có tại bản đồ Valentine: <b>Tung Đồng Xu Nguyện Ước Tình Yêu</b>.</li>
+        <li>Phun trào pháo hoa và cột nước trái tim 3D huyền ảo.</li>
+        <li>Ngẫu nhiên nhận lời ban phúc từ Cupid: <i>Hào Quang Trái Tim Vĩnh Cửu</i>, tăng tốc độ chạy +45%, lì xì may mắn +200 xu, danh hiệu tình yêu và cử chỉ hôn gió ngọt ngào.</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
     <td width="50%">
       <h3>📜 Săn Mã Code Dán Tường & Kinh Tế Chip</h3>
       <ul>
@@ -60,14 +89,21 @@
         <li>Bấm phím <code>C</code> hoặc nhấp vào ví tiền để nhập mã đổi xu bất cứ lúc nào.</li>
       </ul>
     </td>
-  </tr>
-  <tr>
     <td width="50%">
       <h3>👑 Bộ Sưu Tập Danh Hiệu (Titles System)</h3>
       <ul>
         <li>Mở khóa các danh hiệu lấp lánh hiển thị trang trọng ngay trên đầu nhân vật.</li>
         <li>Danh hiệu độc quyền <b>"Vua Đỏ Đen"</b> dành cho cao thủ chinh phục Jackpot cả 5 trò chơi casino.</li>
         <li>Danh hiệu đặc biệt: <i>Bậc Thầy Đỏ Đen</i>, <i>Đại Phú Hào Las Vegas</i>, <i>Thợ Săn Mật Mã</i>, <i>Lễ Hội Vương</i>...</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>🧱 Tối Ưu Hóa Vật Lý & Triệt Tiêu Khoảng Trống (Zero Air Gap)</h3>
+      <ul>
+        <li>Cân chỉnh lại toàn bộ bán kính va chạm của tường và các đồ vật 3D trong 4 bản đồ.</li>
+        <li>Người chơi có thể áp sát tường và nhảy đứng thăng bằng tự nhiên trên các bàn tiệc, bục chướng ngại vật mà không còn bị lơ lửng giữa không trung.</li>
       </ul>
     </td>
     <td width="50%">

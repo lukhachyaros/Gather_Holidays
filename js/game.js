@@ -56,6 +56,12 @@ import {
   redeemCode,
   handleCasinoBroadcast,
   VALID_CODES,
+  CASINO_SHOP_ITEMS,
+  getInventory,
+  getEquipped,
+  buyShopItem,
+  equipShopItem,
+  unequipShopItem,
 } from './casino.js';
 
 let rtc = null;
@@ -371,6 +377,8 @@ try {
   initAudio();
   initCasino(world, toast, emitOp, () => me, () => peers);
   initMobileControls();
+  setupBuilderToolsInteraction();
+  setupAdminCommandAutocomplete();
 } catch (e) {
   console.error(e);
   document.addEventListener('DOMContentLoaded', () => toast('Trình duyệt không hỗ trợ WebGL'));
@@ -1096,6 +1104,10 @@ const pubInfo = () => ({
   costume: me.costume,
   pumpkinHat: me.pumpkinHat,
   heldItem: me.heldItem,
+  accessory: me.accessory || null,
+  aura: me.aura || null,
+  nametagStyle: me.nametagStyle || null,
+  isAdmin: typeof isAdminVerified === 'function' ? isAdminVerified() : false,
   seatId: me.seatSlot?.id || null,
 });
 
@@ -1276,10 +1288,13 @@ async function addOrUpdatePeer(id, d) {
   broadcastMyRoomToLobby();
 
   if (p.av) {
-    p.av.setName(p.name, p.title);
+    p.av.setName(p.name, p.title, p.nametagStyle);
     p.av.applyCostume(p.costume);
     p.av.setPumpkinHat(p.pumpkinHat);
     p.av.setHeldItem(p.heldItem);
+    p.av.setAccessory(p.accessory);
+    p.av.setAura(p.aura);
+    p.av.setAdminAura?.(!!p.isAdmin);
     return;
   }
   if (p.loading) return;
@@ -1294,6 +1309,10 @@ async function addOrUpdatePeer(id, d) {
     pumpkinHat: p.pumpkinHat,
   });
   p.av.setHeldItem(p.heldItem);
+  p.av.setAccessory(p.accessory);
+  p.av.setAura(p.aura);
+  p.av.setAdminAura?.(!!p.isAdmin);
+  if (p.nametagStyle) p.av.setName(p.name, p.title, p.nametagStyle);
   scene.add(p.av.root);
   p.loading = false;
   if (isNew) {
@@ -1483,12 +1502,6 @@ const handlers = {
 function applyOp(op, senderId = null) {
   switch (op.k) {
     case 'theme': {
-      // Only accept theme changes initiated by the Room Host
-      if (senderId && state.hostId && senderId !== state.hostId && op.byHost !== state.hostId) return;
-      if (op.theme === 'casino' && roomName !== SECRET_CASINO_ROOM) {
-        toast('⚠️ Casino là căn phòng mật thất bí mật, không thể đổi chủ đề phòng sang Casino!');
-        return;
-      }
       if (THEMES[op.theme]) {
         state.theme = op.theme;
         state.map = buildThemeMap(op.theme);
@@ -1496,9 +1509,10 @@ function applyOp(op, senderId = null) {
         if ($('topTheme')) $('topTheme').value = op.theme;
         leaveSeat();
         playBgm(op.theme);
+        world.sync(state, roomName);
         minigames?.setTheme(op.theme);
         broadcastMyRoomToLobby();
-        toast(`🗺️ Chủ phòng đã chuyển chủ đề sang: ${THEMES[op.theme].name}`);
+        toast(op.theme === 'casino' ? '🎰 Cả phòng đã cùng bước vào Mật Thất Casino Hoàng Gia!' : `🗺️ Chủ phòng đã chuyển chủ đề sang: ${THEMES[op.theme].name}`);
       }
       break;
     }
@@ -1836,6 +1850,114 @@ function applyOp(op, senderId = null) {
       }
       break;
     }
+    case 'admin_limb_state': {
+      if (op.target === me?.name || op.target === 'all') {
+        me.av?.setLimbState?.(op.limbs);
+        playSfx('splat', 'halloween');
+      }
+      peers.forEach(p => {
+        if (op.target === p.name || op.target === 'all') {
+          p.av?.setLimbState?.(op.limbs);
+        }
+      });
+      break;
+    }
+    case 'admin_block_place': {
+      world.addBuilderBlock(op.block);
+      playSfx('plinko_peg', 'casino');
+      break;
+    }
+    case 'admin_block_remove': {
+      world.removeBuilderBlock(op.blockId);
+      break;
+    }
+    case 'admin_summon_mob': {
+      spawnMobAttack(op.mob || 'bat', op.target, op.by);
+      break;
+    }
+    case 'love_wishing_toss': {
+      toast(`💖 ${op.by} vừa tung đồng xu ước nguyện và nhận ban phúc: [${op.blessing.title}]!`);
+      playSfx('jackpot_voice', 'casino');
+      break;
+    }
+    case 'admin_laser': {
+      spawnLaserStrike(op.x, op.y, op.target, op.by);
+      break;
+    }
+    case 'admin_blackhole': {
+      spawnBlackHole(op.by);
+      break;
+    }
+    case 'admin_confetti': {
+      spawnConfettiShower(op.by);
+      break;
+    }
+    case 'admin_tornado': {
+      spawnTornado(op.target, op.by);
+      break;
+    }
+    case 'admin_golden': {
+      if (op.target === me?.name || op.target === 'all') {
+        me.av?.setMidasGolden?.(true);
+        toast(`✨ Bạn vừa được Admin ${op.by} hóa thành TƯỢNG VÀNG RỰC RỠ!`);
+      }
+      peers.forEach(p => {
+        if (op.target === p.name || op.target === 'all') p.av?.setMidasGolden?.(true);
+      });
+      break;
+    }
+    case 'admin_ghost': {
+      if (op.target === me?.name || op.target === 'all') {
+        me.av?.setGhostMode?.(true);
+        toast(`👻 Bạn vừa được Admin ${op.by} hóa thành HỒN MA TRONG SUỐT!`);
+      }
+      peers.forEach(p => {
+        if (op.target === p.name || op.target === 'all') p.av?.setGhostMode?.(true);
+      });
+      break;
+    }
+    case 'admin_rainbow': {
+      if (op.target === me?.name || op.target === 'all') {
+        me.nametagStyle = 'rainbow';
+        me.aura = 'lightning';
+        me.av?.setName(me.name, me.title, 'rainbow');
+        me.av?.setAura('lightning');
+        syncMyAppearance();
+        toast(`🌈 Bạn vừa được Admin ${op.by} ban tặng HÀO QUANG CẦU VỒNG RGB!`);
+      }
+      break;
+    }
+    case 'admin_heal': {
+      if (op.target === me?.name || op.target === 'all') {
+        document.querySelectorAll('.tomato-splat-overlay').forEach(el => el.remove());
+        me.av?.playEmote?.('cheer');
+        toast(`💖 Bạn đã được Admin ${op.by} hồi phục sinh lực và rửa sạch cà chua!`);
+      }
+      break;
+    }
+    case 'admin_matrix': {
+      document.body.classList.add('matrix-active');
+      adminSpeedMultiplier = 0.3;
+      toast(`🕶️ MA TRẬN KÍCH HOẠT: Tốc độ thời gian toàn server chậm lại 70%!`);
+      playSfx('spooky_laugh', 'halloween');
+      setTimeout(() => {
+        document.body.classList.remove('matrix-active');
+        if (adminSpeedMultiplier === 0.3) adminSpeedMultiplier = 1.0;
+        toast('⚡ Thời gian đã trở lại tốc độ bình thường.');
+      }, 5500);
+      break;
+    }
+    case 'admin_gravity_flip': {
+      currentGravity = -15;
+      me.vy = 4;
+      toast(`🌀 TRỌNG LỰC ĐẢO NGƯỢC! Mọi người đang lộn ngược trôi lên trần nhà!`);
+      playSfx('firework_rocket', 'tet');
+      setTimeout(() => {
+        currentGravity = 20;
+        toast('🌍 Trọng lực đã trở lại bình thường.');
+      }, 6500);
+      break;
+    }
     case 'admin_reset_all': {
       adminSpeedMultiplier = 1.0;
       adminJumpPower = 8.2;
@@ -1848,15 +1970,24 @@ function applyOp(op, senderId = null) {
       jailedPos = null;
       currentGravity = 20;
       adminSpinUntil = 0;
-      document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active');
+      adminBuilderMode = false;
+      world.clearBuilderBlocks();
+      document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active', 'matrix-active', 'builder-mode-active');
+      document.querySelectorAll('.tomato-splat-overlay, .laser-flash-overlay').forEach(el => el.remove());
       if (me?.av) {
         me.av.root.scale.set(1, 1, 1);
         me.av.root.visible = true;
+        me.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
+        me.av.setMidasGolden?.(false);
+        me.av.setGhostMode?.(false);
       }
       peers.forEach(p => {
         if (p.av) {
           p.av.root.scale.set(1, 1, 1);
           p.av.root.visible = true;
+          p.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
+          p.av.setMidasGolden?.(false);
+          p.av.setGhostMode?.(false);
         }
       });
       toast('✨ Tất cả hiệu ứng troll đã được khôi phục về trạng thái ban đầu!');
@@ -3314,11 +3445,14 @@ function triggerInteract(target = activeTarget) {
         openDialog('dlgCostume');
         break;
       case 'heart_tree':
-      case 'love_fountain':
         playSfx('wishing_fountain', 'valentine');
         refreshRecipients();
         $('cardStyle').value = 'love';
         openDialog('dlgCard');
+        break;
+      case 'love_fountain':
+        playSfx('wishing_fountain', 'valentine');
+        openLoveWishingDialog(h.id);
         break;
       case 'mai_tree':
         pickAndOpenLixi();
@@ -3350,6 +3484,10 @@ function triggerInteract(target = activeTarget) {
         break;
       case 'plinko':
         openPlinko();
+        break;
+      case 'casino_pub':
+        playSfx('pop');
+        openCasinoShopDialog();
         break;
       case 'secret_passage':
         playSfx('wishing_fountain', 'valentine');
@@ -3745,8 +3883,8 @@ function getStandHeight(x, y) {
   if (world?.features?.colliders) {
     for (const c of world.features.colliders) {
       const d = Math.hypot(x - c.x, y - c.y);
-      if (d < c.r * 0.75 + RADIUS) {
-        const colH = c.r > 0.6 ? 1.05 : 0.85;
+      if (d < c.r * 0.65 + RADIUS * 0.5) {
+        const colH = c.r > 0.6 ? 1.0 : 0.82;
         maxH = Math.max(maxH, colH);
       }
     }
@@ -3758,11 +3896,11 @@ function getStandHeight(x, y) {
       if (s.kind === 'couple') {
         const dx = Math.abs(x - s.x);
         const dy = Math.abs(y - s.y);
-        if (dx < 0.52 && dy < 0.38) {
+        if (dx < 0.45 && dy < 0.32) {
           maxH = Math.max(maxH, 0.48);
         }
       } else {
-        if (Math.hypot(x - s.x, y - s.y) < 0.36) {
+        if (Math.hypot(x - s.x, y - s.y) < 0.32) {
           maxH = Math.max(maxH, 0.44);
         }
       }
@@ -3806,13 +3944,13 @@ const free = (x, y, currentH = 0) => {
     }
   }
 
-  // Colliders (tables, tree base, fountain, stage)
+  // Colliders (tables, tree base, fountain, stage) with 0 air gap
   if (world?.features?.colliders) {
     for (const c of world.features.colliders) {
-      const colH = c.r > 0.6 ? 1.05 : 0.85;
+      const colH = c.r > 0.6 ? 1.0 : 0.82;
       if (currentH >= colH - 0.22) continue; // Can jump/stand on top!
 
-      const minD = c.r * 0.75 + RADIUS;
+      const minD = c.r * 0.62 + RADIUS * 0.4;
       const nextD = Math.hypot(x - c.x, y - c.y);
       if (nextD < minD) {
         const curD = Math.hypot(me.x - c.x, me.y - c.y);
@@ -3834,8 +3972,8 @@ const free = (x, y, currentH = 0) => {
       if (s.kind === 'couple') {
         const dx = Math.abs(x - s.x);
         const dy = Math.abs(y - s.y);
-        const limitX = 0.36 + RADIUS * 0.5;
-        const limitY = 0.22 + RADIUS * 0.5;
+        const limitX = 0.36 + RADIUS * 0.4;
+        const limitY = 0.22 + RADIUS * 0.4;
         if (dx < limitX && dy < limitY) {
           const curDx = Math.abs(me.x - s.x);
           const curDy = Math.abs(me.y - s.y);
@@ -4269,39 +4407,49 @@ function updateCamera(dt = 0.016) {
 let lastRoomBeforeCasino = null;
 
 function enterSecretCasino() {
-  if (roomName === SECRET_CASINO_ROOM) {
+  if (state?.theme === 'casino') {
     toast('🎰 Bạn đang ở trong Mật Thất Casino rồi!');
     return;
   }
+  toast('🌀 Bức màn bí mật hé mở... Đang dịch chuyển vào Mật Thất Casino Hoàng Gia!');
+  leaveSeat();
   lastRoomBeforeCasino = {
     id: roomName,
     title: roomTitle,
     theme: state?.theme || 'christmas',
   };
-  toast('🌀 Bức màn bí mật hé mở... Đang dịch chuyển vào Mật Thất Casino Hoàng Gia!');
-  leaveSeat();
-  joinRoomConfig({
-    id: SECRET_CASINO_ROOM,
-    title: '🎰 Mật Thất Casino Hoàng Gia (Secret Speakeasy)',
-    theme: 'casino',
-    passHash: '',
-  });
+  state.theme = 'casino';
+  state.map = buildThemeMap('casino');
+  world.sync(state, roomName);
+  me.x = 14.5;
+  me.y = 18.5;
+  me.h = 0;
+  me.vy = 0;
+  if (me.av?.root) {
+    me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
+  }
+  playBgm('casino');
+  minigames?.setTheme('casino');
+  emitOp({ k: 'theme', theme: 'casino', isSecretChamber: true, byHost: state?.hostId || net?.selfId });
 }
 
 function exitSecretCasino() {
-  const returnRoom = lastRoomBeforeCasino || {
-    id: 'quang-truong-noel',
-    title: 'Quảng Trường Giáng Sinh',
-    theme: 'christmas',
-  };
+  const returnTheme = lastRoomBeforeCasino?.theme || 'christmas';
   toast('🚪 Bạn đã bước qua cánh cửa cổ kính trở về thế giới bên trên!');
   leaveSeat();
-  joinRoomConfig({
-    id: returnRoom.id,
-    title: returnRoom.title,
-    theme: returnRoom.theme,
-    passHash: '',
-  });
+  state.theme = returnTheme;
+  state.map = buildThemeMap(returnTheme);
+  world.sync(state, roomName);
+  me.x = 14.5;
+  me.y = 18.5;
+  me.h = 0;
+  me.vy = 0;
+  if (me.av?.root) {
+    me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
+  }
+  playBgm(returnTheme);
+  minigames?.setTheme(returnTheme);
+  emitOp({ k: 'theme', theme: returnTheme, byHost: state?.hostId || net?.selfId });
 }
 
 let activeFoundNoteCode = '';
@@ -4309,35 +4457,45 @@ let activeFoundNoteCode = '';
 const PASSAGE_RIDDLES = {
   christmas: {
     icon: '🎄',
-    title: 'Phong Ấn Cổ Thụ Tuyết',
-    sub: 'Giải mật mã dãy số ma thuật để mở cánh cổng dẫn vào Mật Thất Casino',
-    question: 'Dãy số ma thuật ẩn giấu dưới gốc Thông Tuyết Noel: 3, 6, 12, 24, ? — Con số tiếp theo để mở khóa phong ấn là gì?',
-    options: ['36', '48', '30', '42'],
+    title: 'Phong Ấn Mật Mã RSA (Số Học Bách Khoa)',
+    sub: 'Giải phương trình đồng dư số nguyên tố để mở khóa Mật Thất Casino',
+    question: 'Hệ mã hóa RSA chọn 2 số nguyên tố p = 61, q = 53 (n = 3233), và khóa công khai e = 17. Để tìm khóa giải mã bí mật d sao cho e·d ≡ 1 (mod φ(n)), ta giải: 17d ≡ 1 (mod 3120). Giá trị của d là:',
+    options: ['d = 1847', 'd = 2753', 'd = 3119', 'd = 2171'],
     correct: 1,
   },
   halloween: {
     icon: '🎃',
-    title: 'Ngọn Lửa Huyền Bí Vùng Bí Ngô',
-    sub: 'Giải câu đố bí ngô ngàn năm để bước vào Mật Thất Casino',
-    question: 'Thứ gì càng ăn càng lớn, uống nước thì chết, không có cánh nhưng nhảy múa trong đêm tối soi đường vào mật thất?',
-    options: ['Bóng Đêm', 'Ngọn Lửa', 'Cơn Gió Lạnh', 'Dung Nham Đá'],
+    title: 'Nghịch Lý Máy Turing & Định Lý Gödel',
+    sub: 'Vận dụng logic toán học để phá vỡ phong ấn nghịch lý ngàn năm',
+    question: 'Trong Khoa học máy tính lý thuyết, giả sử tồn tại thuật toán H quyết định bài toán Dừng (Halting Problem). Xét máy Turing nghịch lý D: D(⟨D⟩) dừng khi và chỉ khi H(D, ⟨D⟩) báo không dừng. Mệnh đề logic nào sau đây chứng minh tính bất khả quy (undecidable)?',
+    options: [
+      'Tràn bộ nhớ stack do không gian trạng thái của máy Turing quá lớn',
+      'Máy D tự mâu thuẫn: D dừng khi và chỉ khi D không dừng, dẫn đến giả thiết H tồn tại là sai',
+      'Độ phức tạp tính toán NP-Complete luôn quy về được đa thức P',
+      'Định lý Church-Turing chỉ áp dụng cho ngôn ngữ chính quy Automata hữu hạn',
+    ],
     correct: 1,
   },
   tet: {
     icon: '🐉',
-    title: 'Phong Ấn Kim Long Tứ Linh',
-    sub: 'Giải mật thư truyền thuyết nghìn năm để mở cánh cổng Speakeasy',
-    question: 'Trong Tứ Linh (Long - Lân - Quy - Phụng), linh vật nào uốn lượn mang pháo hoa tài lộc và canh giữ kho báu hoàng gia?',
-    options: ['Huyền Vũ (Rùa)', 'Bạch Hổ (Hổ Trắng)', 'Kim Long (Rồng Vàng)', 'Chu Tước (Phượng Hoàng)'],
-    correct: 2,
+    title: 'Định Lý Số Dư Trung Hoa (Toán Tin Bách Khoa)',
+    sub: 'Giải hệ phương trình đồng dư Sun Tzu để mở cánh cổng Speakeasy',
+    question: 'Tìm số nguyên dương nhỏ nhất x thỏa mãn hệ phương trình đồng dư sau:\nx ≡ 2 (mod 3)\nx ≡ 3 (mod 5)\nx ≡ 2 (mod 7)\nGiá trị nhỏ nhất của x là:',
+    options: ['x = 23', 'x = 38', 'x = 53', 'x = 128'],
+    correct: 0,
   },
   valentine: {
     icon: '🏹',
-    title: 'Mũi Tên Trái Tim Thần Cupid',
-    sub: 'Giải câu đố tình yêu đích thực để đánh thức mật thất ẩn',
-    question: 'Thứ gì vô hình nhưng nặng ngàn cân, có thể chữa lành mọi vết thương và mở khóa được cả những trái tim sắt đá nhất?',
-    options: ['Kim Cương Lấp Lánh', 'Tình Yêu Đích Thực', 'Kho Báu Hoàng Gia', 'Thuốc Ma Thuật'],
-    correct: 1,
+    title: 'Lý Thuyết Trò Chơi & Thuật Toán Gale-Shapley',
+    sub: 'Cân bằng Nash & Ghép cặp hôn nhân bền vững Nobel Kinh Tế',
+    question: 'Trong Thuật toán Ghép cặp Bền vững Gale-Shapley (Deferred Acceptance) với tập n nam và n nữ có danh sách ưu tiên nghiêm ngặt. Khi phía chủ động cầu hôn là phía nam, phát biểu nào sau đây đúng về trạng thái bền vững đạt được?',
+    options: [
+      'Tạo ra kết quả tối ưu cho nữ (female-optimal) và tồi nhất cho nam',
+      'Thuật toán có thể lặp vô hạn và không bao giờ hội tụ',
+      'Luôn đạt trạng thái tối ưu cho bên đề xuất (male-optimal) và tồi nhất cho bên chấp thuận (female-pessimal)',
+      'Chỉ tồn tại duy nhất một cặp đôi ghép được không phụ thuộc danh sách ưu tiên',
+    ],
+    correct: 2,
   },
 };
 
@@ -4668,7 +4826,8 @@ function updateAdminUIStatus() {
       btnAdmin.title = 'Bảng Quản Trị Viên (ĐÃ XÁC THỰC) - Phím [;]';
       if (me) {
         me.title = '👑 ADMIN';
-        me.av?.setName(me.name, me.title);
+        me.av?.setName(me.name, me.title, me.nametagStyle);
+        me.av?.setAdminAura?.(true);
         syncMyAppearance();
       }
     } else {
@@ -4678,6 +4837,9 @@ function updateAdminUIStatus() {
       btnAdmin.style.boxShadow = 'none';
       btnAdmin.style.color = '#fca5a5';
       btnAdmin.title = 'Nhấn để xác thực quyền Admin với mật mã "grinding shit" - Phím [;]';
+      if (me) {
+        me.av?.setAdminAura?.(false);
+      }
     }
   }
 }
@@ -4724,6 +4886,7 @@ function findPeerByName(nameQuery) {
 
 function openAdminDialog() {
   $('inAdminCmd').value = '';
+  hideAdminSuggestions();
   openDialog('dlgAdmin');
   setTimeout(() => $('inAdminCmd').focus(), 150);
 }
@@ -4752,17 +4915,877 @@ $('inAdminPass').onkeydown = e => {
   if (e.key === 'Enter') $('btnSubmitAdminAuth').click();
 };
 
-$('btnRunAdminCmd').onclick = () => {
-  const cmd = $('inAdminCmd').value.trim();
+// ============================================================================
+// VIP PUB & FASHION BOUTIQUE SHOP
+// ============================================================================
+let activeShopCategory = 'accessory';
+
+function renderCasinoShopGrid() {
+  const grid = $('shopItemGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  if ($('shopWalletChips')) {
+    $('shopWalletChips').textContent = (getChips() || 0).toLocaleString();
+  }
+
+  const inv = getInventory();
+  const equipped = getEquipped();
+  const items = CASINO_SHOP_ITEMS.filter(it => it.category === activeShopCategory);
+
+  items.forEach(it => {
+    const isOwned = inv.includes(it.id);
+    const isEquipped = equipped[activeShopCategory] === it.id;
+
+    const card = document.createElement('div');
+    card.className = `shop-item-card ${isEquipped ? 'equipped' : ''}`;
+    card.innerHTML = `
+      <div class="shop-item-icon" style="font-size:32px;text-align:center;margin-bottom:6px">${it.icon || '✨'}</div>
+      <div class="shop-item-name" style="font-weight:700;color:#fde047;font-size:14px">${it.name}</div>
+      <div class="shop-item-desc" style="font-size:11.5px;color:#cbd5e1;margin:4px 0 10px 0;min-height:32px">${it.desc}</div>
+      <div class="shop-item-footer">
+        ${isOwned ? `
+          ${isEquipped 
+            ? `<button class="shop-item-btn unequip" data-action="unequip" data-id="${it.id}" style="width:100%;background:rgba(239,68,68,0.2);border:1px solid #ef4444;color:#fca5a5;padding:6px;border-radius:6px;cursor:pointer">Đang dùng (Tháo)</button>`
+            : `<button class="shop-item-btn equip" data-action="equip" data-id="${it.id}" style="width:100%;background:rgba(34,197,94,0.2);border:1px solid #22c55e;color:#86efac;padding:6px;border-radius:6px;cursor:pointer">Trang bị</button>`}
+        ` : `
+          <button class="shop-item-btn buy" data-action="buy" data-id="${it.id}" style="width:100%;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#fff;font-weight:700;padding:6px;border-radius:6px;cursor:pointer">🪙 ${it.price.toLocaleString()} Chips</button>
+        `}
+      </div>
+    `;
+
+    card.querySelector('button')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const action = e.target.getAttribute('data-action');
+      const id = e.target.getAttribute('data-id');
+      if (action === 'buy') {
+        const res = buyShopItem(id);
+        if (res.ok) {
+          playSfx('jackpot_voice', 'casino');
+          toast(`🎉 Bạn đã mua thành công: ${it.name}!`);
+          renderCasinoShopGrid();
+        } else {
+          toast(res.msg || '⚠️ Không thể mua vật phẩm!');
+        }
+      } else if (action === 'equip') {
+        equipShopItem(id);
+        if (activeShopCategory === 'accessory') {
+          me.accessory = id;
+          me.av?.setAccessory?.(id);
+        } else if (activeShopCategory === 'aura') {
+          me.aura = id;
+          me.av?.setAura?.(id);
+        } else if (activeShopCategory === 'nametag') {
+          me.nametagStyle = id;
+          me.av?.setName?.(me.name, me.title, id);
+        }
+        syncMyAppearance();
+        toast(`✨ Đã trang bị: ${it.name}!`);
+        renderCasinoShopGrid();
+      } else if (action === 'unequip') {
+        unequipShopItem(activeShopCategory);
+        if (activeShopCategory === 'accessory') {
+          me.accessory = null;
+          me.av?.setAccessory?.(null);
+        } else if (activeShopCategory === 'aura') {
+          me.aura = null;
+          me.av?.setAura?.(null);
+        } else if (activeShopCategory === 'nametag') {
+          me.nametagStyle = null;
+          me.av?.setName?.(me.name, me.title, null);
+        }
+        syncMyAppearance();
+        toast(`Đã tháo ${it.name}`);
+        renderCasinoShopGrid();
+      }
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+function openCasinoShopDialog() {
+  openDialog('dlgCasinoShop');
+  renderCasinoShopGrid();
+}
+
+$('tabShopAccessory')?.addEventListener('click', () => {
+  activeShopCategory = 'accessory';
+  $('tabShopAccessory').classList.add('active');
+  $('tabShopAura').classList.remove('active');
+  $('tabShopNametag').classList.remove('active');
+  renderCasinoShopGrid();
+});
+$('tabShopAura')?.addEventListener('click', () => {
+  activeShopCategory = 'aura';
+  $('tabShopAura').classList.add('active');
+  $('tabShopAccessory').classList.remove('active');
+  $('tabShopNametag').classList.remove('active');
+  renderCasinoShopGrid();
+});
+$('tabShopNametag')?.addEventListener('click', () => {
+  activeShopCategory = 'nametag';
+  $('tabShopNametag').classList.add('active');
+  $('tabShopAccessory').classList.remove('active');
+  $('tabShopAura').classList.remove('active');
+  renderCasinoShopGrid();
+});
+
+// ============================================================================
+// VALENTINE LOVE WISHING FOUNTAIN
+// ============================================================================
+const LOVE_BLESSINGS = [
+  {
+    title: 'Hào Quang Trái Tim Vĩnh Cửu',
+    desc: 'Thần Tình Yêu ban tặng hào quang trái tim lấp lánh tỏa sáng quanh người bạn!',
+    apply() {
+      me.aura = 'hearts';
+      me.av?.setAura?.('hearts');
+      syncMyAppearance();
+    }
+  },
+  {
+    title: 'Đôi Cánh Tình Thần Cupid (+45% Tốc Độ)',
+    desc: 'Lực hút tình yêu nâng bước chân bạn, tăng 45% tốc độ di chuyển trong 30 giây!',
+    apply() {
+      adminSpeedMultiplier = 1.45;
+      setTimeout(() => { if (adminSpeedMultiplier === 1.45) adminSpeedMultiplier = 1.0; }, 30000);
+    }
+  },
+  {
+    title: 'Lì Xì Tình Nhân May Mắn (+200 Chips)',
+    desc: 'Đồng xu chạm đáy suối thiêng nhân đôi phước lộc, ban tặng bạn +200 xu Casino!',
+    apply() {
+      addChips(200);
+      updateCasinoChipsUI();
+    }
+  },
+  {
+    title: 'Danh Hiệu Tình Yêu: "Tình Yêu Bất Diệt"',
+    desc: 'Khắc ghi tên bạn lên đài vinh danh những trái tim chung thủy nhất vũ trụ!',
+    apply() {
+      me.title = '💖 Tình Yêu Bất Diệt';
+      me.av?.setName(me.name, me.title, me.nametagStyle);
+      syncMyAppearance();
+    }
+  },
+  {
+    title: 'Hôn Gió Ngọt Ngào & Tình Yêu Thăng Hoa',
+    desc: 'Một nụ hôn gió ngọt ngào thổi bùng những cánh hồng rực rỡ khắp sân suối!',
+    apply() {
+      me.av?.playEmote('kiss');
+    }
+  }
+];
+
+function openLoveWishingDialog(fountainId) {
+  const box = $('wishingCardBox');
+  if (box) box.classList.add('hidden');
+  openDialog('dlgLoveWishing');
+}
+
+$('btnTossLoveCoin')?.addEventListener('click', () => {
+  playSfx('wishing_fountain', 'valentine');
+  playSfx('coin', 'casino');
+  me.av?.playEmote?.('interact');
+  world.spawnFireworksShow?.(me.x, me.y);
+
+  const blessing = LOVE_BLESSINGS[Math.floor(Math.random() * LOVE_BLESSINGS.length)];
+  blessing.apply();
+
+  const box = $('wishingCardBox');
+  const titleEl = $('wishingResultTitle');
+  const descEl = $('wishingResultDesc');
+  if (box && titleEl && descEl) {
+    titleEl.textContent = `✨ ${blessing.title}`;
+    descEl.textContent = blessing.desc;
+    box.classList.remove('hidden');
+  }
+
+  emitOp({ k: 'love_wishing_toss', by: me.name, blessing: { title: blessing.title, desc: blessing.desc } });
+  toast(`💖 ${blessing.title}: ${blessing.desc}`);
+});
+
+// ============================================================================
+// ROBLOX STYLE BUILDER TOOLS (:btools / :build)
+// ============================================================================
+let adminBuilderMode = false;
+const builderRaycaster = new THREE.Raycaster();
+const builderMouse = new THREE.Vector2();
+
+function setupBuilderToolsInteraction() {
+  if (!renderer?.domElement) return;
+  const canvas = renderer.domElement;
+  canvas.addEventListener('click', (e) => {
+    if (!adminBuilderMode || !isAdminVerified()) return;
+    if (document.pointerLockElement) return;
+
+    const rect = canvas.getBoundingClientRect();
+    builderMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    builderMouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    builderRaycaster.setFromCamera(builderMouse, camera);
+
+    const blockMeshes = Array.from(world.builderBlocks.values());
+    const blockIntersects = builderRaycaster.intersectObjects(blockMeshes, true);
+
+    if (e.altKey && blockIntersects.length > 0) {
+      let topHit = blockIntersects[0].object;
+      while (topHit.parent && !topHit.userData.blockId && topHit.parent !== world.builderBlocksGroup) {
+        topHit = topHit.parent;
+      }
+      const bId = topHit.userData.blockId;
+      if (bId) {
+        world.removeBuilderBlock(bId);
+        emitOp({ k: 'admin_block_remove', blockId: bId });
+        playSfx('wood');
+        toast('🧱 Đã xóa khối xây dựng!');
+        return;
+      }
+    }
+
+    const groundTargets = world.groundMesh ? [world.groundMesh, ...blockMeshes] : blockMeshes;
+    const hits = builderRaycaster.intersectObjects(groundTargets, true);
+    if (hits.length > 0) {
+      const pt = hits[0].point;
+      const bColors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#facc15', '#06b6d4'];
+      const chosenColor = bColors[Math.floor(Math.random() * bColors.length)];
+      const block = {
+        id: 'block_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+        x: Math.round(pt.x * 2) / 2,
+        y: Math.max(0.5, Math.round(pt.y * 2) / 2 + 0.5),
+        z: Math.round(pt.z * 2) / 2,
+        color: chosenColor,
+        size: 1.0,
+      };
+      world.addBuilderBlock(block);
+      emitOp({ k: 'admin_block_place', block });
+      playSfx('plinko_peg', 'casino');
+      toast('🧱 Đã đặt khối 3D! (Giữ Alt + Click khối để Xóa)');
+    }
+  });
+}
+
+// ============================================================================
+// ADMIN MOB ATTACK & HUNT SYSTEM (:summon / :attack)
+// ============================================================================
+function spawnMobAttack(mobType = 'bat', targetName, byAdmin = 'Admin') {
+  toast(`🦇 ${byAdmin} đã triệu hồi QUÁI VẬT BÓNG ĐÊM săn đuổi [${targetName || 'mọi người'}]!`);
+  playSfx('spooky_laugh', 'halloween');
+
+  const mobGroup = new THREE.Group();
+  
+  const bodyGeo = new THREE.SphereGeometry(0.35, 12, 12);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x180024, roughness: 0.4 });
+  const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+  bodyMesh.position.y = 0.35;
+  mobGroup.add(bodyMesh);
+
+  const eyeGeo = new THREE.SphereGeometry(0.08, 8, 8);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.14, 0.45, 0.28);
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.14, 0.45, 0.28);
+  mobGroup.add(leftEye, rightEye);
+
+  const fangGeo = new THREE.ConeGeometry(0.05, 0.16, 6);
+  const fangMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const leftFang = new THREE.Mesh(fangGeo, fangMat);
+  leftFang.rotation.x = Math.PI;
+  leftFang.position.set(-0.1, 0.24, 0.3);
+  const rightFang = new THREE.Mesh(fangGeo, fangMat);
+  rightFang.rotation.x = Math.PI;
+  rightFang.position.set(0.1, 0.24, 0.3);
+  mobGroup.add(leftFang, rightFang);
+
+  const wingShape = new THREE.Shape();
+  wingShape.moveTo(0, 0);
+  wingShape.lineTo(0.6, 0.4);
+  wingShape.lineTo(0.9, 0.1);
+  wingShape.lineTo(0.5, -0.2);
+  wingShape.lineTo(0, 0);
+  const wingGeo = new THREE.ShapeGeometry(wingShape);
+  const wingMat = new THREE.MeshStandardMaterial({ color: 0x3b0764, side: THREE.DoubleSide });
+
+  const leftWing = new THREE.Mesh(wingGeo, wingMat);
+  leftWing.position.set(-0.25, 0.35, 0);
+  leftWing.rotation.y = Math.PI;
+
+  const rightWing = new THREE.Mesh(wingGeo, wingMat);
+  rightWing.position.set(0.25, 0.35, 0);
+
+  mobGroup.add(leftWing, rightWing);
+
+  mobGroup.position.set(me.x * TILE, me.h + 3.0, me.y * TILE);
+  scene.add(mobGroup);
+
+  const startTime = performance.now();
+  const maxDuration = 12000;
+
+  const anim = () => {
+    const elapsed = performance.now() - startTime;
+    if (elapsed > maxDuration) {
+      scene.remove(mobGroup);
+      return;
+    }
+
+    const wingFlap = Math.sin(elapsed * 0.02) * 0.7;
+    leftWing.rotation.z = wingFlap;
+    rightWing.rotation.z = -wingFlap;
+
+    let tx = me.x * TILE;
+    let ty = me.h + 0.8;
+    let tz = me.y * TILE;
+
+    if (targetName && targetName !== me.name && targetName !== 'all') {
+      const pEntry = findPeerByName(targetName);
+      if (pEntry) {
+        tx = pEntry[1].x * TILE;
+        ty = (pEntry[1].h || 0) + 0.8;
+        tz = pEntry[1].y * TILE;
+      }
+    }
+
+    const dx = tx - mobGroup.position.x;
+    const dy = ty - mobGroup.position.y;
+    const dz = tz - mobGroup.position.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+    if (dist > 0.45) {
+      mobGroup.position.x += (dx / dist) * 0.22;
+      mobGroup.position.y += (dy / dist) * 0.22;
+      mobGroup.position.z += (dz / dist) * 0.22;
+      mobGroup.lookAt(tx, ty, tz);
+      requestAnimationFrame(anim);
+    } else {
+      playSfx('spooky_laugh', 'halloween');
+      playSfx('splat', 'halloween');
+
+      if (targetName === me.name || targetName === 'all' || !targetName) {
+        me.av?.showTomatoSplat?.();
+        document.body.classList.add('earthquake-active');
+        setTimeout(() => document.body.classList.remove('earthquake-active'), 1200);
+
+        if (!adminGodMode && !window.adminGodMode) {
+          toast(`💀 BẠN ĐÃ BỊ QUÁI VẬT CẮN HẾT MÁU! Đang hồi sinh về vị trí xuất phát...`);
+          me.x = 14.5;
+          me.y = 18.5;
+          me.h = 0;
+          me.vy = 0;
+          me.av?.playEmote?.('cry');
+        } else {
+          toast('🛡️ BẬT BẤT TỬ (GOD MODE): Quái cắn không xi nhê!');
+        }
+      }
+
+      peers.forEach(p => {
+        if (targetName === p.name || targetName === 'all') {
+          p.av?.showTomatoSplat?.();
+          p.av?.playEmote?.('scared');
+        }
+      });
+
+      scene.remove(mobGroup);
+    }
+  };
+
+  requestAnimationFrame(anim);
+}
+
+// ============================================================================
+// ADMIN VISUAL FX: LASER, BLACK HOLE, CONFETTI, TORNADO
+// ============================================================================
+function spawnLaserStrike(x, y, targetName, byAdmin = 'Admin') {
+  toast(`⚡ ${byAdmin} ĐÃ GIÁNG CHÙM TIA LASER HỦY DIỆT XUỐNG [${targetName || 'Mục tiêu'}]!`);
+  playSfx('explosion', 'tet');
+
+  const laserGeo = new THREE.CylinderGeometry(0.28, 0.45, 36, 16);
+  const laserMat = new THREE.MeshBasicMaterial({
+    color: 0xff0033,
+    transparent: true,
+    opacity: 0.92,
+  });
+  const laserMesh = new THREE.Mesh(laserGeo, laserMat);
+  laserMesh.position.set(x * TILE, 18, y * TILE);
+  scene.add(laserMesh);
+
+  const ringGeo = new THREE.RingGeometry(0.2, 1.8, 32);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0xffdd00,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+  ringMesh.rotation.x = -Math.PI / 2;
+  ringMesh.position.set(x * TILE, 0.08, y * TILE);
+  scene.add(ringMesh);
+
+  const flash = document.createElement('div');
+  flash.className = 'laser-flash-overlay';
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 700);
+
+  if (targetName === me.name || targetName === 'all') {
+    me.vy = 8;
+    me.h += 1.2;
+    me.av?.showTomatoSplat?.();
+    document.body.classList.add('earthquake-active');
+    setTimeout(() => document.body.classList.remove('earthquake-active'), 1000);
+  }
+
+  peers.forEach(p => {
+    if (targetName === p.name || targetName === 'all') {
+      p.av?.showTomatoSplat?.();
+    }
+  });
+
+  let start = performance.now();
+  const anim = () => {
+    const elapsed = performance.now() - start;
+    if (elapsed > 600) {
+      scene.remove(laserMesh);
+      scene.remove(ringMesh);
+      laserGeo.dispose();
+      laserMat.dispose();
+      ringGeo.dispose();
+      ringMat.dispose();
+      return;
+    }
+    const f = 1 - (elapsed / 600);
+    laserMat.opacity = f * 0.92;
+    ringMat.opacity = f * 0.9;
+    ringMesh.scale.set(1 + (1 - f) * 1.5, 1 + (1 - f) * 1.5, 1);
+    requestAnimationFrame(anim);
+  };
+  requestAnimationFrame(anim);
+}
+
+function spawnBlackHole(byAdmin = 'Admin') {
+  toast(`🌌 ${byAdmin} ĐÃ MỞ RA MỘT HỐ ĐEN VŨ TRỤ HÚT XOÁY TOÀN PHÒNG!`);
+  playSfx('explosion', 'tet');
+
+  const bhGroup = new THREE.Group();
+  const coreGeo = new THREE.SphereGeometry(1.6, 24, 24);
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0x05010a });
+  const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+  bhGroup.add(coreMesh);
+
+  const ringGeo = new THREE.RingGeometry(1.8, 3.8, 32);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0x9333ea,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.8,
+  });
+  const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+  ringMesh.rotation.x = Math.PI / 3;
+  bhGroup.add(ringMesh);
+
+  bhGroup.position.set(14.5 * TILE, 3.2, 18.5 * TILE);
+  scene.add(bhGroup);
+
+  const startTime = performance.now();
+  const duration = 4000;
+
+  const anim = () => {
+    const elapsed = performance.now() - startTime;
+    if (elapsed > duration) {
+      scene.remove(bhGroup);
+      playSfx('explosion', 'tet');
+      const angle = Math.random() * Math.PI * 2;
+      me.vy = 7;
+      me.x += Math.cos(angle) * 3;
+      me.y += Math.sin(angle) * 3;
+      toast('💥 HỐ ĐEN PHÁT NỔ TỐNG VĂNG TẤT CẢ RA NGOÀI!');
+      return;
+    }
+
+    bhGroup.rotation.y += 0.08;
+    ringMesh.rotation.z += 0.12;
+
+    const dx = 14.5 - me.x;
+    const dy = 18.5 - me.y;
+    const d = Math.hypot(dx, dy);
+    if (d > 0.8) {
+      me.x += (dx / d) * 0.08;
+      me.y += (dy / d) * 0.08;
+      me.h = Math.min(2.5, me.h + 0.02);
+    }
+
+    requestAnimationFrame(anim);
+  };
+  requestAnimationFrame(anim);
+}
+
+function spawnConfettiShower(byAdmin = 'Admin') {
+  toast(`🎉 ${byAdmin} BẮN PHÁO HOA GIẤY CẦU VỒNG TOÀN SERVER!`);
+  playSfx('jackpot_voice', 'casino');
+
+  const confettiCount = 90;
+  const colors = [0xef4444, 0x3b82f6, 0x10b981, 0xfacc15, 0xec4899, 0x8b5cf6, 0x06b6d4];
+  const items = [];
+
+  for (let i = 0; i < confettiCount; i++) {
+    const geo = new THREE.PlaneGeometry(0.18, 0.18);
+    const mat = new THREE.MeshBasicMaterial({
+      color: colors[Math.floor(Math.random() * colors.length)],
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(
+      (14.5 + (Math.random() - 0.5) * 22) * TILE,
+      7 + Math.random() * 5,
+      (18.5 + (Math.random() - 0.5) * 22) * TILE
+    );
+    scene.add(mesh);
+    items.push({
+      mesh,
+      geo,
+      mat,
+      vy: 1.5 + Math.random() * 2,
+      rx: (Math.random() - 0.5) * 6,
+      ry: (Math.random() - 0.5) * 6,
+    });
+  }
+
+  const startTime = performance.now();
+  const anim = () => {
+    const elapsed = performance.now() - startTime;
+    if (elapsed > 4500) {
+      items.forEach(it => {
+        scene.remove(it.mesh);
+        it.geo.dispose();
+        it.mat.dispose();
+      });
+      return;
+    }
+    const dt = 0.016;
+    items.forEach(it => {
+      it.mesh.position.y -= it.vy * dt;
+      it.mesh.rotation.x += it.rx * dt;
+      it.mesh.rotation.y += it.ry * dt;
+    });
+    requestAnimationFrame(anim);
+  };
+  requestAnimationFrame(anim);
+}
+
+function spawnTornado(targetName, byAdmin = 'Admin') {
+  toast(`🌪️ ${byAdmin} ĐÃ THẢ LỐC XOÁY CUỐN BAY [${targetName || 'Mọi người'}]!`);
+  playSfx('spooky_laugh', 'halloween');
+
+  const tornadoGroup = new THREE.Group();
+  for (let i = 0; i < 7; i++) {
+    const r = 0.4 + i * 0.28;
+    const ringGeo = new THREE.RingGeometry(r - 0.05, r + 0.05, 16);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x94a3b8,
+      transparent: true,
+      opacity: 0.65,
+      side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = i * 0.65;
+    tornadoGroup.add(ring);
+  }
+
+  let tx = me.x * TILE;
+  let tz = me.y * TILE;
+  if (targetName && targetName !== me.name && targetName !== 'all') {
+    const pEntry = findPeerByName(targetName);
+    if (pEntry) {
+      tx = pEntry[1].x * TILE;
+      tz = pEntry[1].y * TILE;
+    }
+  }
+
+  tornadoGroup.position.set(tx, 0.2, tz);
+  scene.add(tornadoGroup);
+
+  const startTime = performance.now();
+  const anim = () => {
+    const elapsed = performance.now() - startTime;
+    if (elapsed > 4000) {
+      scene.remove(tornadoGroup);
+      return;
+    }
+    tornadoGroup.rotation.y += 0.25;
+    if (targetName === me.name || targetName === 'all') {
+      me.vy = 8.5;
+      me.r += 0.2;
+    }
+    requestAnimationFrame(anim);
+  };
+  requestAnimationFrame(anim);
+}
+
+// ============================================================================
+// ADMIN COMMAND SUGGESTIONS (AUTOCOMPLETE) & IMMEDIATE MODAL CLOSE
+// ============================================================================
+export const ADMIN_COMMAND_CATALOG = [
+  // 1. Quản lý người chơi
+  { cmd: ':kick', usage: ':kick <tên>', desc: 'Đuổi người chơi ra khỏi phòng' },
+  { cmd: ':ban', usage: ':ban <tên>', desc: 'Cấm người chơi vào lại phòng' },
+  { cmd: ':unban', usage: ':unban <tên>', desc: 'Gỡ lệnh cấm cho người chơi' },
+  { cmd: ':mute', usage: ':mute <tên>', desc: 'Cấm chat người chơi' },
+  { cmd: ':unmute', usage: ':unmute <tên>', desc: 'Gỡ cấm chat' },
+  { cmd: ':jail', usage: ':jail <tên>', desc: 'Nhốt người chơi vào lồng giam' },
+  { cmd: ':unjail', usage: ':unjail <tên>', desc: 'Thả tự do khỏi lồng giam' },
+  { cmd: ':freeze', usage: ':freeze <tên>', desc: 'Đóng băng bất động' },
+  { cmd: ':thaw', usage: ':thaw <tên>', desc: 'Rã đông, di chuyển lại' },
+  { cmd: ':god', usage: ':god', desc: 'Bật chế độ bất tử (God Mode)' },
+  { cmd: ':ungod', usage: ':ungod', desc: 'Tắt chế độ bất tử' },
+  { cmd: ':kill', usage: ':kill <tên>', desc: 'Hạ gục người chơi (0 HP)' },
+  { cmd: ':respawn', usage: ':respawn <tên>', desc: 'Hồi sinh về điểm xuất phát' },
+  { cmd: ':bring', usage: ':bring <tên>', desc: 'Kéo người chơi lại gần mình' },
+  { cmd: ':to', usage: ':to <tên>', desc: 'Dịch chuyển mình tới người chơi' },
+  { cmd: ':tp', usage: ':tp <tên1> <tên2>', desc: 'Dịch chuyển người 1 tới người 2' },
+
+  // 2. Nhân vật & Xây dựng
+  { cmd: ':speed', usage: ':speed <hệ số>', desc: 'Tốc độ chạy (mặc định 1.0, vd :speed 5)' },
+  { cmd: ':jp', usage: ':jp <lực>', desc: 'Lực nhảy cao (mặc định 8.2, vd :jp 18)' },
+  { cmd: ':fly', usage: ':fly', desc: 'Bật chế độ bay tự do (Space bay, Shift hạ)' },
+  { cmd: ':unfly', usage: ':unfly', desc: 'Tắt chế độ bay' },
+  { cmd: ':noclip', usage: ':noclip', desc: 'Đi xuyên qua tất cả các bức tường' },
+  { cmd: ':clip', usage: ':clip', desc: 'Tắt đi xuyên tường (bật lại va chạm)' },
+  { cmd: ':invisible', usage: ':invisible', desc: 'Tàng hình hoàn toàn' },
+  { cmd: ':visible', usage: ':visible', desc: 'Hiện hình trở lại' },
+  { cmd: ':size', usage: ':size <hệ số>', desc: 'Phóng to/thu nhỏ nhân vật (vd :size 3)' },
+  { cmd: ':giant', usage: ':giant <tên>', desc: 'Hóa người khổng lồ 3.5x' },
+  { cmd: ':tiny', usage: ':tiny <tên>', desc: 'Hóa người tí hon 0.35x' },
+  { cmd: ':golden', usage: ':golden <tên>', desc: 'Hóa Tượng Vàng Midas lấp lánh' },
+  { cmd: ':ghost', usage: ':ghost <tên>', desc: 'Hóa Hồn Ma trong suốt bồng bềnh' },
+  { cmd: ':rainbow', usage: ':rainbow <tên>', desc: 'Hào quang cầu vồng RGB rực rỡ' },
+  { cmd: ':btools', usage: ':btools', desc: 'Bật/tắt công cụ xây dựng khối 3D Roblox' },
+  { cmd: ':build', usage: ':build', desc: 'Bật công cụ xây dựng khối 3D Roblox' },
+
+  // 3. Thế giới & Môi trường
+  { cmd: ':time', usage: ':time <day|night>', desc: 'Đổi thời gian ngày hoặc đêm' },
+  { cmd: ':gravity', usage: ':gravity <số>', desc: 'Đổi trọng lực (mặc định 20, vd :gravity 5)' },
+  { cmd: ':gravityflip', usage: ':gravityflip', desc: 'Đảo ngược trọng lực lộn ngược lên trần' },
+  { cmd: ':matrix', usage: ':matrix', desc: 'Slow-Motion làm chậm thời gian 5 giây' },
+  { cmd: ':blackhole', usage: ':blackhole', desc: 'Hố đen vũ trụ hút xoáy toàn bộ server' },
+  { cmd: ':confetti', usage: ':confetti', desc: 'Bắn pháo hoa giấy kim tuyến cầu vồng' },
+  { cmd: ':sm', usage: ':sm <nội dung>', desc: 'Gửi biểu ngữ thông báo lớn toàn phòng' },
+  { cmd: ':shutdown', usage: ':shutdown', desc: 'Đóng phòng ngay lập tức' },
+
+  // 4. Hỗn loạn & Troll (Quyền Nhà Nước)
+  { cmd: ':laser', usage: ':laser <tên>', desc: 'Bắn chùm tia laser hủy diệt từ trời giáng xuống' },
+  { cmd: ':tornado', usage: ':tornado <tên>', desc: 'Lốc xoáy hất tung người chơi lên trời' },
+  { cmd: ':summon', usage: ':summon <mob> <tên>', desc: 'Thả quái vật bóng đêm bay cắn KO' },
+  { cmd: ':attack', usage: ':attack <tên>', desc: 'Điều khiển quái vật cắn cạn máu mục tiêu' },
+  { cmd: ':headless', usage: ':headless <tên>', desc: 'Tháo bay đầu của người chơi rớt Lego' },
+  { cmd: ':disarm', usage: ':disarm <tên>', desc: 'Tháo mất 2 cánh tay' },
+  { cmd: ':amputate', usage: ':amputate <tên>', desc: 'Tháo rụng tứ chi' },
+  { cmd: ':lego', usage: ':lego <tên>', desc: 'Nổ tung cơ thể thành các khối Lego rời rạc' },
+  { cmd: ':rearm', usage: ':rearm <tên>', desc: 'Lắp ráp lại tứ chi nguyên vẹn' },
+  { cmd: ':heal', usage: ':heal <tên>', desc: 'Hồi phục máu và rửa sạch vết cà chua' },
+  { cmd: ':spin', usage: ':spin <tên>', desc: 'Làm người chơi xoay mòng mòng chóng mặt' },
+  { cmd: ':spinall', usage: ':spinall', desc: 'Làm toàn bộ server xoay tít mù' },
+  { cmd: ':disco', usage: ':disco', desc: 'Bật/tắt sàn nhảy Disco lung linh' },
+  { cmd: ':earthquake', usage: ':earthquake', desc: 'Kích hoạt động đất rung chuyển màn hình' },
+  { cmd: ':nuke', usage: ':nuke', desc: 'Kích nổ bom hạt nhân chói lóa' },
+  { cmd: ':rocket', usage: ':rocket <tên>', desc: 'Bắn bay vút lên trời như tên lửa' },
+  { cmd: ':slap', usage: ':slap <tên>', desc: 'Tát bay người chơi kèm ném cà chua' },
+  { cmd: ':danceall', usage: ':danceall', desc: 'Bắt toàn bộ server cùng nhảy múa' },
+  { cmd: ':clown', usage: ':clown <tên>', desc: 'Đội mũ bí ngô hề hước' },
+  { cmd: ':fire', usage: ':fire <tên>', desc: 'Gắn lửa bốc cháy bập bùng' },
+  { cmd: ':blind', usage: ':blind <tên>', desc: 'Làm tối đen màn hình mục tiêu' },
+  { cmd: ':unblind', usage: ':unblind <tên>', desc: 'Gỡ tối đen màn hình mục tiêu' },
+  { cmd: ':blindall', usage: ':blindall', desc: 'Làm tối đen màn hình toàn server' },
+  { cmd: ':unblindall', usage: ':unblindall', desc: 'Gỡ tối đen màn hình toàn server' },
+  { cmd: ':chips', usage: ':chips <số>', desc: 'Tự cấp thêm xu cờ bạc vào ví' },
+
+  // 5. Khôi phục & Reset
+  { cmd: ':reset', usage: ':reset', desc: 'Khôi phục mọi hiệu ứng troll & cơ thể về mặc định' },
+  { cmd: ':resetall', usage: ':resetall', desc: 'Khôi phục mọi hiệu ứng troll & cơ thể về mặc định' },
+  { cmd: ':clean', usage: ':clean', desc: 'Dọn sạch khối xây dựng và hiệu ứng' },
+  { cmd: ':resetchips', usage: ':resetchips', desc: 'Đặt lại số xu cờ bạc về 0' },
+  { cmd: ':clearhistory', usage: ':clearhistory', desc: 'Xóa hồi chiêu 10 phút của mã code' },
+  { cmd: ':clearmap', usage: ':clearmap', desc: 'Dọn dẹp thiệp và đồ trang trí trên sàn' },
+];
+
+let selectedSuggestIndex = -1;
+let currentSuggestions = [];
+
+function hideAdminSuggestions() {
+  const container = $('adminSuggestions');
+  if (container) {
+    container.classList.add('hidden');
+    container.innerHTML = '';
+  }
+  selectedSuggestIndex = -1;
+  currentSuggestions = [];
+}
+
+function renderAdminSuggestions(list) {
+  const container = $('adminSuggestions');
+  if (!container) return;
+  if (!list || list.length === 0) {
+    hideAdminSuggestions();
+    return;
+  }
+  currentSuggestions = list;
+  selectedSuggestIndex = -1;
+  container.innerHTML = '';
+
+  list.forEach((item, idx) => {
+    const el = document.createElement('div');
+    el.className = 'admin-suggest-item';
+    el.innerHTML = `
+      <div class="admin-suggest-left">
+        <span class="admin-suggest-badge ${item.isUser ? 'user' : ''}">${item.isUser ? 'NGƯỜI CHƠI' : 'LỆNH'}</span>
+        <span class="admin-suggest-cmd">${item.label}</span>
+      </div>
+      <div class="admin-suggest-desc">${item.desc}</div>
+    `;
+
+    el.onclick = (e) => {
+      e.stopPropagation();
+      applySuggestion(item);
+    };
+    container.appendChild(el);
+  });
+
+  container.classList.remove('hidden');
+}
+
+function applySuggestion(item) {
+  const input = $('inAdminCmd');
+  if (!input) return;
+
+  if (item.isUser) {
+    const parts = input.value.split(/\s+/);
+    parts[parts.length - 1] = item.value;
+    input.value = parts.join(' ') + ' ';
+  } else {
+    input.value = item.value + ' ';
+  }
+  input.focus();
+  updateSuggestions();
+}
+
+function updateSuggestions() {
+  const input = $('inAdminCmd');
+  if (!input) return;
+  const raw = input.value;
+  if (!raw || !raw.trim()) {
+    hideAdminSuggestions();
+    return;
+  }
+
+  const parts = raw.split(/\s+/);
+
+  if (parts.length === 1 || (parts.length === 2 && !parts[1])) {
+    let term = parts[0].toLowerCase();
+    if (!term.startsWith(':') && !term.startsWith(';') && !term.startsWith('/')) {
+      term = ':' + term;
+    }
+    const matches = ADMIN_COMMAND_CATALOG.filter(c => c.cmd.toLowerCase().startsWith(term));
+    const items = matches.slice(0, 10).map(c => ({
+      isUser: false,
+      label: c.usage,
+      value: c.cmd,
+      desc: c.desc,
+    }));
+    renderAdminSuggestions(items);
+  } else {
+    const lastArg = parts[parts.length - 1].toLowerCase();
+    const playerList = [];
+
+    playerList.push({ name: me.name, desc: 'Chính bản thân bạn' });
+    playerList.push({ name: 'all', desc: 'Toàn bộ tất cả người chơi trong phòng' });
+
+    peers.forEach(p => {
+      if (p.name && !playerList.some(pl => pl.name === p.name)) {
+        playerList.push({ name: p.name, desc: 'Thành viên trong phòng' });
+      }
+    });
+
+    const matches = playerList.filter(p => p.name.toLowerCase().includes(lastArg));
+    const items = matches.slice(0, 8).map(p => ({
+      isUser: true,
+      label: p.name,
+      value: p.name,
+      desc: p.desc,
+    }));
+    renderAdminSuggestions(items);
+  }
+}
+
+function setupAdminCommandAutocomplete() {
+  const input = $('inAdminCmd');
+  if (!input) return;
+
+  input.addEventListener('input', () => {
+    updateSuggestions();
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const container = $('adminSuggestions');
+    const isVisible = container && !container.classList.contains('hidden');
+
+    if (!isVisible) {
+      if (e.key === 'Enter') {
+        runAndCloseAdminCmd();
+      }
+      return;
+    }
+
+    const items = container.querySelectorAll('.admin-suggest-item');
+    if (items.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedSuggestIndex = (selectedSuggestIndex + 1) % items.length;
+      items.forEach((it, idx) => it.classList.toggle('selected', idx === selectedSuggestIndex));
+      items[selectedSuggestIndex]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedSuggestIndex = (selectedSuggestIndex - 1 + items.length) % items.length;
+      items.forEach((it, idx) => it.classList.toggle('selected', idx === selectedSuggestIndex));
+      items[selectedSuggestIndex]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      const targetIdx = selectedSuggestIndex >= 0 ? selectedSuggestIndex : 0;
+      if (currentSuggestions[targetIdx]) {
+        applySuggestion(currentSuggestions[targetIdx]);
+      }
+    } else if (e.key === 'Enter') {
+      if (selectedSuggestIndex >= 0 && currentSuggestions[selectedSuggestIndex]) {
+        e.preventDefault();
+        applySuggestion(currentSuggestions[selectedSuggestIndex]);
+      } else {
+        runAndCloseAdminCmd();
+      }
+    } else if (e.key === 'Escape') {
+      hideAdminSuggestions();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.admin-cmd-box')) {
+      hideAdminSuggestions();
+    }
+  });
+}
+
+function runAndCloseAdminCmd() {
+  const input = $('inAdminCmd');
+  if (!input) return;
+  const cmd = input.value.trim();
   if (cmd) {
     executeAdminCommand(cmd);
-    $('inAdminCmd').value = '';
+    input.value = '';
+    hideAdminSuggestions();
+    // Tự động đóng modal ngay lập tức để người chơi quan sát kết quả trên màn hình
+    closeDialog('dlgAdmin');
   }
-};
+}
 
-$('inAdminCmd').onkeydown = e => {
-  if (e.key === 'Enter') $('btnRunAdminCmd').click();
-};
+$('btnRunAdminCmd').onclick = runAndCloseAdminCmd;
 
 function executeAdminCommand(raw) {
   let cmdStr = (raw || '').trim();
@@ -5142,7 +6165,213 @@ function executeAdminCommand(raw) {
       return true;
     }
 
+    // === BUILDER TOOLS ===
+    case 'btools':
+    case 'build': {
+      adminBuilderMode = !adminBuilderMode;
+      document.body.classList.toggle('builder-mode-active', adminBuilderMode);
+      toast(adminBuilderMode 
+        ? '🧱 BẬT BUILDER TOOL: Click để ĐẶT khối 3D, Giữ Alt + Click khối để XÓA!' 
+        : '🧱 ĐÃ TẮT BUILDER TOOL');
+      return true;
+    }
+
+    // === MOB ATTACK & HUNT ===
+    case 'summon':
+    case 'attack': {
+      let mobType = 'bat';
+      let targetName = args[0] || me.name;
+      if (args.length >= 2) {
+        mobType = args[0];
+        targetName = args[1];
+      }
+      emitOp({ k: 'admin_summon_mob', mob: mobType, target: targetName, by: me.name });
+      spawnMobAttack(mobType, targetName, me.name);
+      return true;
+    }
+
+    // === LEGO LIMB DETACH TROLLS ===
+    case 'headless': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_limb_state', target: targetName, limbs: { head: false } });
+      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ head: false });
+      toast(`🪓 Đã tháo bay đầu của ${targetName} rớt Lego!`);
+      return true;
+    }
+    case 'disarm': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_limb_state', target: targetName, limbs: { leftArm: false, rightArm: false } });
+      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ leftArm: false, rightArm: false });
+      toast(`🦾 Đã tháo mất 2 cánh tay của ${targetName}!`);
+      return true;
+    }
+    case 'amputate': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_limb_state', target: targetName, limbs: { leftArm: false, rightArm: false, legs: false } });
+      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ leftArm: false, rightArm: false, legs: false });
+      toast(`🦿 Đã tháo rụng tứ chi của ${targetName}!`);
+      return true;
+    }
+    case 'lego': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_limb_state', target: targetName, limbs: { head: false, leftArm: false, rightArm: false, legs: false } });
+      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ head: false, leftArm: false, rightArm: false, legs: false });
+      toast(`🧱 Đã nổ tung người ${targetName} thành các khối Lego rời rạc!`);
+      return true;
+    }
+    case 'rearm': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_limb_state', target: targetName, limbs: { head: true, leftArm: true, rightArm: true, legs: true } });
+      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
+      toast(`✨ Đã lắp ráp lại tứ chi nguyên vẹn cho ${targetName}!`);
+      return true;
+    }
+
+    // === NEW CHAOS & SPECIAL ADMIN COMMANDS ===
+    case 'laser':
+    case 'beam': {
+      const targetName = args[0] || me.name;
+      let tx = me.x;
+      let ty = me.y;
+      if (targetName !== me.name && targetName !== 'all') {
+        const pEntry = findPeerByName(targetName);
+        if (pEntry) {
+          tx = pEntry[1].x;
+          ty = pEntry[1].y;
+        }
+      }
+      emitOp({ k: 'admin_laser', x: tx, y: ty, target: targetName, by: me.name });
+      spawnLaserStrike(tx, ty, targetName, me.name);
+      return true;
+    }
+    case 'tornado':
+    case 'cyclone': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_tornado', target: targetName, by: me.name });
+      spawnTornado(targetName, me.name);
+      return true;
+    }
+    case 'blackhole':
+    case 'vortex': {
+      emitOp({ k: 'admin_blackhole', by: me.name });
+      spawnBlackHole(me.name);
+      return true;
+    }
+    case 'confetti':
+    case 'party': {
+      emitOp({ k: 'admin_confetti', by: me.name });
+      spawnConfettiShower(me.name);
+      return true;
+    }
+    case 'golden':
+    case 'midas': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_golden', target: targetName, by: me.name });
+      if (targetName === me.name || targetName === 'all') {
+        me.av?.setMidasGolden?.(true);
+      }
+      peers.forEach(p => {
+        if (targetName === p.name || targetName === 'all') p.av?.setMidasGolden?.(true);
+      });
+      toast(`✨ Đã hóa tượng vàng Midas cho ${targetName}!`);
+      return true;
+    }
+    case 'ghost': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_ghost', target: targetName, by: me.name });
+      if (targetName === me.name || targetName === 'all') {
+        me.av?.setGhostMode?.(true);
+      }
+      peers.forEach(p => {
+        if (targetName === p.name || targetName === 'all') p.av?.setGhostMode?.(true);
+      });
+      toast(`👻 Đã hóa hồn ma trong suốt cho ${targetName}!`);
+      return true;
+    }
+    case 'rainbow': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_rainbow', target: targetName, by: me.name });
+      if (targetName === me.name || targetName === 'all') {
+        me.nametagStyle = 'rainbow';
+        me.aura = 'lightning';
+        me.av?.setName(me.name, me.title, 'rainbow');
+        me.av?.setAura('lightning');
+        syncMyAppearance();
+      }
+      toast(`🌈 Đã ban tặng hào quang cầu vồng RGB cho ${targetName}!`);
+      return true;
+    }
+    case 'heal':
+    case 'revive': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_heal', target: targetName, by: me.name });
+      if (targetName === me.name || targetName === 'all') {
+        document.querySelectorAll('.tomato-splat-overlay').forEach(el => el.remove());
+        me.av?.playEmote?.('cheer');
+      }
+      toast(`💖 Đã hồi phục sinh lực và làm sạch cà chua cho ${targetName}!`);
+      return true;
+    }
+    case 'matrix': {
+      emitOp({ k: 'admin_matrix', by: me.name });
+      document.body.classList.add('matrix-active');
+      adminSpeedMultiplier = 0.3;
+      toast(`🕶️ KÍCH HOẠT MA TRẬN: Toàn server chậm lại 70%!`);
+      playSfx('spooky_laugh', 'halloween');
+      setTimeout(() => {
+        document.body.classList.remove('matrix-active');
+        if (adminSpeedMultiplier === 0.3) adminSpeedMultiplier = 1.0;
+        toast('⚡ Thời gian đã trở lại tốc độ bình thường.');
+      }, 5500);
+      return true;
+    }
+    case 'gravityflip':
+    case 'invertr': {
+      emitOp({ k: 'admin_gravity_flip', by: me.name });
+      currentGravity = -15;
+      me.vy = 4;
+      toast(`🌀 TRỌNG LỰC ĐẢO NGƯỢC! Mọi người đang lộn ngược trôi lên trần nhà!`);
+      playSfx('firework_rocket', 'tet');
+      setTimeout(() => {
+        currentGravity = 20;
+        toast('🌍 Trọng lực đã trở lại bình thường.');
+      }, 6500);
+      return true;
+    }
+    case 'blindall': {
+      emitOp({ k: 'admin_blind', target: 'all', blind: true });
+      document.body.classList.add('blinded-screen');
+      toast('🕶️ Đã làm tối đen màn hình toàn server!');
+      return true;
+    }
+    case 'unblindall': {
+      emitOp({ k: 'admin_blind', target: 'all', blind: false });
+      document.body.classList.remove('blinded-screen');
+      toast('👀 Đã gỡ tối đen màn hình toàn server!');
+      return true;
+    }
+    case 'tp': {
+      const t1 = args[0];
+      const t2 = args[1];
+      if (!t1 || !t2) { toast('⚠️ Cú pháp: :tp <tên_người_1> <tên_người_2>'); return true; }
+      let targetX = me.x;
+      let targetY = me.y;
+      if (t2.toLowerCase() === 'me' || t2.toLowerCase() === me.name.toLowerCase()) {
+        targetX = me.x;
+        targetY = me.y;
+      } else {
+        const p2 = findPeerByName(t2);
+        if (!p2) { toast(`⚠️ Không tìm thấy người chơi "${t2}"`); return true; }
+        targetX = p2[1].x;
+        targetY = p2[1].y;
+      }
+      emitOp({ k: 'admin_teleport', target: t1, toX: targetX, toY: targetY, by: me.name });
+      toast(`🌀 Đã dịch chuyển ${t1} tới chỗ ${t2}!`);
+      return true;
+    }
+
     // === 5. RESET COMMANDS ===
+    case 'reset':
     case 'resetall':
     case 'clean': {
       emitOp({ k: 'admin_reset_all', by: me.name });
@@ -5157,18 +6386,22 @@ function executeAdminCommand(raw) {
       jailedPos = null;
       currentGravity = 20;
       adminSpinUntil = 0;
-      document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active');
+      adminBuilderMode = false;
+      document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active', 'builder-mode-active');
+      world.clearBuilderBlocks();
       if (me?.av) {
         me.av.root.scale.set(1, 1, 1);
         me.av.root.visible = true;
+        me.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
       }
       peers.forEach(p => {
         if (p.av) {
           p.av.root.scale.set(1, 1, 1);
           p.av.root.visible = true;
+          p.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
         }
       });
-      toast('✨ Đã đặt lại toàn bộ hiệu ứng troll về mặc định!');
+      toast('✨ Đã đặt lại toàn bộ hiệu ứng troll & khôi phục trạng thái hoàn toàn!');
       return true;
     }
     case 'resetchips': {

@@ -1539,4 +1539,245 @@ export function buildCasinoExitPortal() {
   return g;
 }
 
+// ============================================================================
+// 7. ILLUSION WALL (BỨC TƯỜNG ẢO ẢNH ĐI XUYÊN QUA)
+// ============================================================================
+export function buildIllusionWall(themeKey) {
+  const g = new THREE.Group();
+  const themeColors = {
+    christmas: { base: '#cbd5e1', glow: '#38bdf8', rune: '❄️' },
+    halloween: { base: '#18181b', glow: '#a855f7', rune: '💀' },
+    tet: { base: '#7f1d1d', glow: '#facc15', rune: '🏮' },
+    valentine: { base: '#831843', glow: '#f43f5e', rune: '💖' },
+  };
+  const cfg = themeColors[themeKey] || themeColors.christmas;
+
+  const wallMat = mat(cfg.base, {
+    roughness: 0.45,
+    transparent: true,
+    opacity: 0.94,
+  });
+  part(g, G.box(), wallMat, [0, 0.8, 0], [2.1, 1.6, 0.35]);
+
+  const runeMat = mat(cfg.glow, {
+    emissive: cfg.glow,
+    emissiveIntensity: 0.85,
+    roughness: 0.2,
+  });
+  part(g, G.box(), runeMat, [-1.02, 0.8, 0.18], [0.06, 1.58, 0.04]);
+  part(g, G.box(), runeMat, [1.02, 0.8, 0.18], [0.06, 1.58, 0.04]);
+  part(g, G.box(), runeMat, [0, 1.58, 0.18], [2.1, 0.06, 0.04]);
+
+  const spr = emojiSprite(cfg.rune, 0.32);
+  spr.position.set(0, 1.0, 0.2);
+  g.add(spr);
+
+  g.userData = { type: 'illusion_wall' };
+  return g;
+}
+
+// ============================================================================
+// 8. CASINO VIP PUB & BOUTIQUE COUNTER
+// ============================================================================
+export function buildCasinoPubBar() {
+  const g = new THREE.Group();
+
+  const woodMat = mat('#3b1a0a', { roughness: 0.35 });
+  const marbleMat = mat('#0f172a', { roughness: 0.15, metalness: 0.1 });
+  const brassMat = mat('#f59e0b', { roughness: 0.2, metalness: 0.85 });
+  const glassMat = mat('#38bdf8', { transparent: true, opacity: 0.45, roughness: 0.1 });
+
+  part(g, G.box(), woodMat, [0, 0.52, 0], [5.4, 1.04, 1.2]);
+  part(g, G.box(), marbleMat, [0, 1.06, 0], [5.6, 0.08, 1.35]);
+  part(g, G.box(), brassMat, [0, 0.08, 0.65], [5.4, 0.06, 0.06]);
+
+  const backShelf = new THREE.Group();
+  backShelf.position.set(0, 0, -1.2);
+  part(backShelf, G.box(), woodMat, [0, 1.4, 0], [5.2, 2.6, 0.4]);
+  const bottleColors = ['#ef4444', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4'];
+  for (let s = 0; s < 3; s++) {
+    const sy = 0.8 + s * 0.7;
+    part(backShelf, G.box(), brassMat, [0, sy, 0.18], [5.0, 0.04, 0.32]);
+    for (let b = 0; b < 12; b++) {
+      const bx = -2.2 + b * 0.4;
+      const col = bottleColors[(b + s) % bottleColors.length];
+      const botMat = mat(col, { transparent: true, opacity: 0.75, roughness: 0.1 });
+      part(backShelf, G.cyl(), botMat, [bx, sy + 0.18, 0.18], [0.08, 0.32, 0.08]);
+      part(backShelf, G.cyl(), brassMat, [bx, sy + 0.36, 0.18], [0.03, 0.08, 0.03]);
+    }
+  }
+  g.add(backShelf);
+
+  [-2.0, -0.68, 0.68, 2.0].forEach(sx => {
+    const stool = new THREE.Group();
+    stool.position.set(sx, 0, 1.15);
+    part(stool, G.cyl(), brassMat, [0, 0.36, 0], [0.06, 0.72, 0.06]);
+    part(stool, G.cyl(), brassMat, [0, 0.02, 0], [0.42, 0.04, 0.42]);
+    part(stool, G.cyl(), mat('#831843', { roughness: 0.5 }), [0, 0.74, 0], [0.44, 0.12, 0.44]);
+    g.add(stool);
+  });
+
+  const sign = labelSprite('🍸 VIP PUB & FASHION BOUTIQUE 👑', 'rgba(120,53,15,0.95)', '#fef08a', 0.56);
+  sign.position.set(0, 3.1, 0);
+  g.add(sign);
+
+  part(g, G.cyl(), mat('#cbd5e1', { metalness: 0.9, roughness: 0.1 }), [-0.6, 1.25, 0.15], [0.12, 0.32, 0.12]);
+  part(g, G.cone(), glassMat, [0.6, 1.22, 0.15], [0.12, 0.16, 0.12]);
+
+  g.userData = { type: 'casino_pub' };
+  return g;
+}
+
+// ============================================================================
+// 9. 3D AVATAR ACCESSORIES & WEARABLES
+// ============================================================================
+export function buildAccessoryMesh(type) {
+  const g = new THREE.Group();
+  const goldMat = mat('#f59e0b', { roughness: 0.15, metalness: 0.85 });
+  const rubyMat = mat('#ef4444', { emissive: '#dc2626', emissiveIntensity: 0.5 });
+  const blackMat = mat('#18181b', { roughness: 0.4 });
+  const whiteMat = mat('#f8fafc', { roughness: 0.3 });
+
+  switch (type) {
+    case 'crown': {
+      part(g, G.cyl(), goldMat, [0, 0.06, 0], [0.42, 0.1, 0.42]);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        const cx = Math.cos(a) * 0.19;
+        const cz = Math.sin(a) * 0.19;
+        part(g, G.cone(), goldMat, [cx, 0.18, cz], [0.08, 0.18, 0.08]);
+        part(g, G.sph(), rubyMat, [cx, 0.28, cz], [0.04, 0.04, 0.04]);
+      }
+      break;
+    }
+    case 'cowboy_hat': {
+      const leather = mat('#78350f', { roughness: 0.6 });
+      part(g, G.cyl(), leather, [0, 0.04, 0], [0.68, 0.04, 0.58]);
+      part(g, G.cyl(), leather, [0, 0.22, 0], [0.38, 0.32, 0.34]);
+      part(g, G.torus(), goldMat, [0, 0.08, 0], [0.39, 0.39, 0.39], [Math.PI / 2, 0, 0]);
+      break;
+    }
+    case 'top_hat': {
+      part(g, G.cyl(), blackMat, [0, 0.03, 0], [0.62, 0.04, 0.62]);
+      part(g, G.cyl(), blackMat, [0, 0.28, 0], [0.38, 0.46, 0.38]);
+      part(g, G.cyl(), mat('#dc2626'), [0, 0.08, 0], [0.39, 0.07, 0.39]);
+      break;
+    }
+    case 'cat_ears': {
+      const earMat = mat('#1e293b');
+      const pinkMat = mat('#f472b6');
+      [-0.14, 0.14].forEach(x => {
+        part(g, G.cone(), earMat, [x, 0.15, 0], [0.12, 0.24, 0.08], [0, 0, x > 0 ? -0.2 : 0.2]);
+        part(g, G.cone(), pinkMat, [x, 0.14, 0.02], [0.07, 0.18, 0.04], [0, 0, x > 0 ? -0.2 : 0.2]);
+      });
+      break;
+    }
+    case 'shades': {
+      const frameMat = mat('#f59e0b', { metalness: 0.9, roughness: 0.1 });
+      const lensMat = mat('#020617', { metalness: 0.8, roughness: 0.1 });
+      part(g, G.box(), lensMat, [-0.09, 0, 0.2], [0.14, 0.09, 0.03]);
+      part(g, G.box(), lensMat, [0.09, 0, 0.2], [0.14, 0.09, 0.03]);
+      part(g, G.box(), frameMat, [0, 0.02, 0.2], [0.26, 0.015, 0.03]);
+      break;
+    }
+    case 'hacker_mask': {
+      part(g, G.sph(), whiteMat, [0, -0.04, 0.18], [0.38, 0.38, 0.14]);
+      part(g, G.box(), mat('#dc2626'), [0, -0.14, 0.26], [0.18, 0.04, 0.02]);
+      part(g, G.box(), blackMat, [-0.08, 0.02, 0.26], [0.08, 0.03, 0.02]);
+      part(g, G.box(), blackMat, [0.08, 0.02, 0.26], [0.08, 0.03, 0.02]);
+      break;
+    }
+    case 'astronaut_helmet': {
+      const domeMat = mat('#f1f5f9', { roughness: 0.2 });
+      const visorMat = mat('#fbbf24', { metalness: 0.95, roughness: 0.05 });
+      part(g, G.sph(), domeMat, [0, 0.05, 0], [0.52, 0.52, 0.52]);
+      part(g, G.sph(), visorMat, [0, 0.05, 0.14], [0.42, 0.34, 0.32]);
+      break;
+    }
+    case 'halo': {
+      const haloMat = mat('#fef08a', { emissive: '#facc15', emissiveIntensity: 1.2 });
+      part(g, G.torus(), haloMat, [0, 0.42, 0], [0.28, 0.28, 0.28], [Math.PI / 2, 0, 0]);
+      break;
+    }
+    case 'devil_wings': {
+      const wingMat = mat('#450a0a', { roughness: 0.4 });
+      const boneMat = mat('#991b1b', { metalness: 0.6 });
+      [-1, 1].forEach(side => {
+        const wing = new THREE.Group();
+        wing.position.set(side * 0.15, 0.2, -0.16);
+        wing.rotation.y = side * 0.45;
+        part(wing, G.cone(), boneMat, [side * 0.4, 0.28, 0], [0.05, 0.85, 0.05], [0, 0, -side * 0.9]);
+        part(wing, G.box(), wingMat, [side * 0.35, 0.05, 0], [0.65, 0.45, 0.03]);
+        g.add(wing);
+      });
+      break;
+    }
+  }
+
+  return g;
+}
+
+// ============================================================================
+// 10. 3D AVATAR AURAS & PARTICLES
+// ============================================================================
+export function buildAuraMesh(auraType) {
+  const g = new THREE.Group();
+  const auraConfigs = {
+    gold: { col: 0xfacc15, count: 18, radius: 0.85 },
+    fire: { col: 0xef4444, count: 20, radius: 0.8 },
+    frost: { col: 0x38bdf8, count: 18, radius: 0.85 },
+    hearts: { col: 0xf43f5e, count: 16, radius: 0.75 },
+    lightning: { col: 0xa855f7, count: 22, radius: 0.9 },
+    admin: { col: 0xffd700, count: 28, radius: 1.1 },
+  };
+  const cfg = auraConfigs[auraType] || auraConfigs.gold;
+
+  const particles = [];
+  const pMat = new THREE.MeshBasicMaterial({ color: cfg.col });
+  for (let i = 0; i < cfg.count; i++) {
+    const mesh = new THREE.Mesh(G.sph(), pMat);
+    const sz = auraType === 'admin' ? 0.08 : 0.06;
+    mesh.scale.set(sz, sz, sz);
+    g.add(mesh);
+    particles.push({
+      mesh,
+      angle: (i / cfg.count) * Math.PI * 2,
+      speed: 1.5 + (i % 3) * 0.4,
+      yOffset: (i / cfg.count) * 1.6,
+      radius: cfg.radius * (0.8 + (i % 4) * 0.1),
+    });
+  }
+
+  const ringGeo = new THREE.RingGeometry(cfg.radius * 0.8, cfg.radius * 1.15, 24);
+  ringGeo.rotateX(-Math.PI / 2);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: cfg.col,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.55,
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.position.y = 0.04;
+  g.add(ring);
+
+  g.userData = {
+    type: 'aura',
+    particles,
+    ring,
+    update(time) {
+      ring.rotation.y = time * 0.6;
+      particles.forEach(p => {
+        p.angle += 0.04 * p.speed;
+        p.mesh.position.set(
+          Math.cos(p.angle) * p.radius,
+          0.2 + ((p.yOffset + time * 0.5) % 1.7),
+          Math.sin(p.angle) * p.radius
+        );
+      });
+    },
+  };
+
+  return g;
+}
+
 

@@ -1,7 +1,7 @@
 // Articulated 3D Human Character with Costumes, Wearable Pumpkin Hats, Held Props & Rich Animations.
 import * as THREE from 'three';
 import { COSTUMES } from './themes.js';
-import { buildCarvedPumpkin, buildOrnamentMesh, G, mat, part } from './props.js';
+import { buildCarvedPumpkin, buildOrnamentMesh, buildAccessoryMesh, buildAuraMesh, G, mat, part } from './props.js';
 
 const HEIGHT = 1.72;
 const _headPos = new THREE.Vector3();
@@ -82,9 +82,20 @@ export class Avatar {
     this.costumeKey = costume || 'default';
     this.pumpkinHatKey = pumpkinHat || null;
     this.heldKey = null;
+    this.accessoryKey = null;
+    this.auraKey = null;
+    this.nametagStyle = null;
+    this.limbState = { head: true, leftArm: true, rightArm: true, legs: true };
+    this.legoBricks = [];
 
     this.body = new THREE.Group();
     this.root.add(this.body);
+
+    this.auraGroup = new THREE.Group();
+    this.root.add(this.auraGroup);
+
+    this.adminAuraGroup = new THREE.Group();
+    this.root.add(this.adminAuraGroup);
 
     this.buildHumanRig();
     this.applyCostume(this.costumeKey);
@@ -154,6 +165,15 @@ export class Avatar {
     this.pumpkinMount = new THREE.Group();
     this.pumpkinMount.position.set(0, -0.08, 0);
     this.headGroup.add(this.pumpkinMount);
+
+    // Head Accessories Mount (Crown, Cowboy Hat, Top Hat, Cat Ears, Shades, etc.)
+    this.accessoryGroup = new THREE.Group();
+    this.accessoryGroup.position.set(0, 0.24, 0);
+    this.headGroup.add(this.accessoryGroup);
+
+    // Back Accessories Mount on Torso (Wings, Capes)
+    this.backAccessoryGroup = new THREE.Group();
+    this.torso.add(this.backAccessoryGroup);
 
     // Left Arm (Shoulder pivot at [-0.3, 0.48, 0])
     this.leftArm = new THREE.Group();
@@ -321,9 +341,10 @@ export class Avatar {
     this.splatGroup.visible = true;
   }
 
-  setName(name, title = this.title) {
+  setName(name, title = this.title, style = this.nametagStyle) {
     this.name = name;
     this.title = title || null;
+    this.nametagStyle = style || null;
     if (this.label) this.root.remove(this.label);
 
     const isAdmin = isAdminUser(name);
@@ -331,32 +352,61 @@ export class Avatar {
 
     this.label = textSprite(
       (x, w, h) => {
-        // Sleek modern glassmorphic name pill with title support
-        x.fillStyle = isAdmin ? 'rgba(88, 28, 28, 0.92)' : 'rgba(15, 23, 42, 0.88)';
+        const bgFill = isAdmin ? 'rgba(88, 28, 28, 0.92)' : 'rgba(15, 23, 42, 0.88)';
+        x.fillStyle = bgFill;
         x.beginPath();
         x.roundRect(8, 8, w - 16, h - 16, 22);
         x.fill();
-        x.strokeStyle = isAdmin ? 'rgba(250, 204, 21, 0.95)' : 'rgba(56, 189, 248, 0.85)';
-        x.lineWidth = isAdmin ? 4 : 3;
+
+        // Border styling
+        if (style?.border) {
+          x.strokeStyle = style.border;
+          x.lineWidth = 3.5;
+        } else {
+          x.strokeStyle = isAdmin ? 'rgba(250, 204, 21, 0.95)' : 'rgba(56, 189, 248, 0.85)';
+          x.lineWidth = isAdmin ? 4 : 3;
+        }
         x.stroke();
 
         x.textAlign = 'center';
         x.textBaseline = 'middle';
 
+        // Title
         if (displayTitle) {
-          // Render Title badge above name
           x.font = 'bold 22px system-ui, sans-serif';
           x.fillStyle = isAdmin ? '#fde047' : '#facc15';
           x.fillText(displayTitle, w / 2, 28);
 
-          // Render Player Name
-          x.font = 'bold 26px system-ui, sans-serif';
-          x.fillStyle = '#f8fafc';
+          x.font = style?.font ? `bold 26px ${style.font}` : 'bold 26px system-ui, sans-serif';
+          if (style?.rainbow) {
+            const grad = x.createLinearGradient(40, 0, w - 40, 0);
+            grad.addColorStop(0, '#f43f5e');
+            grad.addColorStop(0.25, '#facc15');
+            grad.addColorStop(0.5, '#4ade80');
+            grad.addColorStop(0.75, '#38bdf8');
+            grad.addColorStop(1, '#a855f7');
+            x.fillStyle = grad;
+          } else if (style?.color) {
+            x.fillStyle = style.color;
+          } else {
+            x.fillStyle = '#f8fafc';
+          }
           x.fillText(name, w / 2, 60);
         } else {
-          // Render Name only
-          x.font = 'bold 32px system-ui, sans-serif';
-          x.fillStyle = '#f8fafc';
+          x.font = style?.font ? `bold 32px ${style.font}` : 'bold 32px system-ui, sans-serif';
+          if (style?.rainbow) {
+            const grad = x.createLinearGradient(40, 0, w - 40, 0);
+            grad.addColorStop(0, '#f43f5e');
+            grad.addColorStop(0.25, '#facc15');
+            grad.addColorStop(0.5, '#4ade80');
+            grad.addColorStop(0.75, '#38bdf8');
+            grad.addColorStop(1, '#a855f7');
+            x.fillStyle = grad;
+          } else if (style?.color) {
+            x.fillStyle = style.color;
+          } else {
+            x.fillStyle = '#f8fafc';
+          }
           x.fillText(name, w / 2, h / 2);
         }
       },
@@ -366,6 +416,126 @@ export class Avatar {
     );
     this.label.position.y = HEIGHT + 0.42;
     this.root.add(this.label);
+  }
+
+  setAccessory(accKey) {
+    this.accessoryKey = accKey || null;
+    this.accessoryGroup.clear();
+    this.backAccessoryGroup.clear();
+    if (!accKey) return;
+
+    const accMesh = buildAccessoryMesh(accKey);
+    if (accKey === 'devil_wings') {
+      this.backAccessoryGroup.add(accMesh);
+    } else {
+      this.accessoryGroup.add(accMesh);
+    }
+  }
+
+  setAura(auraKey) {
+    this.auraKey = auraKey || null;
+    this.auraGroup.clear();
+    if (!auraKey) return;
+    const aMesh = buildAuraMesh(auraKey);
+    this.auraGroup.add(aMesh);
+    this.auraGroup.userData = aMesh.userData;
+  }
+
+  setAdminAura(enabled) {
+    this.adminAuraGroup.clear();
+    if (!enabled) return;
+    const adminMesh = buildAuraMesh('admin');
+    this.adminAuraGroup.add(adminMesh);
+    this.adminAuraGroup.userData = adminMesh.userData;
+  }
+
+  setLimbState(limbs = {}) {
+    if (limbs.head !== undefined) {
+      if (this.headGroup.visible && !limbs.head) this.spawnLegoPop(0, 1.4, 0);
+      this.headGroup.visible = !!limbs.head;
+      this.limbState.head = !!limbs.head;
+    }
+    if (limbs.leftArm !== undefined) {
+      if (this.leftArm.visible && !limbs.leftArm) this.spawnLegoPop(-0.35, 1.1, 0);
+      this.leftArm.visible = !!limbs.leftArm;
+      this.limbState.leftArm = !!limbs.leftArm;
+    }
+    if (limbs.rightArm !== undefined) {
+      if (this.rightArm.visible && !limbs.rightArm) this.spawnLegoPop(0.35, 1.1, 0);
+      this.rightArm.visible = !!limbs.rightArm;
+      this.limbState.rightArm = !!limbs.rightArm;
+    }
+    if (limbs.legs !== undefined) {
+      if (this.leftLeg.visible && !limbs.legs) {
+        this.spawnLegoPop(-0.15, 0.4, 0);
+        this.spawnLegoPop(0.15, 0.4, 0);
+      }
+      this.leftLeg.visible = !!limbs.legs;
+      this.rightLeg.visible = !!limbs.legs;
+      this.limbState.legs = !!limbs.legs;
+    }
+  }
+
+  setMidasGolden(active = true) {
+    this.isMidasGolden = !!active;
+    const goldMat = new THREE.MeshStandardMaterial({
+      color: 0xffd700,
+      metalness: 0.95,
+      roughness: 0.15,
+      emissive: 0x553300,
+      emissiveIntensity: 0.3
+    });
+    this.root.traverse(child => {
+      if (child.isMesh && child !== this.nameSprite && child !== this.bubbleSprite && child !== this.speakingBadge) {
+        if (active) {
+          if (!child.userData.origMaterial) child.userData.origMaterial = child.material;
+          child.material = goldMat;
+        } else if (child.userData.origMaterial) {
+          child.material = child.userData.origMaterial;
+          delete child.userData.origMaterial;
+        }
+      }
+    });
+  }
+
+  setGhostMode(active = true) {
+    this.isGhostMode = !!active;
+    this.root.traverse(child => {
+      if (child.isMesh && child !== this.nameSprite && child !== this.bubbleSprite && child !== this.speakingBadge) {
+        if (active) {
+          if (child.material) {
+            child.material.transparent = true;
+            child.material.opacity = 0.35;
+          }
+        } else {
+          if (child.material) {
+            child.material.transparent = false;
+            child.material.opacity = 1.0;
+          }
+        }
+      }
+    });
+  }
+
+  spawnLegoPop(ox, oy, oz) {
+    const colors = ['#dc2626', '#2563eb', '#facc15', '#16a34a', '#9333ea', '#ea580c'];
+    for (let i = 0; i < 5; i++) {
+      const col = colors[Math.floor(Math.random() * colors.length)];
+      const m = new THREE.Mesh(G.box(), mat(col, { roughness: 0.3 }));
+      m.scale.set(0.14, 0.1, 0.14);
+      m.position.set(ox + (Math.random() - 0.5) * 0.1, oy + (Math.random() - 0.5) * 0.1, oz + (Math.random() - 0.5) * 0.1);
+      this.root.add(m);
+      this.legoBricks.push({
+        mesh: m,
+        vx: (Math.random() - 0.5) * 2.8,
+        vy: 1.8 + Math.random() * 2.5,
+        vz: (Math.random() - 0.5) * 2.8,
+        rx: (Math.random() - 0.5) * 10,
+        ry: (Math.random() - 0.5) * 10,
+        life: 0,
+        maxLife: 2.2,
+      });
+    }
   }
 
   setTitle(title) {
@@ -481,6 +651,36 @@ export class Avatar {
     if (this.speakingBadge && this.speakingBadge.visible) {
       const s = 0.32 + Math.sin(now * 0.012) * 0.04;
       this.speakingBadge.scale.set(s, s, 1);
+    }
+
+    // Update Lego Brick physics
+    for (let i = this.legoBricks.length - 1; i >= 0; i--) {
+      const b = this.legoBricks[i];
+      b.life += dt;
+      b.vy -= 9.8 * dt;
+      b.mesh.position.x += b.vx * dt;
+      b.mesh.position.y += b.vy * dt;
+      b.mesh.position.z += b.vz * dt;
+      b.mesh.rotation.x += b.rx * dt;
+      b.mesh.rotation.y += b.ry * dt;
+      if (b.mesh.position.y < 0.05) {
+        b.mesh.position.y = 0.05;
+        b.vy = -b.vy * 0.35;
+        b.vx *= 0.7;
+        b.vz *= 0.7;
+      }
+      if (b.life >= b.maxLife) {
+        this.root.remove(b.mesh);
+        this.legoBricks.splice(i, 1);
+      }
+    }
+
+    // Update Aura Particles & Ring
+    if (this.auraGroup?.userData?.update) {
+      this.auraGroup.userData.update(this.animTime);
+    }
+    if (this.adminAuraGroup?.userData?.update) {
+      this.adminAuraGroup.userData.update(this.animTime);
     }
 
     // Cancel emote if non-held emote expired or player started walking/running/jumping

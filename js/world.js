@@ -33,6 +33,8 @@ import {
   buildSecretPaperNote,
   buildSecretPassage,
   buildCasinoExitPortal,
+  buildIllusionWall,
+  buildCasinoPubBar,
   emojiTexture,
   geo,
   mat,
@@ -63,6 +65,9 @@ export class World {
     this.cardObjs = new Map();
     this.ornamentGroup = new THREE.Group();
     this.scene.add(this.ornamentGroup);
+    this.builderBlocksGroup = new THREE.Group();
+    this.scene.add(this.builderBlocksGroup);
+    this.builderBlocks = new Map();
 
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x445566, 0.9);
     scene.add(this.hemi);
@@ -402,10 +407,15 @@ export class World {
         const ce = buildCasinoExitPortal();
         ce.position.set(h.x * TILE, 0, h.y * TILE);
         this.group.add(ce);
+      } else if (h.type === 'casino_pub') {
+        const pub = buildCasinoPubBar();
+        pub.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(pub);
+        this.casinoObjs.push(pub);
       }
     }
 
-    // 4. Extra props (Random Snowmen in Christmas)
+    // 4. Extra props (Random Snowmen, Rose Arch, Illusion Walls)
     for (const ep of this.features.extraProps) {
       if (ep.type === 'snowman') {
         const sm = buildSnowman(ep.variant);
@@ -418,6 +428,11 @@ export class World {
         arch.rotation.y = ep.rot || 0;
         this.group.add(arch);
         this.valentineObjs.push(arch);
+      } else if (ep.type === 'illusion_wall') {
+        const iw = buildIllusionWall(themeKey);
+        iw.position.set(ep.x * TILE, 0, ep.y * TILE);
+        iw.rotation.y = ep.rot || 0;
+        this.group.add(iw);
       }
     }
 
@@ -737,5 +752,34 @@ export class World {
         }
       }
     }
+  }
+
+  addBuilderBlock(block) {
+    if (this.builderBlocks.has(block.id)) return;
+    const boxGeo = new THREE.BoxGeometry(block.sx || 1.0, block.sy || 1.0, block.sz || 1.0);
+    const boxMat = new THREE.MeshStandardMaterial({
+      color: block.color || 0xfacc15,
+      roughness: 0.35,
+      metalness: 0.1,
+    });
+    const mesh = new THREE.Mesh(boxGeo, boxMat);
+    mesh.position.set(block.x, block.y, block.z);
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.userData = { blockId: block.id, isBuilderBlock: true };
+    this.builderBlocksGroup.add(mesh);
+    this.builderBlocks.set(block.id, mesh);
+  }
+
+  removeBuilderBlock(blockId) {
+    const mesh = this.builderBlocks.get(blockId);
+    if (mesh) {
+      this.builderBlocksGroup.remove(mesh);
+      this.builderBlocks.delete(blockId);
+    }
+  }
+
+  clearBuilderBlocks() {
+    this.builderBlocksGroup.clear();
+    this.builderBlocks.clear();
   }
 }

@@ -781,18 +781,19 @@
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-size:24px">⚡</span>
         <div>
-          <h2 style="margin:0;color:#facc15">BẢNG ĐIỀU KHIỂN QUẢN TRỊ VIÊN (ROBLOX ADMIN)</h2>
-          <p class="sub" style="margin:0">Đặc quyền dành riêng cho Contributors: <b>chu0n6</b>, <b>trung</b>, <b>khoa pug (lukhachyaros)</b></p>
+          <h2 style="margin:0;color:#facc15">QUYỀN NHÀ NƯỚC (BẢNG QUẢN TRỊ TỐI CAO)</h2>
+          <p class="sub" style="margin:0">Đặc quyền tối thượng dành riêng cho Ban Quản Trị Tối Cao</p>
         </div>
       </div>
       <button data-close class="icon-chip">✕</button>
     </div>
 
-    <!-- Quick Command Runner -->
-    <div style="display:flex;gap:8px;align-items:center;background:rgba(15,23,42,0.8);padding:10px;border-radius:10px;border:1px solid rgba(250,204,21,0.3)">
+    <!-- Quick Command Runner with Suggestions -->
+    <div class="admin-cmd-box">
       <span style="font-family:monospace;font-weight:900;color:#facc15">CMD &gt;</span>
-      <input id="inAdminCmd" placeholder="Nhập lệnh (ví dụ: fly, noclip, god, speed 5, jail <tên>, sm <thông báo>)..." style="flex:1;background:#090d16">
+      <input id="inAdminCmd" placeholder="Nhập lệnh (vd: :spin, :summon, :laser, :blackhole, :btools, :reset)..." style="flex:1;background:#090d16" autocomplete="off" spellcheck="false">
       <button id="btnRunAdminCmd" class="primary">Thực thi [Enter]</button>
+      <div id="adminSuggestions" class="admin-suggestions hidden"></div>
     </div>
 
     <!-- Command Categories Tabs & Help -->
@@ -809,11 +810,12 @@
           <span><code>:kill / :respawn &lt;tên&gt;</code> — Hạ gục/Hồi sinh</span>
           <span><code>:bring &lt;tên&gt;</code> — Kéo lại gần mình</span>
           <span><code>:to &lt;tên&gt;</code> — Bay tới chỗ người khác</span>
+          <span><code>:tp &lt;tên1&gt; &lt;tên2&gt;</code> — Dịch chuyển người 1 tới người 2</span>
         </div>
       </div>
 
       <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px">
-        <b style="color:#4ade80">2. Nhân vật & Ngoại hình (Character & Customization):</b>
+        <b style="color:#4ade80">2. Nhân vật, Ngoại hình & Quyền Năng Xây Dựng:</b>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;margin-top:6px">
           <span><code>:speed &lt;hệ số&gt;</code> — Tốc độ chạy (vd: 5)</span>
           <span><code>:jp &lt;lực&gt;</code> — Lực nhảy cao (vd: 16)</span>
@@ -821,6 +823,11 @@
           <span><code>:noclip / :clip</code> — Đi xuyên mọi bức tường</span>
           <span><code>:invisible / :visible</code> — Tàng hình hoàn toàn</span>
           <span><code>:size &lt;hệ số&gt;</code> — Phóng to/thu nhỏ</span>
+          <span><code>:giant / :tiny &lt;tên&gt;</code> — Khổng lồ / Tí hon</span>
+          <span><code>:golden &lt;tên&gt;</code> — Hóa Tượng Vàng rực rỡ</span>
+          <span><code>:ghost &lt;tên&gt;</code> — Hóa Hồn Ma trong suốt</span>
+          <span><code>:rainbow &lt;tên&gt;</code> — Hào quang cầu vồng RGB</span>
+          <span><code>:btools / :build</code> — Bật Builder Tool đặt/xóa khối 3D</span>
         </div>
       </div>
 
@@ -829,28 +836,39 @@
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;margin-top:6px">
           <span><code>:time &lt;day|night&gt;</code> — Đổi ngày/đêm</span>
           <span><code>:gravity &lt;số&gt;</code> — Đổi trọng lực (mặc định 20)</span>
+          <span><code>:gravityflip</code> — Đảo ngược trọng lực lộn ngược</span>
+          <span><code>:matrix</code> — Slow-Motion làm chậm thời gian</span>
+          <span><code>:blackhole</code> — Hố đen vũ trụ hút xoáy server</span>
+          <span><code>:confetti</code> — Bắn pháo hoa giấy kim tuyến</span>
           <span><code>:sm &lt;thông báo&gt;</code> — Thông báo biểu ngữ lớn</span>
           <span><code>:shutdown</code> — Đóng cửa server</span>
         </div>
       </div>
 
       <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px">
-        <b style="color:#ec4899">4. Hỗn Loạn & Troll Hài Hước (Fun & Chaos Commands):</b>
+        <b style="color:#ec4899">4. Hỗn Loạn & Troll Hài Hước (Quyền Nhà Nước Chaos):</b>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;margin-top:6px">
+          <span><code>:laser &lt;tên&gt;</code> — Bắn tia laser hủy diệt từ trời</span>
+          <span><code>:tornado &lt;tên&gt;</code> — Lốc xoáy hất tung lên trời</span>
+          <span><code>:summon &lt;mob&gt; &lt;tên&gt;</code> — Thả quái săn đuổi cắn KO</span>
+          <span><code>:attack &lt;tên&gt;</code> — Điều khiển quái cắn cạn máu</span>
+          <span><code>:headless &lt;tên&gt;</code> — Tháo bay đầu rớt Lego</span>
+          <span><code>:disarm &lt;tên&gt;</code> — Tháo mất 2 cánh tay</span>
+          <span><code>:amputate &lt;tên&gt;</code> — Tháo rụng tứ chi</span>
+          <span><code>:lego &lt;tên&gt;</code> — Nổ tung thành các khối Lego</span>
+          <span><code>:rearm &lt;tên&gt;</code> — Lắp ráp lại tứ chi nguyên vẹn</span>
+          <span><code>:heal &lt;tên&gt;</code> — Hồi máu & sạch sẽ cà chua</span>
           <span><code>:spin / :spinall &lt;tên&gt;</code> — Xoay mòng mòng chóng mặt</span>
           <span><code>:disco</code> — Vũ trường đèn Disco chớp nháy</span>
           <span><code>:earthquake</code> — Động đất rung chuyển màn hình</span>
           <span><code>:nuke</code> — Kích nổ bom hạt nhân chói lóa</span>
-          <span><code>:giant / :tiny &lt;tên&gt;</code> — Phóng to khổng lồ / Tí hon</span>
           <span><code>:rocket &lt;tên&gt;</code> — Bắn bay vút lên trời như tên lửa</span>
-          <span><code>:slap &lt;tên&gt;</code> — Tát bay người chơi + Cà chua bét nhè</span>
+          <span><code>:slap &lt;tên&gt;</code> — Tát bay người chơi + Cà chua</span>
           <span><code>:danceall</code> — Ép toàn bộ server cùng nhảy múa</span>
           <span><code>:clown &lt;tên&gt;</code> — Đội mũ bí ngô hề hước</span>
-          <span><code>:jailall / :unjailall</code> — Nhốt / Thả lồng giam cả phòng</span>
-          <span><code>:freezeall / :thawall</code> — Đóng băng / Rã đông cả phòng</span>
-          <span><code>:bringall</code> — Dịch chuyển tất cả người chơi về trước mặt</span>
           <span><code>:fire &lt;tên&gt;</code> — Gắn lửa cháy bập bùng</span>
           <span><code>:blind / :unblind &lt;tên&gt;</code> — Làm tối đen màn hình</span>
+          <span><code>:blindall / :unblindall</code> — Tối đen toàn phòng</span>
           <span><code>:chips &lt;số xu&gt;</code> — Tự cấp thêm xu cờ bạc</span>
         </div>
       </div>
@@ -858,12 +876,57 @@
       <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px">
         <b style="color:#22c55e">5. Khôi Phục & Đặt Lại Trạng Thái (Reset Commands):</b>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;margin-top:6px">
-          <span><code>:resetall / :clean</code> — Khôi phục mọi hiệu ứng troll về bình thường</span>
+          <span><code>:reset / :resetall / :clean</code> — Khôi phục mọi hiệu ứng troll về bình thường</span>
           <span><code>:resetchips</code> — Đặt lại ví xu cờ bạc về 0</span>
           <span><code>:clearhistory</code> — Xóa hồi chiêu 10 phút của các mã code</span>
           <span><code>:clearmap</code> — Dọn dẹp thiệp và đồ trang trí trên map</span>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG 14: Casino VIP Pub & Fashion Boutique Shop Modal -->
+<div id="dlgCasinoShop" class="overlay hidden">
+  <div class="panel shop-panel" style="width:min(680px,96%);max-height:85vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;margin-bottom:12px">
+      <div>
+        <h2 style="margin:0;color:#facc15">🍸 VIP PUB & FASHION BOUTIQUE</h2>
+        <p class="sub" style="margin:0">Cửa hàng phụ kiện hoàng gia, hào quang & nametag độc quyền</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="casino-shop-wallet">🪙 Số dư: <b id="shopWalletChips" style="color:#fde047">0</b> Chips</div>
+        <button data-close class="icon-chip">✕</button>
+      </div>
+    </div>
+
+    <!-- Shop Tabs -->
+    <div class="shop-tabs" style="display:flex;gap:8px;margin-bottom:14px">
+      <button id="tabShopAccessory" class="shop-tab active" data-cat="accessory">🎩 Phụ Kiện</button>
+      <button id="tabShopAura" class="shop-tab" data-cat="aura">✨ Hào Quang</button>
+      <button id="tabShopNametag" class="shop-tab" data-cat="nametag">🏷️ Nametag VIP</button>
+    </div>
+
+    <!-- Items Grid Container -->
+    <div id="shopItemGrid" class="shop-item-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;overflow-y:auto;padding-right:4px;flex:1"></div>
+  </div>
+</div>
+
+<!-- DIALOG 15: Valentine Love Wishing Fountain Modal -->
+<div id="dlgLoveWishing" class="overlay hidden">
+  <div class="panel" style="width:min(440px,94%);text-align:center;padding:24px">
+    <div style="font-size:42px;margin-bottom:6px">⛲💖</div>
+    <h2 style="color:#f472b6;margin:0 0 6px 0">SUỐI NGUYỆN ƯỚC TÌNH YÊU</h2>
+    <p class="sub" style="margin:0 0 16px 0">Tung một đồng xu lấp lánh xuống lòng suối thiêng để đánh thức lời ban phúc tình duyên từ Thần Cupid!</p>
+    
+    <div id="wishingCardBox" class="wishing-card-box hidden" style="background:rgba(244,63,94,0.12);border:1px solid rgba(244,63,94,0.4);border-radius:12px;padding:16px;margin-bottom:16px">
+      <div id="wishingResultTitle" style="font-size:18px;font-weight:800;color:#fbcfe8">✨ LỜI BAN PHÚC</div>
+      <div id="wishingResultDesc" style="font-size:13px;color:#cbd5e1;margin-top:6px">Mô tả phước lành...</div>
+    </div>
+
+    <div class="row" style="justify-content:center;gap:12px">
+      <button id="btnTossLoveCoin" class="primary" style="background:linear-gradient(135deg,#ec4899,#f43f5e);border:none;padding:12px 24px;font-size:14px">🪙 Tung Đồng Xu Nguyện Ước</button>
+      <button data-close>Rời Bước</button>
     </div>
   </div>
 </div>

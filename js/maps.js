@@ -280,15 +280,18 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       }
     });
 
-    // Secret Passage to Casino: Invisible frost wall at NW corner (x: 3.2, y: 3.5)
+    // Illusion wall concealing secret passage at NW corner
+    extraProps.push({ type: 'illusion_wall', x: 3.2, y: 3.5, rot: 0 });
+
+    // Secret Passage to Casino: In hidden nook behind frost illusion wall (x: 2.2, y: 2.6)
     hotspots.push({
       id: 'secret_passage_xmas',
       type: 'secret_passage',
       target: 'casino',
-      x: 3.2,
-      y: 3.5,
-      radius: 2.2,
-      prompt: '❄️ Bức Tường Băng Bí Ẩn · [E] Đi xuyên tường vào Mật Thất Casino',
+      x: 2.2,
+      y: 2.6,
+      radius: 2.0,
+      prompt: '❄️ Mật Đạo Băng Giá · [E] Giải mật mã Bách Khoa vào Mật Thất Casino',
     });
 
     // Secret Paper Notes (Code: Chu0n6, Raumania)
@@ -378,15 +381,18 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       });
     });
 
-    // Secret Passage to Casino: Hidden Crypt Trapdoor behind Giant Pumpkin (x: 14.5, y: 8.5)
+    // Illusion wall concealing secret crypt passage at NE corner
+    extraProps.push({ type: 'illusion_wall', x: 26.5, y: 3.5, rot: 0 });
+
+    // Secret Passage to Casino: Hidden Crypt Trapdoor behind illusion wall (x: 27.5, y: 2.5)
     hotspots.push({
       id: 'secret_passage_halloween',
       type: 'secret_passage',
       target: 'casino',
-      x: 14.5,
-      y: 8.5,
-      radius: 2.2,
-      prompt: '⚰️ Quan Tài Hầm Ngầm Cổ · [E] Xoay quan tài mở Mật Thất Casino',
+      x: 27.5,
+      y: 2.5,
+      radius: 2.0,
+      prompt: '⚰️ Quan Tài Hầm Ngầm Cổ · [E] Giải mật mã Bách Khoa mở Mật Thất Casino',
     });
 
     // Secret Paper Notes (Code: toilagay, BoKho)
@@ -470,15 +476,18 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         ],
       });
     });
-    // Secret Passage to Casino: Imperial Screen behind Giant Mai Tree (x: 14.5, y: 8.8)
+    // Illusion wall concealing secret passage at SW corner
+    extraProps.push({ type: 'illusion_wall', x: 3.5, y: 18.5, rot: Math.PI / 2 });
+
+    // Secret Passage to Casino: Imperial Screen behind illusion wall (x: 2.2, y: 18.5)
     hotspots.push({
       id: 'secret_passage_tet',
       type: 'secret_passage',
       target: 'casino',
-      x: 14.5,
-      y: 8.8,
-      radius: 2.2,
-      prompt: '🏮 Bức Bình Phong Kim Long · [E] Đọc mật chú mở cửa Mật Thất Casino',
+      x: 2.2,
+      y: 18.5,
+      radius: 2.0,
+      prompt: '🏮 Bức Bình Phong Kim Long · [E] Giải mật mã Bách Khoa mở Mật Thất Casino',
     });
 
     // Secret Paper Notes (Code: Trung Legit, Chu0n6)
@@ -524,8 +533,8 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         type: 'love_fountain',
         x: f.x,
         y: f.y,
-        radius: 2.0,
-        prompt: '⛲ Suối Ước Nguyện · [E] Gửi một tấm thiệp yêu thương',
+        radius: 2.2,
+        prompt: '⛲ Suối Nguyện Ước Tình Yêu · [E] Tung Đồng Xu Ước Nguyện & Nhận Ban Phúc',
       });
       colliders.push({ x: f.x, y: f.y, r: 0.26 });
     });
@@ -557,15 +566,18 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       });
     });
 
-    // Secret Passage to Casino: Behind East Wishing Fountain (x: 23.5, y: 14.5)
+    // Illusion wall concealing secret passage behind east rose garden (x: 26.5, y: 18.5)
+    extraProps.push({ type: 'illusion_wall', x: 26.5, y: 18.5, rot: Math.PI / 2 });
+
+    // Secret Passage to Casino: In hidden nook behind East Illusion Wall (x: 27.5, y: 18.5)
     hotspots.push({
       id: 'secret_passage_valentine',
       type: 'secret_passage',
       target: 'casino',
-      x: 23.5,
-      y: 14.5,
-      radius: 2.2,
-      prompt: '🌹 Thác Hoa Hồng Bí Ẩn · [E] Trượt qua thác nước xuống hầm Casino',
+      x: 27.5,
+      y: 18.5,
+      radius: 2.0,
+      prompt: '🌹 Thác Hoa Hồng Bí Ẩn · [E] Giải mật mã Bách Khoa vào Mật Thất Casino',
     });
 
     // Secret Paper Notes (Code: BoKho, Raumania)
@@ -590,6 +602,17 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       }
     );
   } else if (themeKey === 'casino') {
+    // 0. VIP Pub & Boutique Fashion Counter (North Plaza, x=14.5, y=7.2)
+    hotspots.push({
+      id: 'casino_pub_shop',
+      type: 'casino_pub',
+      x: 14.5,
+      y: 7.2,
+      radius: 2.8,
+      prompt: '🍸 Quầy Pub & Boutique VIP · [E] Mua Sắm Phụ Kiện, Hào Quang & Nametag',
+    });
+    colliders.push({ x: 14.5, y: 7.2, r: 1.3 });
+
     // 1. Roulette Table (West Plaza, x=7.0, y=11.5)
     hotspots.push({
       id: 'casino_roulette',
