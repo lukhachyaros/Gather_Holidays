@@ -1014,19 +1014,6 @@ export class MinigameManager {
     };
   }
 
-    this.dragon = {
-      group: this.dragonGroup,
-      head,
-      mountPoint,
-      pearlGroup,
-      bodySegments,
-      legs,
-      tailFan,
-      skinKey: skin.id,
-      glowUntil: 0,
-    };
-  }
-
   // --------------------------------------------------------------------------
   // DRAGON MOUNT & FLIGHT CONTROLS (30S FLIGHT MODE)
   // --------------------------------------------------------------------------
