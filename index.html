@@ -31,6 +31,7 @@
           <span>👤 Tên của bạn</span>
           <input id="inName" maxlength="16" placeholder="Nhập tên hiển thị…">
         </label>
+        <a href="admin.html" class="icon-chip" style="display:flex;align-items:center;gap:4px;text-decoration:none;font-size:12px;color:#38bdf8;padding:8px 12px;border:1px solid rgba(56,189,248,0.3);border-radius:8px;" title="Khu vực Admin Builder & Model Studio">🛠 Admin Studio</a>
         <button id="btnCloseLobby" class="hidden" title="Quay lại phòng đang chơi">✕ Đóng</button>
       </div>
     </div>
@@ -89,35 +90,115 @@
 <!-- 3D Game Canvas -->
 <canvas id="game"></canvas>
 
-<!-- Compact Top Navigation Dock -->
+<!-- Compact Top Navigation Dock (Clean Minimalist Dock) -->
 <div id="topbar" class="top-dock">
-  <div class="brand-dock" title="Gather Holidays 3D">
+  <button id="btnBrandMenu" class="brand-dock-btn" title="Bấm để mở danh sách chức năng (Menu)">
     <img src="assets/logo.jpg" alt="Logo" class="dock-logo-img">
     <span class="dock-logo-title">Gather Holidays</span>
-  </div>
-  <button id="btnLobby" class="dock-btn accent" title="Mở Sảnh chờ (Danh sách phòng & Đổi phòng)">🏠 Sảnh</button>
-  <span id="roomInfo" title="Phòng hiện tại & Quyền chủ phòng"></span>
-  <select id="topTheme" title="Chủ đề phòng (Chỉ chủ phòng mới đổi được)"></select>
+    <span class="dock-menu-chevron">▼</span>
+  </button>
   <span class="dock-sep"></span>
-  <button id="btnMic" class="dock-btn" title="Bật/Tắt Microphone để nói chuyện (Phím M)">🔇 Mic</button>
-  <button id="btnShareScreen" class="dock-btn" title="Chia sẻ màn hình máy tính lên TV lớn (Phím P)">🖥️ Chiếu TV</button>
+  <button id="btnEmotes" class="dock-btn emote-btn" title="Biểu cảm & Hành động nhân vật (Phím F hoặc 1-8)">🎭 Emote</button>
   <button id="btnBgm" class="dock-btn bgm-active" title="Bật/Tắt Nhạc nền lễ hội (BGM)">🎵 Nhạc</button>
-  <button id="btnMinigame" class="dock-btn minigame-btn" title="Chơi Minigame theo chủ đề phòng (Phím G)">🎮 Minigame</button>
-  <button id="btnEmotes" class="dock-btn emote-btn" title="Mở Bộ Emote Pack Meccha (Phím F)">🎭 Emotes [F]</button>
-  <button id="btnEnterCode" class="dock-btn" title="Nhập Mật Mã Bí Mật Đổi Xu (Phím C)" style="background:rgba(234,179,8,0.2);border-color:#facc15;color:#fef08a">🎟️ Code [C]</button>
-  <button id="btnTitles" class="dock-btn" title="Bộ Sưu Tập Danh Hiệu">👑 Danh Hiệu</button>
-  <button id="btnCasinoWallet" class="dock-btn hidden" style="background:linear-gradient(135deg,#f59e0b,#b45309);border-color:#fef08a;color:#000;font-weight:700" title="Ví tiền Chips Casino (Nhận thêm chips)">🪙 <span class="casino-chip-count">$0</span></button>
-  <button id="btnAdminCmds" class="dock-btn danger-btn hidden" title="Bảng Lệnh Quản Trị Admin Roblox (Phím ;)">⚡ Admin [;]</button>
-  <span class="dock-sep"></span>
-  <button id="btnCopy" class="dock-btn icon-only" title="Sao chép link mời bạn bè vào phòng này">🔗</button>
-  <button id="btnView" class="dock-btn" title="Đổi góc nhìn Thứ nhất / Thứ ba (Phím V)">🎥 TPS</button>
-  <button id="btnLock" class="dock-btn icon-only" title="Khóa/Mở con trỏ chuột (Phím L hoặc Chuột phải)">🔓</button>
-  <button id="btnCard" class="dock-btn icon-only" title="Viết thiệp chúc mừng">💌</button>
-  <button id="btnInbox" class="dock-btn icon-only" title="Hộp thư thiệp đã lưu">📬<span id="inboxCount" class="mini-badge">0</span></button>
-  <button id="btnMedia" class="dock-btn icon-only" title="Rạp chiếu TV & Hàng chờ video YouTube">🎬<span id="queueCount" class="mini-badge">0</span></button>
-  <button id="btnChatHistoryTop" class="dock-btn icon-only" title="Mở lịch sử trò chuyện (Chat History)">💬<span id="unreadChatBadge" class="mini-badge hidden">0</span></button>
-  <button id="btnSettings" class="dock-btn icon-only" title="Cài đặt Âm lượng, Voice Chat, Chuột & Quản lý phòng (Phím O hoặc U)">⚙️</button>
-  <button id="btnCloseRoomTop" class="dock-btn danger-btn hidden" title="Đóng phòng hiện tại (Chỉ Chủ phòng)">🛑 Đóng phòng</button>
+  <button id="btnMic" class="dock-btn" title="Bật/Tắt Microphone để nói chuyện (Phím M)">🔇 Mic</button>
+</div>
+
+<!-- Floating Vertical Menu Drawer (Opens when clicking the Brand Logo) -->
+<div id="verticalMenuDrawer" class="vertical-drawer hidden">
+  <div class="drawer-header">
+    <div class="drawer-header-left">
+      <span class="drawer-header-icon">🧭</span>
+      <span class="drawer-header-title">Menu Chức Năng</span>
+    </div>
+    <button id="btnCloseDrawer" class="drawer-close-btn" title="Đóng menu">✕</button>
+  </div>
+
+  <div class="drawer-room-bar">
+    <div class="drawer-room-info">
+      <span class="drawer-room-badge">Phòng</span>
+      <span id="roomInfo" class="drawer-room-title" title="Phòng hiện tại & Quyền chủ phòng">#lobby</span>
+    </div>
+    <select id="topTheme" class="drawer-theme-select" title="Chủ đề phòng (Chỉ chủ phòng mới đổi được)"></select>
+  </div>
+
+  <div class="drawer-menu-list">
+    <button id="btnLobby" class="drawer-item" title="Mở Sảnh chờ (Danh sách phòng & Đổi phòng)">
+      <span class="item-icon">🏠</span>
+      <span class="item-label">Sảnh Chờ & Danh Sách Phòng</span>
+    </button>
+    <button id="btnShareScreen" class="drawer-item" title="Chia sẻ màn hình máy tính lên TV lớn (Phím P)">
+      <span class="item-icon">🖥️</span>
+      <span class="item-label">Chiếu Màn Hình Lên TV</span>
+      <kbd class="item-kbd">P</kbd>
+    </button>
+    <button id="btnMedia" class="drawer-item" title="Rạp chiếu TV & Hàng chờ video YouTube">
+      <span class="item-icon">🎬</span>
+      <span class="item-label">Rạp Chiếu TV & Video YouTube</span>
+      <span id="queueCount" class="mini-badge">0</span>
+    </button>
+    <button id="btnMinigame" class="drawer-item" title="Chơi Minigame theo chủ đề phòng (Phím G)">
+      <span class="item-icon">🎮</span>
+      <span class="item-label">Minigame Lễ Hội</span>
+      <kbd class="item-kbd">G</kbd>
+    </button>
+    <button id="btnEnterCode" class="drawer-item" title="Nhập Mật Mã Bí Mật Đổi Xu (Phím C)">
+      <span class="item-icon">🎟️</span>
+      <span class="item-label">Nhập Mật Mã Đổi Xu</span>
+      <kbd class="item-kbd">C</kbd>
+    </button>
+    <button id="btnTitles" class="drawer-item" title="Bộ Sưu Tập Danh Hiệu">
+      <span class="item-icon">👑</span>
+      <span class="item-label">Bộ Sưu Tập Danh Hiệu</span>
+    </button>
+    <button id="btnCasinoWallet" class="drawer-item hidden" title="Ví tiền Chips Casino (Nhận thêm chips)">
+      <span class="item-icon">🪙</span>
+      <span class="item-label">Ví Tiền Casino: <span class="casino-chip-count">$0</span></span>
+    </button>
+    <div class="drawer-divider"></div>
+    <button id="btnCopy" class="drawer-item" title="Sao chép link mời bạn bè vào phòng này">
+      <span class="item-icon">🔗</span>
+      <span class="item-label">Sao Chép Link Mời Bạn Bè</span>
+    </button>
+    <button id="btnView" class="drawer-item" title="Đổi góc nhìn Thứ nhất / Thứ ba (Phím V)">
+      <span class="item-icon">🎥</span>
+      <span class="item-label" id="btnViewLabel">Góc Nhìn Thứ Ba (TPS)</span>
+      <kbd class="item-kbd">V</kbd>
+    </button>
+    <button id="btnLock" class="drawer-item" title="Khóa/Mở con trỏ chuột (Phím L hoặc Chuột phải)">
+      <span class="item-icon">🔓</span>
+      <span class="item-label" id="btnLockLabel">Khóa / Mở Chuột Tự Do</span>
+      <kbd class="item-kbd">L</kbd>
+    </button>
+    <button id="btnChatHistoryTop" class="drawer-item" title="Mở lịch sử trò chuyện (Chat History)">
+      <span class="item-icon">💬</span>
+      <span class="item-label">Lịch Sử Trò Chuyện (Chat)</span>
+      <span id="unreadChatBadge" class="mini-badge hidden">0</span>
+    </button>
+    <button id="btnCard" class="drawer-item" title="Viết thiệp chúc mừng">
+      <span class="item-icon">💌</span>
+      <span class="item-label">Viết Thiệp Chúc Mừng</span>
+    </button>
+    <button id="btnInbox" class="drawer-item" title="Hộp thư thiệp đã lưu">
+      <span class="item-icon">📬</span>
+      <span class="item-label">Hộp Thư Thiệp Đã Lưu</span>
+      <span id="inboxCount" class="mini-badge">0</span>
+    </button>
+    <button id="btnSettings" class="drawer-item" title="Cài đặt Âm lượng, Voice Chat, Chuột & Quản lý phòng (Phím O hoặc U)">
+      <span class="item-icon">⚙️</span>
+      <span class="item-label">Cài Đặt & Quản Lý Phòng</span>
+      <kbd class="item-kbd">O/U</kbd>
+    </button>
+    <button id="btnAdminCmds" class="drawer-item danger-item hidden" title="Bảng Lệnh Quản Trị Admin Roblox (Phím ;)">
+      <span class="item-icon">⚡</span>
+      <span class="item-label">Bảng Quản Trị Admin</span>
+      <kbd class="item-kbd">;</kbd>
+    </button>
+    <div class="drawer-divider"></div>
+    <button id="btnCloseRoomTop" class="drawer-item danger-item hidden" title="Đóng phòng hiện tại (Chỉ Chủ phòng)">
+      <span class="item-icon">🛑</span>
+      <span class="item-label">Đóng Phòng Giải Tán</span>
+    </button>
+  </div>
 </div>
 
 <!-- Safe Zone Indicator & Player HP Bar -->
@@ -707,11 +788,12 @@
       <button data-close class="icon-chip">✕</button>
     </div>
 
-    <!-- Quick Command Runner -->
-    <div style="display:flex;gap:8px;align-items:center;background:rgba(15,23,42,0.8);padding:10px;border-radius:10px;border:1px solid rgba(250,204,21,0.3)">
+    <!-- Quick Command Runner with Suggestions -->
+    <div class="admin-cmd-box">
       <span style="font-family:monospace;font-weight:900;color:#facc15">CMD &gt;</span>
-      <input id="inAdminCmd" placeholder="Nhập lệnh (vd: summon dơi, attack, btools, headless, reset)..." style="flex:1;background:#090d16">
+      <input id="inAdminCmd" placeholder="Nhập lệnh (vd: :spin, :summon, :laser, :blackhole, :btools, :reset)..." style="flex:1;background:#090d16" autocomplete="off" spellcheck="false">
       <button id="btnRunAdminCmd" class="primary">Thực thi [Enter]</button>
+      <div id="adminSuggestions" class="admin-suggestions hidden"></div>
     </div>
 
     <!-- Command Categories Tabs & Help -->
@@ -728,6 +810,7 @@
           <span><code>:kill / :respawn &lt;tên&gt;</code> — Hạ gục/Hồi sinh</span>
           <span><code>:bring &lt;tên&gt;</code> — Kéo lại gần mình</span>
           <span><code>:to &lt;tên&gt;</code> — Bay tới chỗ người khác</span>
+          <span><code>:tp &lt;tên1&gt; &lt;tên2&gt;</code> — Dịch chuyển người 1 tới người 2</span>
         </div>
       </div>
 
@@ -740,6 +823,10 @@
           <span><code>:noclip / :clip</code> — Đi xuyên mọi bức tường</span>
           <span><code>:invisible / :visible</code> — Tàng hình hoàn toàn</span>
           <span><code>:size &lt;hệ số&gt;</code> — Phóng to/thu nhỏ</span>
+          <span><code>:giant / :tiny &lt;tên&gt;</code> — Khổng lồ / Tí hon</span>
+          <span><code>:golden &lt;tên&gt;</code> — Hóa Tượng Vàng rực rỡ</span>
+          <span><code>:ghost &lt;tên&gt;</code> — Hóa Hồn Ma trong suốt</span>
+          <span><code>:rainbow &lt;tên&gt;</code> — Hào quang cầu vồng RGB</span>
           <span><code>:btools / :build</code> — Bật Builder Tool đặt/xóa khối 3D</span>
         </div>
       </div>
@@ -749,6 +836,10 @@
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px;margin-top:6px">
           <span><code>:time &lt;day|night&gt;</code> — Đổi ngày/đêm</span>
           <span><code>:gravity &lt;số&gt;</code> — Đổi trọng lực (mặc định 20)</span>
+          <span><code>:gravityflip</code> — Đảo ngược trọng lực lộn ngược</span>
+          <span><code>:matrix</code> — Slow-Motion làm chậm thời gian</span>
+          <span><code>:blackhole</code> — Hố đen vũ trụ hút xoáy server</span>
+          <span><code>:confetti</code> — Bắn pháo hoa giấy kim tuyến</span>
           <span><code>:sm &lt;thông báo&gt;</code> — Thông báo biểu ngữ lớn</span>
           <span><code>:shutdown</code> — Đóng cửa server</span>
         </div>
@@ -757,6 +848,8 @@
       <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px">
         <b style="color:#ec4899">4. Hỗn Loạn & Troll Hài Hước (Quyền Nhà Nước Chaos):</b>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;margin-top:6px">
+          <span><code>:laser &lt;tên&gt;</code> — Bắn tia laser hủy diệt từ trời</span>
+          <span><code>:tornado &lt;tên&gt;</code> — Lốc xoáy hất tung lên trời</span>
           <span><code>:summon &lt;mob&gt; &lt;tên&gt;</code> — Thả quái săn đuổi cắn KO</span>
           <span><code>:attack &lt;tên&gt;</code> — Điều khiển quái cắn cạn máu</span>
           <span><code>:headless &lt;tên&gt;</code> — Tháo bay đầu rớt Lego</span>
@@ -764,6 +857,7 @@
           <span><code>:amputate &lt;tên&gt;</code> — Tháo rụng tứ chi</span>
           <span><code>:lego &lt;tên&gt;</code> — Nổ tung thành các khối Lego</span>
           <span><code>:rearm &lt;tên&gt;</code> — Lắp ráp lại tứ chi nguyên vẹn</span>
+          <span><code>:heal &lt;tên&gt;</code> — Hồi máu & sạch sẽ cà chua</span>
           <span><code>:spin / :spinall &lt;tên&gt;</code> — Xoay mòng mòng chóng mặt</span>
           <span><code>:disco</code> — Vũ trường đèn Disco chớp nháy</span>
           <span><code>:earthquake</code> — Động đất rung chuyển màn hình</span>
@@ -774,6 +868,7 @@
           <span><code>:clown &lt;tên&gt;</code> — Đội mũ bí ngô hề hước</span>
           <span><code>:fire &lt;tên&gt;</code> — Gắn lửa cháy bập bùng</span>
           <span><code>:blind / :unblind &lt;tên&gt;</code> — Làm tối đen màn hình</span>
+          <span><code>:blindall / :unblindall</code> — Tối đen toàn phòng</span>
           <span><code>:chips &lt;số xu&gt;</code> — Tự cấp thêm xu cờ bạc</span>
         </div>
       </div>

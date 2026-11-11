@@ -476,6 +476,47 @@ export class Avatar {
     }
   }
 
+  setMidasGolden(active = true) {
+    this.isMidasGolden = !!active;
+    const goldMat = new THREE.MeshStandardMaterial({
+      color: 0xffd700,
+      metalness: 0.95,
+      roughness: 0.15,
+      emissive: 0x553300,
+      emissiveIntensity: 0.3
+    });
+    this.root.traverse(child => {
+      if (child.isMesh && child !== this.nameSprite && child !== this.bubbleSprite && child !== this.speakingBadge) {
+        if (active) {
+          if (!child.userData.origMaterial) child.userData.origMaterial = child.material;
+          child.material = goldMat;
+        } else if (child.userData.origMaterial) {
+          child.material = child.userData.origMaterial;
+          delete child.userData.origMaterial;
+        }
+      }
+    });
+  }
+
+  setGhostMode(active = true) {
+    this.isGhostMode = !!active;
+    this.root.traverse(child => {
+      if (child.isMesh && child !== this.nameSprite && child !== this.bubbleSprite && child !== this.speakingBadge) {
+        if (active) {
+          if (child.material) {
+            child.material.transparent = true;
+            child.material.opacity = 0.35;
+          }
+        } else {
+          if (child.material) {
+            child.material.transparent = false;
+            child.material.opacity = 1.0;
+          }
+        }
+      }
+    });
+  }
+
   spawnLegoPop(ox, oy, oz) {
     const colors = ['#dc2626', '#2563eb', '#facc15', '#16a34a', '#9333ea', '#ea580c'];
     for (let i = 0; i < 5; i++) {
@@ -551,7 +592,8 @@ export class Avatar {
       this.bubbleEl = null;
       return;
     }
-    if (!camera || !this.root.visible) {
+    const layer = document.getElementById('speechLayer');
+    if (!camera || !this.root.visible || layer?.classList.contains('safe-hidden')) {
       this.bubbleEl.style.display = 'none';
       return;
     }

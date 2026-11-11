@@ -74,7 +74,7 @@ export class World {
     this.sun = new THREE.DirectionalLight(0xffffff, 1);
     this.sun.position.set(22, 42, 16);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(1024, 1024);
     const sc = this.sun.shadow.camera;
     sc.left = sc.bottom = -34;
     sc.right = sc.top = 34;
