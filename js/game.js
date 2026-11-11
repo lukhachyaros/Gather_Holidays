@@ -4735,9 +4735,14 @@ function loop(now) {
     // Update my 3D Avatar
     const av = me.av;
     if (av?.root) {
-      av.root.position.set(me.x * TILE, me.h, me.y * TILE);
-      av.root.rotation.y = me.r;
-      av.setLocomotion(me.loco, { lean: myLean });
+      if (minigames?.isRiding() && minigames.dragon?.mountPoint) {
+        // Position and rotation are handled by dragon mount update
+        av.setLocomotion('sit');
+      } else {
+        av.root.position.set(me.x * TILE, me.h, me.y * TILE);
+        av.root.rotation.y = me.r;
+        av.setLocomotion(me.loco, { lean: myLean });
+      }
       av.update(dt);
     }
 
