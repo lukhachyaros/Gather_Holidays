@@ -373,6 +373,7 @@ function checkCooldown() {
 
 // ---------- Landing & Select Menus ----------
 for (const [k, t] of Object.entries(THEMES)) {
+  if (k === 'casino') continue; // Casino là map ẩn / mật thất bí mật, giấu hoàn toàn khỏi menu công khai!
   for (const selId of ['inTheme', 'topTheme']) {
     const o = document.createElement('option');
     o.value = k;
@@ -779,7 +780,7 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
   invitedRoomId = '';
   const off = OFFICIAL_ROOMS.find(o => o.id === roomName);
   roomTitle = title || off?.title || roomName;
-  const selectedTheme = off?.theme || theme || 'christmas';
+  const selectedTheme = off ? off.theme : (roomName === SECRET_CASINO_ROOM ? 'casino' : (theme || 'christmas'));
   isKicked = false;
   gotState = false;
 
@@ -788,7 +789,7 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
   $('dlgKicked').classList.add('hidden');
   $('btnCloseLobby').classList.remove('hidden');
 
-  const savedTitle = localStorage.getItem('gh_selected_title') || (isAdminUser(name) ? '👑 ADMIN' : '');
+  const savedTitle = localStorage.getItem('gh_selected_title') || (isAdminVerified() ? '👑 ADMIN' : '');
   me = {
     name,
     title: savedTitle,
@@ -898,7 +899,14 @@ async function start() {
   me.av.label.visible = false;
   scene.add(me.av.root);
 
+  const offOfficial = OFFICIAL_ROOMS.find(o => o.id === roomName);
+  if (offOfficial && state.theme === 'casino') {
+    state.theme = offOfficial.theme;
+    state.map = buildThemeMap(offOfficial.theme);
+  }
+
   $('topTheme').value = state.theme;
+  $('topTheme').classList.toggle('hidden', roomName === SECRET_CASINO_ROOM);
   playBgm(state.theme);
   minigames?.setTheme(state.theme);
   net.send('hello', pubInfo());
@@ -909,7 +917,7 @@ async function start() {
   updateMediaDialog();
   updateLiveStats();
   updateCasinoChipsUI();
-  $('btnAdminCmds').classList.toggle('hidden', !isAdminUser(me.name));
+  updateAdminUIStatus();
   broadcastMyRoomToLobby();
 
   if (!loopRunning) {
@@ -1234,6 +1242,13 @@ const handlers = {
     state = s;
     if (s.roomTitle) roomTitle = s.roomTitle;
     gotState = true;
+
+    const offOfficial = OFFICIAL_ROOMS.find(o => o.id === roomName);
+    if (offOfficial && state.theme === 'casino') {
+      state.theme = offOfficial.theme;
+      state.map = buildThemeMap(offOfficial.theme);
+    }
+
     if (first) {
       start();
     } else {
@@ -1241,6 +1256,7 @@ const handlers = {
         promptRoomPassword({ id: roomName, title: state.roomTitle || roomName, passHash: state.passHash });
       }
       $('topTheme').value = state.theme;
+      $('topTheme').classList.toggle('hidden', roomName === SECRET_CASINO_ROOM);
       playBgm(state.theme);
       minigames?.setTheme(state.theme);
       applyMedia(state.mediaCurrent);
@@ -1309,11 +1325,15 @@ function applyOp(op, senderId = null) {
     case 'theme': {
       // Only accept theme changes initiated by the Room Host
       if (senderId && state.hostId && senderId !== state.hostId && op.byHost !== state.hostId) return;
+      if (op.theme === 'casino' && roomName !== SECRET_CASINO_ROOM) {
+        toast('⚠️ Casino là căn phòng mật thất bí mật, không thể đổi chủ đề phòng sang Casino!');
+        return;
+      }
       if (THEMES[op.theme]) {
         state.theme = op.theme;
         state.map = buildThemeMap(op.theme);
         state.decor = [];
-        $('topTheme').value = op.theme;
+        if ($('topTheme')) $('topTheme').value = op.theme;
         leaveSeat();
         playBgm(op.theme);
         minigames?.setTheme(op.theme);
@@ -2343,9 +2363,17 @@ function updateLockHud() {
 document.addEventListener('pointerlockchange', updateLockHud);
 
 $('topTheme').onchange = e => {
+  if (roomName === SECRET_CASINO_ROOM) {
+    e.target.value = 'casino';
+    return toast('🎰 Bạn đang ở trong Mật Thất Casino Hoàng Gia!');
+  }
   if (!isHost()) {
     e.target.value = state.theme;
     return toast('⚠️ Chỉ Chủ phòng mới có quyền thay đổi chủ đề của phòng!');
+  }
+  if (e.target.value === 'casino') {
+    e.target.value = state.theme;
+    return toast('⚠️ Casino là căn phòng mật thất bí mật, không thể đổi chủ đề sang Casino!');
   }
   if (!checkCooldown()) {
     e.target.value = state.theme;
@@ -3001,10 +3029,8 @@ addEventListener('keydown', e => {
     e.preventDefault();
   }
   else if (code === 'Semicolon' || e.key === ';') {
-    if (isAdminUser(me?.name) || (state && state.hostId === net?.selfId)) {
-      openAdminDialog();
-      e.preventDefault();
-    }
+    handleAdminTrigger();
+    e.preventDefault();
   }
   else if ((k === 'k' || code === 'KeyK') && state?.mediaCurrent?.kind === 'web') scrollTv(450);
   else if ((k === 'i' || code === 'KeyI') && state?.mediaCurrent?.kind === 'web') scrollTv(-450);
@@ -3931,9 +3957,9 @@ const TITLE_LIST = [
   {
     id: 'admin',
     name: '👑 ADMIN',
-    desc: 'Đặc quyền Tối cao dành riêng cho 3 Contributors dự án: chu0n6, trung, khoa pug (lukhachyaros)',
-    condition: (pName) => isAdminUser(pName),
-    lockMsg: 'Chỉ dành riêng cho 3 Contributors dự án (chu0n6, trung, khoa pug)!',
+    desc: 'Đặc quyền Tối cao dành riêng cho Quản Trị Viên đã xác thực mật mã "grinding shit"',
+    condition: () => isAdminVerified(),
+    lockMsg: 'Cần xác thực mật mã Admin "grinding shit" (Bấm phím [;] để nhập)!',
   },
   {
     id: 'vuadoden',
@@ -4051,8 +4077,68 @@ function selectTitle(titleItem) {
 $('btnTitles').onclick = openTitlesDialog;
 
 // ============================================================================
-// ROBLOX ADMIN COMMANDS SYSTEM
+// ROBLOX ADMIN COMMANDS SYSTEM & PASSWORD AUTHENTICATION ("grinding shit")
 // ============================================================================
+export const ADMIN_SECRET_KEY = 'grinding shit';
+
+export function isAdminVerified() {
+  return localStorage.getItem('gh_admin_verified') === 'true';
+}
+
+export function verifyAdminPassword(pass) {
+  const p = (pass || '').trim().toLowerCase();
+  if (p === ADMIN_SECRET_KEY) {
+    localStorage.setItem('gh_admin_verified', 'true');
+    updateAdminUIStatus();
+    return true;
+  }
+  return false;
+}
+
+function updateAdminUIStatus() {
+  const isVerified = isAdminVerified();
+  const btnAdmin = $('btnAdminCmds');
+  if (btnAdmin) {
+    btnAdmin.classList.remove('hidden');
+    if (isVerified) {
+      btnAdmin.innerHTML = '👑 ADMIN [;]';
+      btnAdmin.style.background = 'linear-gradient(135deg, #dc2626, #991b1b)';
+      btnAdmin.style.borderColor = '#facc15';
+      btnAdmin.style.boxShadow = '0 0 14px rgba(250, 204, 21, 0.6)';
+      btnAdmin.style.color = '#fff';
+      btnAdmin.title = 'Bảng Quản Trị Viên (ĐÃ XÁC THỰC) - Phím [;]';
+      if (me) {
+        me.title = '👑 ADMIN';
+        me.av?.setName(me.name, me.title);
+        syncMyAppearance();
+      }
+    } else {
+      btnAdmin.innerHTML = '⚡ Admin [;]';
+      btnAdmin.style.background = 'rgba(239, 68, 68, 0.2)';
+      btnAdmin.style.borderColor = 'rgba(250, 204, 21, 0.4)';
+      btnAdmin.style.boxShadow = 'none';
+      btnAdmin.style.color = '#fca5a5';
+      btnAdmin.title = 'Nhấn để xác thực quyền Admin với mật mã "grinding shit" - Phím [;]';
+    }
+  }
+}
+
+function openAdminAuthDialog() {
+  $('inAdminPass').value = '';
+  $('adminAuthErr').classList.add('hidden');
+  $('adminAuthSuccess').classList.add('hidden');
+  openDialog('dlgAdminAuth');
+  setTimeout(() => $('inAdminPass').focus(), 150);
+}
+
+function handleAdminTrigger() {
+  if (isAdminVerified()) {
+    openAdminDialog();
+  } else {
+    openAdminAuthDialog();
+  }
+}
+
 let adminSpeedMultiplier = 1.0;
 let adminJumpPower = 8.2;
 let adminFlying = false;
@@ -4096,12 +4182,28 @@ function openAdminDialog() {
   setTimeout(() => $('inAdminCmd').focus(), 150);
 }
 
-$('btnAdminCmds').onclick = () => {
-  if (isAdminUser(me?.name) || (state && state.hostId === net?.selfId)) {
-    openAdminDialog();
+$('btnAdminCmds').onclick = handleAdminTrigger;
+
+$('btnSubmitAdminAuth').onclick = () => {
+  const val = $('inAdminPass').value;
+  if (verifyAdminPassword(val)) {
+    $('adminAuthErr').classList.add('hidden');
+    $('adminAuthSuccess').classList.remove('hidden');
+    playSfx('jackpot_voice');
+    toast('✨ XÁC THỰC THÀNH CÔNG! Chào mừng Quản Trị Viên Tối Cao!');
+    setTimeout(() => {
+      closeDialog('dlgAdminAuth');
+      openAdminDialog();
+    }, 850);
   } else {
-    toast('⛔ Bạn không có quyền Admin!');
+    $('adminAuthSuccess').classList.add('hidden');
+    $('adminAuthErr').classList.remove('hidden');
+    toast('❌ Mật mã Admin không chính xác!');
   }
+};
+
+$('inAdminPass').onkeydown = e => {
+  if (e.key === 'Enter') $('btnSubmitAdminAuth').click();
 };
 
 $('btnRunAdminCmd').onclick = () => {
@@ -4127,10 +4229,31 @@ function executeAdminCommand(raw) {
   const cmd = parts[0].toLowerCase();
   const args = parts.slice(1);
 
-  // Check Admin permission
-  const isAdmin = isAdminUser(me?.name) || (state && state.hostId === net?.selfId);
-  if (!isAdmin) {
-    toast('⛔ Bạn không có quyền Admin! Lệnh này chỉ dành riêng cho: chu0n6, trung, khoa pug (lukhachyaros).');
+  // Cho phép xác thực mật khẩu qua lệnh chat
+  if (cmd === 'admin' || cmd === 'auth' || cmd === 'login') {
+    const inputPass = args.join(' ');
+    if (verifyAdminPassword(inputPass)) {
+      playSfx('jackpot_voice');
+      toast('✨ XÁC THỰC THÀNH CÔNG! Đã kích hoạt quyền Quản Trị Viên Tối Cao (ADMIN)!');
+      return true;
+    } else {
+      toast('❌ Mật mã Admin không chính xác! Cú pháp: :admin grinding shit');
+      return true;
+    }
+  }
+
+  // Đăng xuất quyền Admin
+  if (cmd === 'logout' || cmd === 'unadmin') {
+    localStorage.removeItem('gh_admin_verified');
+    updateAdminUIStatus();
+    toast('🔒 Đã hủy kích hoạt quyền Admin.');
+    return true;
+  }
+
+  // Bắt buộc phải xác thực mật mã Admin
+  if (!isAdminVerified()) {
+    toast('⛔ Bạn chưa xác thực quyền Admin! Bấm [;] hoặc gõ: :admin grinding shit');
+    openAdminAuthDialog();
     return true;
   }
 

@@ -56,7 +56,8 @@ export const THEMES = {
     particles: { emoji: ['🌸', '💗', '✨'], count: 34, vy: [0.25, 0.75], vx: [-0.35, 0.35] },
   },
   casino: {
-    name: '🎰 Casino & Arcade (Test)',
+    name: '🎰 Mật Thất Casino (Bí Mật)',
+    secret: true,
     bg: '#0a0a1a',
     floor: ['#1e1b4b', '#181438'],
     path: '#2e1065',
