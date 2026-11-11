@@ -1205,9 +1205,10 @@ export class MinigameManager {
   // --------------------------------------------------------------------------
   // FRAME UPDATE LOOP (PROJECTILES, PARTICLES, DRAGON)
   // --------------------------------------------------------------------------
-  update(dt) {
+  update(dt, playerYaw = null) {
     const now = performance.now();
     const me = this.getMe();
+    if (playerYaw !== null) this.playerYaw = playerYaw;
 
     // 1. Safe Zone Detection (Auto-hide speech bubbles in Safe Zone & update indicator only when state changes)
     if (me) {
@@ -1300,37 +1301,49 @@ export class MinigameManager {
           return;
         }
 
-        // Flight Steer & Kinematics
+        // Flight Steer & Kinematics: Direct player movement control (only moves when input is pressed)
         const keys = this.dragonKeys;
-        const turnRate = 2.4 * dt;
-        if (keys.left) {
-          this.dragonYaw += turnRate;
-          this.dragonRoll = THREE.MathUtils.lerp(this.dragonRoll, 0.45, dt * 5);
-        } else if (keys.right) {
-          this.dragonYaw -= turnRate;
-          this.dragonRoll = THREE.MathUtils.lerp(this.dragonRoll, -0.45, dt * 5);
-        } else {
-          this.dragonRoll = THREE.MathUtils.lerp(this.dragonRoll, 0, dt * 4);
-        }
+        const curYaw = this.playerYaw !== undefined && this.playerYaw !== null ? this.playerYaw : (this.camera?.rotation?.y || 0);
 
-        if (keys.forward) {
-          this.dragonSpeed = THREE.MathUtils.lerp(this.dragonSpeed, 28.0, dt * 3);
-          this.dragonPitch = THREE.MathUtils.lerp(this.dragonPitch, 0.25, dt * 4);
-        } else if (keys.backward) {
-          this.dragonSpeed = THREE.MathUtils.lerp(this.dragonSpeed, 10.0, dt * 4);
-          this.dragonPitch = THREE.MathUtils.lerp(this.dragonPitch, -0.2, dt * 4);
-        } else {
-          this.dragonSpeed = THREE.MathUtils.lerp(this.dragonSpeed, 18.0, dt * 2);
-          this.dragonPitch = THREE.MathUtils.lerp(this.dragonPitch, 0, dt * 3);
-        }
+        let fwd = (keys.forward ? 1 : 0) - (keys.backward ? 1 : 0);
+        let str = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+        const isMoving = fwd !== 0 || str !== 0;
 
         let vy = 0;
-        if (keys.up) vy = 12.0;
-        else if (keys.down) vy = -12.0;
+        if (keys.up) vy = 11.0;
+        else if (keys.down) vy = -11.0;
 
         const curPos = this.dragon.group.position;
-        curPos.x += Math.sin(this.dragonYaw) * this.dragonSpeed * dt;
-        curPos.z += Math.cos(this.dragonYaw) * this.dragonSpeed * dt;
+
+        if (isMoving) {
+          // Camera-relative movement (just like normal player walking/running)
+          let dx = -Math.sin(curYaw) * fwd + Math.cos(curYaw) * str;
+          let dz = -Math.cos(curYaw) * fwd - Math.sin(curYaw) * str;
+          const len = Math.hypot(dx, dz);
+          dx /= len;
+          dz /= len;
+
+          const targetYaw = Math.atan2(dx, dz);
+          // Smoothly rotate dragon toward move direction
+          let diff = targetYaw - this.dragonYaw;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          this.dragonYaw += diff * Math.min(1, dt * 10);
+
+          const moveSpeed = keys.forward ? 20.0 : 14.0;
+          curPos.x += dx * moveSpeed * dt;
+          curPos.z += dz * moveSpeed * dt;
+
+          this.dragonPitch = THREE.MathUtils.lerp(this.dragonPitch, keys.forward ? 0.15 : -0.15, dt * 6);
+          this.dragonRoll = THREE.MathUtils.lerp(this.dragonRoll, -str * 0.35, dt * 6);
+        } else {
+          // Idle hovering in place - no auto flight!
+          this.dragonPitch = THREE.MathUtils.lerp(this.dragonPitch, 0, dt * 5);
+          this.dragonRoll = THREE.MathUtils.lerp(this.dragonRoll, 0, dt * 5);
+          // Gentle hovering vertical wave
+          curPos.y += Math.sin(now * 0.003) * 0.012;
+        }
+
         curPos.y += vy * dt;
 
         // Boundaries clamp (smooth airspace ceiling & floor)

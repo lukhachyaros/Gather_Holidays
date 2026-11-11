@@ -4807,7 +4807,7 @@ function loop(now) {
       world?.sync(state, roomName);
     }
     world?.update(dt, { x: me.x * TILE, z: me.y * TILE });
-    minigames?.update(dt);
+    minigames?.update(dt, yaw);
     updateCamera(dt);
     if (world?.bgColor && renderer) renderer.setClearColor(world.bgColor, 1);
     if (renderer && scene && camera) renderer.render(scene, camera);
@@ -4912,18 +4912,17 @@ function updateScreen3D() {
 }
 
 function updateCamera(dt = 0.016) {
-  // Override camera when riding dragon - follow from behind & above
+  // Override camera when riding dragon - smooth third-person view following camera yaw
   if (minigames?.isRiding() && minigames.dragon?.group) {
     const dg = minigames.dragon.group;
-    const dYaw = minigames.dragonYaw || 0;
     const dPos = dg.position;
-    const behindDist = 14;
-    const aboveOffset = 7;
-    const camX = dPos.x - Math.sin(dYaw) * behindDist;
-    const camZ = dPos.z - Math.cos(dYaw) * behindDist;
+    const behindDist = 12;
+    const aboveOffset = 5.5;
+    const camX = dPos.x + Math.sin(yaw) * behindDist;
+    const camZ = dPos.z + Math.cos(yaw) * behindDist;
     const camY = dPos.y + aboveOffset;
-    camera.position.lerp(new THREE.Vector3(camX, camY, camZ), Math.min(1, dt * 6));
-    camera.lookAt(dPos.x, dPos.y + 1, dPos.z);
+    camera.position.lerp(new THREE.Vector3(camX, camY, camZ), Math.min(1, dt * 10));
+    camera.lookAt(dPos.x, dPos.y + 1.2, dPos.z);
     if (me?.av) me.av.root.visible = true;
     updateScreen3D();
     return;
