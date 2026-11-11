@@ -534,120 +534,212 @@ export function buildPhucLocThoShrine() {
   part(g, G.box(), goldMat, [0, 1.18, 0.44], [3.9, 0.12, 0.04]);
 
   // --------------------------------------------------------------------------
-  // 2. THE THREE DEITIES: PHÚC - LỘC - THỌ (Distinct Models & Nametags)
+  // 2. THE THREE DEITIES: PHÚC - LỘC - THỌ (Distinct Majestic Models & Nametags)
   // --------------------------------------------------------------------------
+  const skinTone = mat('#fed7aa', { roughness: 0.45 });
+  const silkRed = mat('#b91c1c', { roughness: 0.35, metalness: 0.15 });
+  const silkGreen = mat('#047857', { roughness: 0.35, metalness: 0.15 });
+  const silkAmber = mat('#b45309', { roughness: 0.35, metalness: 0.15 });
+  const haloMat = mat('#fef08a', { emissive: '#facc15', emissiveIntensity: 0.6, transparent: true, opacity: 0.85 });
 
-  // --- STATUE 1: ÔNG PHÚC (Left: x = -1.25) ---
-  // Robe: Crimson silk (#dc2626) with golden cloud trim. Holding a happy baby boy!
+  // --- STATUE 1: ÔNG PHÚC (Left: x = -1.35) ---
+  // Robe: Crimson Imperial silk with gold cloud dragon trim. Holding baby boy in left arm & gold ingot in right!
   const phucGroup = new THREE.Group();
-  phucGroup.position.set(-1.25, 1.22, -0.35);
+  phucGroup.position.set(-1.35, 1.22, -0.35);
 
-  // Lotus base
-  part(phucGroup, G.cyl(), goldMat, [0, 0.08, 0], [0.55, 0.15, 0.55]);
-  // Robe body
-  part(phucGroup, G.cyl(), mat('#dc2626'), [0, 0.65, 0], [0.45, 1.0, 0.45]);
-  part(phucGroup, G.box(), goldMat, [0, 0.65, 0.22], [0.15, 0.95, 0.03]);
-  // Head & benevolence smile
-  part(phucGroup, G.sph(), mat('#fed7aa'), [0, 1.3, 0], [0.26, 0.28, 0.26]);
-  part(phucGroup, G.cyl(), mat('#991b1b'), [0, 1.5, 0], [0.28, 0.16, 0.28]); // Red mandarin hat
-  // Black goatee
-  part(phucGroup, G.cone(), mat('#1f2937'), [0, 1.14, 0.22], [0.08, 0.22, 0.08], [0.3, 0, 0]);
+  // Triple-tiered Lotus Throne (Đài sen 3 tầng dát vàng)
+  part(phucGroup, G.cyl(), goldMat, [0, 0.05, 0], [0.68, 0.1, 0.68]);
+  part(phucGroup, G.cyl(), silkRed, [0, 0.13, 0], [0.62, 0.08, 0.62]);
+  part(phucGroup, G.cyl(), goldMat, [0, 0.19, 0], [0.55, 0.06, 0.55]);
 
-  // Baby in Ông Phúc's arms (Em bé khôi ngô may mắn)
+  // Flowing Bell-shaped Ceremonial Robe Body
+  part(phucGroup, G.cyl(), silkRed, [0, 0.72, 0], [0.54, 0.98, 0.54]);
+  // Golden Imperial Sash & Chest Cloud Embroidery
+  part(phucGroup, G.box(), goldMat, [0, 0.72, 0.28], [0.22, 0.96, 0.03]);
+  part(phucGroup, G.box(), goldMat, [0, 1.05, 0.28], [0.42, 0.18, 0.03]);
+
+  // Wide Flowing Silk Sleeves
+  [-0.38, 0.38].forEach(sx => {
+    part(phucGroup, G.cyl(), silkRed, [sx, 0.82, 0.08], [0.24, 0.55, 0.24], [0.2, 0, sx > 0 ? -0.35 : 0.35]);
+    part(phucGroup, G.cyl(), goldMat, [sx > 0 ? sx + 0.08 : sx - 0.08, 0.62, 0.12], [0.25, 0.08, 0.25], [0.2, 0, sx > 0 ? -0.35 : 0.35]);
+  });
+
+  // Face with warm joyful smile
+  part(phucGroup, G.sph(), skinTone, [0, 1.35, 0], [0.28, 0.3, 0.28]);
+  // Rosy cheeks
+  [-0.14, 0.14].forEach(cx => {
+    part(phucGroup, G.sph(), mat('#fda4af'), [cx, 1.32, 0.24], [0.06, 0.04, 0.04]);
+  });
+  // Imperial Official Hat (Mũ quan triều đình cao quý)
+  part(phucGroup, G.box(), mat('#0f172a'), [0, 1.56, 0], [0.42, 0.18, 0.38]);
+  part(phucGroup, G.cyl(), mat('#0f172a'), [0, 1.68, 0], [0.22, 0.16, 0.22]);
+  part(phucGroup, G.sph(), goldMat, [0, 1.78, 0], [0.08, 0.08, 0.08]); // Gold pinnacle bead
+
+  // Elegant Black Mustache & Beard (Râu ba chòm uy nghiêm)
+  part(phucGroup, G.cone(), mat('#09090b'), [0, 1.15, 0.26], [0.1, 0.38, 0.08], [0.25, 0, 0]);
+  [-0.08, 0.08].forEach(mx => {
+    part(phucGroup, G.cyl(), mat('#09090b'), [mx, 1.25, 0.26], [0.02, 0.12, 0.02], [0, 0, mx > 0 ? -0.7 : 0.7]);
+  });
+
+  // Left Arm: Holding happy chubby baby boy (Đứa bé mũm mĩm tay cầm ngọc)
   const babyGroup = new THREE.Group();
-  babyGroup.position.set(0.18, 0.82, 0.26);
-  babyGroup.rotation.z = -0.35;
-  part(babyGroup, G.cyl(), mat('#10b981'), [0, 0.18, 0], [0.16, 0.36, 0.16]); // Green swaddle
-  part(babyGroup, G.sph(), mat('#fed7aa'), [0, 0.42, 0], [0.13, 0.13, 0.13]); // Baby head
-  part(babyGroup, G.cone(), goldMat, [0, 0.54, 0], [0.1, 0.14, 0.1], [-0.2, 0, 0]); // Yellow cap
+  babyGroup.position.set(0.25, 0.88, 0.28);
+  babyGroup.rotation.z = -0.32;
+  part(babyGroup, G.cyl(), mat('#10b981'), [0, 0.18, 0], [0.18, 0.42, 0.18]); // Emerald swaddle
+  part(babyGroup, G.sph(), skinTone, [0, 0.45, 0], [0.14, 0.14, 0.14]); // Chubby head
+  part(babyGroup, G.sph(), goldMat, [0, 0.58, 0], [0.09, 0.1, 0.09]); // Golden cap
+  part(babyGroup, G.sph(), mat('#ef4444'), [0.08, 0.22, 0.14], [0.06, 0.06, 0.06]); // Lucky red packet
   phucGroup.add(babyGroup);
+
+  // Right Hand: Holding large Gold Ingot (Kim Nguyên Bảo)
+  const ingotGroup = new THREE.Group();
+  ingotGroup.position.set(-0.35, 0.88, 0.3);
+  part(ingotGroup, G.box(), goldMat, [0, 0, 0], [0.18, 0.08, 0.12]);
+  part(ingotGroup, G.sph(), goldMat, [0, 0.04, 0], [0.09, 0.07, 0.07]);
+  phucGroup.add(ingotGroup);
+
+  // Radiant Golden Halo behind head (Vòng hào quang cát tường)
+  part(phucGroup, G.torus(), haloMat, [0, 1.45, -0.22], [0.65, 0.65, 0.65]);
 
   // Nametag Ông Phúc
   const lblPhuc = labelSprite('✨ ÔNG PHÚC ✨', 'rgba(185,28,28,0.92)', '#fef08a', 0.40);
-  lblPhuc.position.set(0, 2.05, 0);
+  lblPhuc.position.set(0, 2.15, 0);
   phucGroup.add(lblPhuc);
   g.add(phucGroup);
 
-  // --- STATUE 2: ÔNG LỘC (Center: x = 0, Slightly Taller) ---
-  // Robe: Emerald Jade (#059669) with gold embroidery. Wearing winged official hat & holding Ruyi Scepter!
+  // --- STATUE 2: ÔNG LỘC (Center: x = 0, Tallest & Grandest) ---
+  // Robe: Emerald Jade silk with golden dragon sash. Imperial Hat with wing flaps, holding Jade Ruyi & Pearl!
   const locGroup = new THREE.Group();
-  locGroup.position.set(0, 1.22, -0.35);
+  locGroup.position.set(0, 1.25, -0.35);
 
-  // Lotus base
-  part(locGroup, G.cyl(), goldMat, [0, 0.08, 0], [0.58, 0.15, 0.58]);
-  // Imperial green robe
-  part(locGroup, G.cyl(), mat('#059669'), [0, 0.72, 0], [0.48, 1.12, 0.48]);
-  part(locGroup, G.box(), goldMat, [0, 0.72, 0.24], [0.18, 1.05, 0.03]); // Gold central sash
-  // Head
-  part(locGroup, G.sph(), mat('#fed7aa'), [0, 1.42, 0], [0.27, 0.29, 0.27]);
-  // Imperial Minister Hat with 2 Side Wing Flaps (Mũ Cánh Chuồn)
-  part(locGroup, G.box(), mat('#0f172a'), [0, 1.62, 0], [0.42, 0.22, 0.36]);
-  part(locGroup, G.box(), goldMat, [0, 1.74, 0], [0.16, 0.08, 0.16]);
-  [-0.42, 0.42].forEach(wx => {
-    part(locGroup, G.box(), mat('#0f172a'), [wx, 1.62, 0], [0.48, 0.06, 0.12]);
-    part(locGroup, G.box(), goldMat, [wx > 0 ? wx + 0.24 : wx - 0.24, 1.62, 0], [0.06, 0.08, 0.14]);
+  // Triple Lotus Throne (Đài sen hoàng gia)
+  part(locGroup, G.cyl(), goldMat, [0, 0.05, 0], [0.72, 0.1, 0.72]);
+  part(locGroup, G.cyl(), silkGreen, [0, 0.13, 0], [0.65, 0.08, 0.65]);
+  part(locGroup, G.cyl(), goldMat, [0, 0.19, 0], [0.58, 0.06, 0.58]);
+
+  // Regal Emerald Robe Body
+  part(locGroup, G.cyl(), silkGreen, [0, 0.8, 0], [0.58, 1.15, 0.58]);
+  // Golden Imperial Dragon Panel & Jade Belt
+  part(locGroup, G.box(), goldMat, [0, 0.8, 0.3], [0.26, 1.1, 0.03]);
+  part(locGroup, G.cyl(), mat('#10b981', { roughness: 0.2 }), [0, 0.72, 0.3], [0.28, 0.06, 0.04], [Math.PI / 2, 0, 0]); // Jade buckle
+  part(locGroup, G.box(), goldMat, [0, 1.15, 0.3], [0.46, 0.22, 0.03]); // Dragon chest badge
+
+  // Wide Minister Sleeves
+  [-0.42, 0.42].forEach(sx => {
+    part(locGroup, G.cyl(), silkGreen, [sx, 0.9, 0.08], [0.26, 0.62, 0.26], [0.2, 0, sx > 0 ? -0.38 : 0.38]);
+    part(locGroup, G.cyl(), goldMat, [sx > 0 ? sx + 0.09 : sx - 0.09, 0.68, 0.12], [0.27, 0.08, 0.27], [0.2, 0, sx > 0 ? -0.38 : 0.38]);
   });
-  // Long black beard
-  part(locGroup, G.cone(), mat('#0f172a'), [0, 1.22, 0.23], [0.1, 0.32, 0.08], [0.2, 0, 0]);
 
-  // Ngọc Như Ý (Golden & Jade Ruyi Scepter in hands)
+  // Head of Imperial Prime Minister
+  part(locGroup, G.sph(), skinTone, [0, 1.48, 0], [0.29, 0.31, 0.29]);
+
+  // Grand Imperial Minister Hat with Side Wings (Mũ Cánh Chuồn Đại Thần)
+  part(locGroup, G.box(), mat('#0f172a'), [0, 1.7, 0], [0.46, 0.24, 0.38]);
+  part(locGroup, G.box(), goldMat, [0, 1.83, 0], [0.18, 0.09, 0.18]);
+  [-0.55, 0.55].forEach(wx => {
+    // Extended horizontal wing flaps
+    part(locGroup, G.box(), mat('#0f172a'), [wx, 1.7, 0], [0.65, 0.07, 0.14]);
+    part(locGroup, G.box(), goldMat, [wx > 0 ? wx + 0.32 : wx - 0.32, 1.7, 0], [0.08, 0.1, 0.16]); // Golden wingtip
+  });
+
+  // Long Dignified Black Beard (Râu dài đen óng mượt)
+  part(locGroup, G.cone(), mat('#09090b'), [0, 1.25, 0.28], [0.12, 0.48, 0.09], [0.2, 0, 0]);
+  [-0.09, 0.09].forEach(mx => {
+    part(locGroup, G.cyl(), mat('#09090b'), [mx, 1.36, 0.28], [0.02, 0.14, 0.02], [0, 0, mx > 0 ? -0.6 : 0.6]);
+  });
+
+  // Left Hand: Imperial Golden & Emerald Jade Ruyi Scepter (Gậy Như Ý Đại Cát)
   const ruyiGroup = new THREE.Group();
-  ruyiGroup.position.set(0, 0.88, 0.32);
-  ruyiGroup.rotation.z = 0.5;
-  part(ruyiGroup, G.cyl(), mat('#10b981', { roughness: 0.2 }), [0, 0, 0], [0.04, 0.65, 0.04]);
-  part(ruyiGroup, G.sph(), goldMat, [0, 0.35, 0], [0.12, 0.1, 0.08]); // Cloud head
-  part(ruyiGroup, G.cone(), mat('#dc2626'), [0, -0.36, 0], [0.06, 0.18, 0.06]); // Red tassel
+  ruyiGroup.position.set(-0.35, 0.98, 0.32);
+  ruyiGroup.rotation.z = -0.45;
+  ruyiGroup.rotation.x = 0.25;
+  part(ruyiGroup, G.cyl(), mat('#10b981', { roughness: 0.15 }), [0, 0, 0], [0.05, 0.85, 0.05]); // Jade rod
+  part(ruyiGroup, G.sph(), goldMat, [0, 0.45, 0], [0.16, 0.14, 0.1]); // Golden cloud head
+  part(ruyiGroup, G.sph(), mat('#ef4444'), [0, 0.45, 0.08], [0.06, 0.06, 0.06]); // Ruby inlay
+  part(ruyiGroup, G.cone(), mat('#dc2626'), [0, -0.48, 0], [0.08, 0.24, 0.08]); // Red silk tassel
   locGroup.add(ruyiGroup);
 
+  // Right Hand: Golden Wealth Casket / Scroll (Sớ ban tài lộc)
+  const scrollGroup = new THREE.Group();
+  scrollGroup.position.set(0.35, 0.98, 0.32);
+  scrollGroup.rotation.z = 0.45;
+  part(scrollGroup, G.cyl(), goldMat, [0, 0, 0], [0.08, 0.65, 0.08], [0, 0, Math.PI / 4]);
+  part(scrollGroup, G.sph(), mat('#dc2626'), [0.24, 0.24, 0], [0.09, 0.09, 0.09]);
+  part(scrollGroup, G.sph(), mat('#dc2626'), [-0.24, -0.24, 0], [0.09, 0.09, 0.09]);
+  locGroup.add(scrollGroup);
+
+  // Radiant Golden Halo
+  part(locGroup, G.torus(), haloMat, [0, 1.58, -0.22], [0.75, 0.75, 0.75]);
+
   // Nametag Ông Lộc
-  const lblLoc = labelSprite('💰 ÔNG LỘC 💰', 'rgba(5,150,105,0.92)', '#fef08a', 0.40);
-  lblLoc.position.set(0, 2.15, 0);
+  const lblLoc = labelSprite('💰 ÔNG LỘC 💰', 'rgba(5,150,105,0.92)', '#fef08a', 0.42);
+  lblLoc.position.set(0, 2.3, 0);
   locGroup.add(lblLoc);
   g.add(locGroup);
 
-  // --- STATUE 3: ÔNG THỌ (Right: x = 1.25) ---
-  // High elongated cranial forehead, flowing long white beard, dragon staff with wine gourd & celestial peach!
+  // --- STATUE 3: ÔNG THỌ (Right: x = 1.35) ---
+  // High Cranial Forehead, Snowy White Beard, Dragon Staff with Gourd & Giant Celestial Peach!
   const thoGroup = new THREE.Group();
-  thoGroup.position.set(1.25, 1.22, -0.35);
+  thoGroup.position.set(1.35, 1.22, -0.35);
 
-  // Lotus base
-  part(thoGroup, G.cyl(), goldMat, [0, 0.08, 0], [0.55, 0.15, 0.55]);
-  // Yellow/Amber Longevity robe
-  part(thoGroup, G.cyl(), mat('#d97706'), [0, 0.65, 0], [0.45, 1.0, 0.45]);
-  part(thoGroup, G.box(), goldMat, [0, 0.65, 0.22], [0.15, 0.95, 0.03]);
+  // Triple Lotus Throne
+  part(thoGroup, G.cyl(), goldMat, [0, 0.05, 0], [0.68, 0.1, 0.68]);
+  part(thoGroup, G.cyl(), silkAmber, [0, 0.13, 0], [0.62, 0.08, 0.62]);
+  part(thoGroup, G.cyl(), goldMat, [0, 0.19, 0], [0.55, 0.06, 0.55]);
 
-  // Face & Prominent Elongated Cranial Dome (Trán Dô Trường Thọ)
-  part(thoGroup, G.sph(), mat('#fed7aa'), [0, 1.26, 0], [0.26, 0.26, 0.26]);
-  part(thoGroup, G.sph(), mat('#fed7aa'), [0, 1.48, 0.04], [0.22, 0.34, 0.22]); // High bald forehead
+  // Warm Amber Golden Robe Body
+  part(thoGroup, G.cyl(), silkAmber, [0, 0.72, 0], [0.52, 0.98, 0.52]);
+  part(thoGroup, G.box(), goldMat, [0, 0.72, 0.28], [0.2, 0.96, 0.03]);
 
-  // Long flowing white beard & white eyebrows
-  part(thoGroup, G.cone(), mat('#f8fafc'), [0, 1.08, 0.22], [0.14, 0.48, 0.1], [0.25, 0, 0]);
-  [-0.1, 0.1].forEach(ex => {
-    part(thoGroup, G.box(), mat('#ffffff'), [ex, 1.34, 0.22], [0.09, 0.03, 0.03]);
+  // Wide Sleeves
+  [-0.38, 0.38].forEach(sx => {
+    part(thoGroup, G.cyl(), silkAmber, [sx, 0.82, 0.08], [0.24, 0.55, 0.24], [0.2, 0, sx > 0 ? -0.35 : 0.35]);
+    part(thoGroup, G.cyl(), goldMat, [sx > 0 ? sx + 0.08 : sx - 0.08, 0.62, 0.12], [0.25, 0.08, 0.25], [0.2, 0, sx > 0 ? -0.35 : 0.35]);
   });
 
-  // Right Hand: Dragon Head Staff with Wine Gourd (Gậy đầu rồng buộc Hồ Lô Tiên)
+  // Face & Iconic High Elongated Cranial Dome (Trán Dô Tiên Ông Trường Thọ)
+  part(thoGroup, G.sph(), skinTone, [0, 1.32, 0], [0.28, 0.28, 0.28]);
+  part(thoGroup, G.sph(), skinTone, [0, 1.58, 0.04], [0.24, 0.38, 0.24]); // High bald dome
+
+  // Long Flowing Snowy White Beard & Eyebrows (Râu tóc bạc phơ tiên phong đạo cốt)
+  part(thoGroup, G.cone(), mat('#ffffff', { roughness: 0.3 }), [0, 1.1, 0.26], [0.15, 0.58, 0.12], [0.22, 0, 0]);
+  [-0.11, 0.11].forEach(ex => {
+    part(thoGroup, G.box(), mat('#ffffff'), [ex, 1.4, 0.26], [0.12, 0.04, 0.04], [0, 0, ex > 0 ? 0.2 : -0.2]); // White bushy brows
+  });
+
+  // Right Hand: Dragon Head Walking Staff with Celestial Wine Gourd (Gậy đầu rồng buộc Hồ Lô Tiên)
   const staffGroup = new THREE.Group();
-  staffGroup.position.set(-0.36, 0.72, 0.18);
-  part(staffGroup, G.cyl(), mat('#78350f'), [0, 0.35, 0], [0.04, 1.55, 0.04]); // Staff pole
-  part(staffGroup, G.cone(), goldMat, [0, 1.15, 0.06], [0.1, 0.2, 0.1], [0.6, 0, 0]); // Dragon head crook
-  // Hanging Wine Gourd (Hồ Lô Tiên)
-  part(staffGroup, G.sph(), mat('#b45309'), [0.08, 0.95, 0.04], [0.08, 0.09, 0.08]);
-  part(staffGroup, G.sph(), mat('#b45309'), [0.08, 0.82, 0.04], [0.11, 0.12, 0.11]);
-  staffGroup.rotation.z = -0.08;
+  staffGroup.position.set(-0.38, 0.72, 0.22);
+  part(staffGroup, G.cyl(), mat('#5c2b0e'), [0, 0.45, 0], [0.045, 1.8, 0.045]); // Wooden staff
+  part(staffGroup, G.cone(), goldMat, [0, 1.35, 0.08], [0.12, 0.25, 0.12], [0.65, 0, 0]); // Dragon head crook
+  part(staffGroup, G.sph(), goldMat, [0, 1.45, 0.15], [0.08, 0.08, 0.08]);
+
+  // Hanging Wine Gourd (Hồ Lô Tiên thắt dây đỏ)
+  const gourdGroup = new THREE.Group();
+  gourdGroup.position.set(0.12, 1.12, 0.06);
+  part(gourdGroup, G.sph(), mat('#d97706'), [0, 0.12, 0], [0.1, 0.11, 0.1]);
+  part(gourdGroup, G.sph(), mat('#d97706'), [0, -0.04, 0], [0.14, 0.15, 0.14]);
+  part(gourdGroup, G.torus(), mat('#ef4444'), [0, 0.04, 0], [0.08, 0.08, 0.08], [Math.PI / 2, 0, 0]); // Red silk ribbon
+  staffGroup.add(gourdGroup);
   thoGroup.add(staffGroup);
 
-  // Left Hand: Celestial Peach of Immortality (Quả Đào Tiên)
+  // Left Hand: Celestial Peach of Immortality (Đào Tiên ngậm sương phúc thọ)
   const peachGroup = new THREE.Group();
-  peachGroup.position.set(0.24, 0.82, 0.25);
-  part(peachGroup, G.sph(), mat('#fb7185'), [0, 0, 0], [0.11, 0.13, 0.11]);
-  part(peachGroup, G.cone(), mat('#f43f5e'), [0, 0.12, 0], [0.06, 0.1, 0.06]); // Peach tip
-  part(peachGroup, G.box(), mat('#22c55e'), [-0.08, -0.05, 0], [0.08, 0.03, 0.08]); // Green peach leaf
+  peachGroup.position.set(0.3, 0.88, 0.3);
+  part(peachGroup, G.sph(), mat('#fb7185', { roughness: 0.25 }), [0, 0, 0], [0.15, 0.18, 0.15]);
+  part(peachGroup, G.cone(), mat('#e11d48'), [0, 0.16, 0], [0.08, 0.14, 0.08]); // Rosy peach tip
+  // Emerald Jade Leaves
+  [-0.1, 0.1].forEach(lx => {
+    part(peachGroup, G.box(), mat('#15803d'), [lx, -0.06, 0], [0.11, 0.03, 0.08], [0, 0, lx > 0 ? 0.35 : -0.35]);
+  });
   thoGroup.add(peachGroup);
+
+  // Radiant Golden Halo
+  part(thoGroup, G.torus(), haloMat, [0, 1.5, -0.22], [0.65, 0.65, 0.65]);
 
   // Nametag Ông Thọ
   const lblTho = labelSprite('🍑 ÔNG THỌ 🍑', 'rgba(217,119,6,0.92)', '#fef08a', 0.40);
-  lblTho.position.set(0, 2.05, 0);
+  lblTho.position.set(0, 2.15, 0);
   thoGroup.add(lblTho);
   g.add(thoGroup);
 
