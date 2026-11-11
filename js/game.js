@@ -31,7 +31,7 @@ import {
 } from './media.js';
 import { World, TILE } from './world.js';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js';
-import { emojiSprite } from './props.js';
+import { emojiSprite, part, G, mat } from './props.js';
 import { RtcManager } from './rtc.js?v=20261111_trystero';
 import {
   initAudio,
@@ -3523,9 +3523,17 @@ function openPhucLocThoDialog() {
 }
 
 $('btnPltIncense').onclick = () => {
-  me.av?.playEmote('interact');
+  me.av?.playEmote('kneel', true);
+  // Build 3 incense sticks prop in right hand
+  if (me.av?.emotePropMount) {
+    me.av.emotePropMount.clear();
+    [-0.04, 0, 0.04].forEach((ix, idx) => {
+      part(me.av.emotePropMount, G.cyl(), mat('#b91c1c'), [ix, 0, 0.22 + idx * 0.02], [0.018, 0.55, 0.018], [Math.PI / 2.5, 0, 0]);
+      part(me.av.emotePropMount, G.sph(), mat('#ff4500', { emissive: '#ff4500', emissiveIntensity: 3.0 }), [ix, 0.05, 0.52 + idx * 0.02], [0.025, 0.025, 0.025]);
+    });
+  }
   playSfx('tet_lixi', 'tet');
-  floaters.push({ e: '🕯️✨ Dâng Hương Cầu An', who: net.selfId, t: Date.now() });
+  floaters.push({ e: '🕯️✨ Dâng Hương', who: net.selfId, t: Date.now() });
   toast('✨ Bạn đã thành tâm dâng hương trước Tam Vị Thần! Khí lành bao quanh, tâm an vạn sự như ý!');
   $('pltResultTitle').textContent = '🕯️ Hương Khói Tụ Khí An Khang';
   $('pltResultMsg').textContent = 'Nén hương trầm lan tỏa thanh tịnh, xua tan u ám, đem lại bình an và may mắn cho bạn cùng gia quyến suốt năm mới!';
@@ -3543,7 +3551,7 @@ $('btnPltBow').onclick = () => {
   }
   lastPltBowTime = now;
 
-  me.av?.playEmote('sit');
+  me.av?.playEmote('kneel', true);
   const blessings = [
     { god: 'Ông Phúc', xu: 88, wish: 'Phúc duyên tròn đầy, gia đạo an khang, con đàn cháu đống thuận hòa!' },
     { god: 'Ông Lộc', xu: 168, wish: 'Lộc tấn vinh hoa, tiền vào như nước, công danh sự nghiệp đại hiển đạt!' },
@@ -3561,7 +3569,7 @@ $('btnPltBow').onclick = () => {
 };
 
 $('btnPltChant').onclick = () => {
-  me.av?.playEmote('sit');
+  me.av?.playEmote('kneel', true);
   playSfx('tet_lixi', 'tet');
   floaters.push({ e: '📿 Tịnh Tâm Niệm Phật', who: net.selfId, t: Date.now() });
   toast('📿 Đang đọc kinh cầu phúc... Tâm tịnh trí sáng, vạn sự hanh thông.');
@@ -4904,6 +4912,23 @@ function updateScreen3D() {
 }
 
 function updateCamera(dt = 0.016) {
+  // Override camera when riding dragon - follow from behind & above
+  if (minigames?.isRiding() && minigames.dragon?.group) {
+    const dg = minigames.dragon.group;
+    const dYaw = minigames.dragonYaw || 0;
+    const dPos = dg.position;
+    const behindDist = 14;
+    const aboveOffset = 7;
+    const camX = dPos.x - Math.sin(dYaw) * behindDist;
+    const camZ = dPos.z - Math.cos(dYaw) * behindDist;
+    const camY = dPos.y + aboveOffset;
+    camera.position.lerp(new THREE.Vector3(camX, camY, camZ), Math.min(1, dt * 6));
+    camera.lookAt(dPos.x, dPos.y + 1, dPos.z);
+    if (me?.av) me.av.root.visible = true;
+    updateScreen3D();
+    return;
+  }
+
   const px = me.x * TILE,
     pz = me.y * TILE;
   const eyeH = me.seatSlot ? 1.25 : 1.55;

@@ -32,14 +32,25 @@ export function part(parent, g, material, pos = [0, 0, 0], scale = [1, 1, 1], ro
 }
 
 export function labelSprite(text, bg = 'rgba(15, 20, 35, 0.82)', fg = '#ffffff', worldH = 0.42) {
+  const lines = text.split('\n');
+  const lineCount = lines.length;
   const c = document.createElement('canvas');
-  c.width = 512;
-  c.height = 96;
+  c.width = 1024;
+  c.height = lineCount > 1 ? 160 : 96;
   const x = c.getContext('2d');
-  x.font = 'bold 34px system-ui, -apple-system, sans-serif';
+  const fontSize = lineCount > 1 ? 38 : 44;
+  x.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+
+  // Measure widest line to auto-fit pill width
+  let maxW = 0;
+  for (const ln of lines) maxW = Math.max(maxW, x.measureText(ln).width);
+  const pillW = Math.min(c.width - 32, maxW + 64);
+  const pillH = c.height - 24;
+  const pillX = (c.width - pillW) / 2;
+
   x.fillStyle = bg;
   x.beginPath();
-  x.roundRect(16, 12, 480, 72, 22);
+  x.roundRect(pillX, 12, pillW, pillH, 22);
   x.fill();
   x.strokeStyle = 'rgba(255,255,255,0.28)';
   x.lineWidth = 3;
@@ -47,7 +58,15 @@ export function labelSprite(text, bg = 'rgba(15, 20, 35, 0.82)', fg = '#ffffff',
   x.fillStyle = fg;
   x.textAlign = 'center';
   x.textBaseline = 'middle';
-  x.fillText(text, 256, 49, 450);
+  if (lineCount > 1) {
+    const lineH = pillH / (lineCount + 0.4);
+    for (let i = 0; i < lineCount; i++) {
+      const ly = 12 + lineH * (i + 0.7);
+      x.fillText(lines[i], c.width / 2, ly, pillW - 32);
+    }
+  } else {
+    x.fillText(text, c.width / 2, c.height / 2, pillW - 32);
+  }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false }));
@@ -544,8 +563,8 @@ export function buildPhucLocThoShrine() {
   phucGroup.add(babyGroup);
 
   // Nametag Ông Phúc
-  const lblPhuc = labelSprite('✨ ÔNG PHÚC ✨\n(Phúc Tinh Cao Chiếu)', 'rgba(185,28,28,0.92)', '#fef08a', 0.34);
-  lblPhuc.position.set(0, 1.88, 0);
+  const lblPhuc = labelSprite('✨ ÔNG PHÚC ✨', 'rgba(185,28,28,0.92)', '#fef08a', 0.40);
+  lblPhuc.position.set(0, 2.05, 0);
   phucGroup.add(lblPhuc);
   g.add(phucGroup);
 
@@ -581,8 +600,8 @@ export function buildPhucLocThoShrine() {
   locGroup.add(ruyiGroup);
 
   // Nametag Ông Lộc
-  const lblLoc = labelSprite('💰 ÔNG LỘC 💰\n(Lộc Tấn Vinh Hoa)', 'rgba(5,150,105,0.92)', '#fef08a', 0.36);
-  lblLoc.position.set(0, 2.02, 0);
+  const lblLoc = labelSprite('💰 ÔNG LỘC 💰', 'rgba(5,150,105,0.92)', '#fef08a', 0.40);
+  lblLoc.position.set(0, 2.15, 0);
   locGroup.add(lblLoc);
   g.add(locGroup);
 
@@ -627,8 +646,8 @@ export function buildPhucLocThoShrine() {
   thoGroup.add(peachGroup);
 
   // Nametag Ông Thọ
-  const lblTho = labelSprite('🍑 ÔNG THỌ 🍑\n(Thọ Tỷ Nam Sơn)', 'rgba(217,119,6,0.92)', '#fef08a', 0.34);
-  lblTho.position.set(0, 1.88, 0);
+  const lblTho = labelSprite('🍑 ÔNG THỌ 🍑', 'rgba(217,119,6,0.92)', '#fef08a', 0.40);
+  lblTho.position.set(0, 2.05, 0);
   thoGroup.add(lblTho);
   g.add(thoGroup);
 
@@ -690,10 +709,10 @@ export function buildPhucLocThoShrine() {
 
   // Grand Signboard above temple entrance
   const mainLabel = labelSprite(
-    '🏮 ĐIỆN THỜ TAM ĐA PHÚC - LỘC - THỌ 🏮\n[E] Chiêm Bái: Thắp Hương · Lạy Cầu May · Ngồi Đọc Kinh',
+    '🏮 ĐIỆN THỜ PHÚC LỘC THỌ 🏮\n[E] Chiêm Bái',
     'rgba(153,27,27,0.95)',
     '#fef08a',
-    0.46
+    0.52
   );
   mainLabel.position.set(0, 3.8, 0.3);
   g.add(mainLabel);
@@ -744,10 +763,10 @@ export function buildDragonAltar() {
   g.add(pearlLight);
 
   const lbl = labelSprite(
-    '🐉 ĐÀI TRIỆU HỒI RỒNG THẦN 🐉\n[E] Triệu Hồi Cưỡi Rồng (30s) · Thử Thách Vòng Bay Mở Khóa Skin',
+    '🐉 ĐÀI TRIỆU HỒI RỒNG 🐉\n[E] Cưỡi Rồng · Bay Thử Thách',
     'rgba(180,83,9,0.92)',
     '#fde047',
-    0.44
+    0.50
   );
   lbl.position.set(0, 2.3, 0);
   g.add(lbl);
