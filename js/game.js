@@ -32,7 +32,7 @@ import {
 import { World, TILE } from './world.js';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js';
 import { emojiSprite } from './props.js';
-import { RtcManager } from './rtc.js?v=20261111_voice_rtc';
+import { RtcManager } from './rtc.js?v=20261111_v3_dest';
 import {
   initAudio,
   playBgm,

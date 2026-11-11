@@ -2,7 +2,7 @@
 // Features:
 // 1. Full-Mesh WebRTC RTCPeerConnection with W3C Perfect Negotiation, STUN & TURN relay fallback
 // 2. High-Fidelity Voice Chat with Opus codec, Echo Cancellation, Noise Suppression & AGC
-// 3. Continuous Audio Pipeline (Silent Primer Track) to guarantee immediate receiver setup and avoid stalled decoding
+// 3. Web Audio API Direct Speaker Playback: routes incoming remote stream directly to AudioContext.destination
 // 4. 3D Spatial Proximity Audio: Dynamic distance attenuation (sounds louder up close, comfortable floor everywhere)
 // 5. Voice Activity Detection (VAD) via Web Audio API Analyser for real-time speaking indicators
 // 6. Signal deduplication to prevent state corruption across dual transports (BroadcastChannel + MQTT)
@@ -60,7 +60,6 @@ export class RtcManager {
     this.localVoiceSource = null;
     this.isLocalSpeaking = false;
     this.vadInterval = null;
-    this.cachedSilent = null;
 
     // Settings
     this.proximityEnabled = true; // 3D distance attenuation
@@ -81,9 +80,9 @@ export class RtcManager {
         this.audioCtx = new AudioContextClass();
       }
     }
-    // Resume audio context on any user interaction if suspended
+    // Resume audio context on any user interaction if not running
     const resumeAudio = () => {
-      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      if (this.audioCtx && this.audioCtx.state !== 'running') {
         this.audioCtx.resume().catch(() => {});
       }
       this.unlockAudioPlayback();
@@ -91,32 +90,8 @@ export class RtcManager {
     if (typeof window !== 'undefined') {
       window.addEventListener('pointerdown', resumeAudio, { passive: true });
       window.addEventListener('keydown', resumeAudio, { passive: true });
-    }
-  }
-
-  // Generates a continuous silent audio track to prime WebRTC negotiation & remote audio pipeline
-  getSilentTrack() {
-    if (this.cachedSilent && this.cachedSilent.track && this.cachedSilent.track.readyState === 'live') {
-      return this.cachedSilent;
-    }
-    this.initAudioContext();
-    if (!this.audioCtx) return null;
-    try {
-      const osc = this.audioCtx.createOscillator();
-      const gain = this.audioCtx.createGain();
-      gain.gain.value = 0.0;
-      osc.connect(gain);
-      const dest = this.audioCtx.createMediaStreamDestination();
-      gain.connect(dest);
-      osc.start();
-      this.cachedSilent = {
-        track: dest.stream.getAudioTracks()[0],
-        stream: dest.stream,
-      };
-      return this.cachedSilent;
-    } catch (e) {
-      console.warn('[RTC] Failed to create silent audio track:', e);
-      return null;
+      window.addEventListener('click', resumeAudio, { passive: true });
+      window.addEventListener('touchstart', resumeAudio, { passive: true });
     }
   }
 
@@ -142,8 +117,8 @@ export class RtcManager {
 
     try {
       this.initAudioContext();
-      if (this.audioCtx && this.audioCtx.state === 'suspended') {
-        await this.audioCtx.resume();
+      if (this.audioCtx && this.audioCtx.state !== 'running') {
+        await this.audioCtx.resume().catch(() => {});
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -177,34 +152,12 @@ export class RtcManager {
         audioTrack.enabled = true;
         for (const [peerId, peer] of this.peers.entries()) {
           try {
-            // Ensure transceiver is sendrecv
-            if (peer.pc.getTransceivers) {
-              const audioTransceiver = peer.pc.getTransceivers().find(
-                t =>
-                  (t.sender && t.sender.track && t.sender.track.kind === 'audio') ||
-                  (t.receiver && t.receiver.track && t.receiver.track.kind === 'audio')
-              );
-              if (audioTransceiver && audioTransceiver.direction !== 'sendrecv') {
-                audioTransceiver.direction = 'sendrecv';
-              }
-            }
-
-            let replaced = false;
-            // 1. Try known audioSender
-            if (peer.audioSender) {
-              await peer.audioSender.replaceTrack(audioTrack);
-              replaced = true;
+            const senders = peer.pc.getSenders ? peer.pc.getSenders() : [];
+            const existingSender = senders.find(s => s.track && s.track.kind === 'audio');
+            if (existingSender) {
+              await existingSender.replaceTrack(audioTrack);
+              peer.audioSender = existingSender;
             } else {
-              // 2. Try finding sender among peer.pc.getSenders()
-              const senders = peer.pc.getSenders ? peer.pc.getSenders() : [];
-              const existing = senders.find(s => s.track && s.track.kind === 'audio');
-              if (existing) {
-                await existing.replaceTrack(audioTrack);
-                peer.audioSender = existing;
-                replaced = true;
-              }
-            }
-            if (!replaced) {
               peer.audioSender = peer.pc.addTrack(audioTrack, stream);
             }
           } catch (e) {
@@ -240,18 +193,9 @@ export class RtcManager {
   }
 
   stopMicrophone() {
-    const silent = this.getSilentTrack();
     if (this.localVoiceStream) {
       this.localVoiceStream.getTracks().forEach(t => t.stop());
       this.localVoiceStream = null;
-    }
-    // Revert peer senders to silent track so audio pipeline stays active
-    if (silent?.track) {
-      for (const peer of this.peers.values()) {
-        if (peer.audioSender) {
-          peer.audioSender.replaceTrack(silent.track).catch(() => {});
-        }
-      }
     }
     this.isMicMuted = true;
     this.isLocalSpeaking = false;
@@ -309,8 +253,8 @@ export class RtcManager {
 
     try {
       this.initAudioContext();
-      if (this.audioCtx && this.audioCtx.state === 'suspended') {
-        await this.audioCtx.resume();
+      if (this.audioCtx && this.audioCtx.state !== 'running') {
+        await this.audioCtx.resume().catch(() => {});
       }
 
       // Capture screen with audio (tab/system audio if user enables it)
@@ -349,7 +293,6 @@ export class RtcManager {
       return stream;
     } catch (err) {
       if (err.name === 'NotAllowedError') {
-        // User cancelled picker, do not toast an error
         return null;
       }
       console.error('[RTC] Screen share failed:', err);
@@ -402,7 +345,7 @@ export class RtcManager {
       candidateQueue: [],
       seenSignals: new Set(),
       audioSender: null,
-      audioGain: null,
+      gainNode: null,
       audioEl: null,
       source: null,
       analyser: null,
@@ -415,20 +358,30 @@ export class RtcManager {
     // Setup Web Audio nodes for remote peer's incoming audio
     this.setupRemoteAudioGraph(peerData);
 
-    // 1. Attach ALL event handlers BEFORE adding any tracks
-    // ICE Candidates
+    // 1. ICE Candidates
     pc.onicecandidate = ({ candidate }) => {
       if (candidate) {
-        this.sendSignal(peerId, { candidate });
+        const candJson = candidate.toJSON
+          ? candidate.toJSON()
+          : {
+              candidate: candidate.candidate,
+              sdpMid: candidate.sdpMid,
+              sdpMLineIndex: candidate.sdpMLineIndex,
+              usernameFragment: candidate.usernameFragment,
+            };
+        this.sendSignal(peerId, { candidate: candJson });
       }
     };
 
-    // Perfect Negotiation Offer creation
+    // 2. Perfect Negotiation Offer creation
     pc.onnegotiationneeded = async () => {
       try {
         peerData.makingOffer = true;
         await pc.setLocalDescription();
-        this.sendSignal(peerId, { description: pc.localDescription });
+        const descJson = pc.localDescription.toJSON
+          ? pc.localDescription.toJSON()
+          : { type: pc.localDescription.type, sdp: pc.localDescription.sdp };
+        this.sendSignal(peerId, { description: descJson });
       } catch (err) {
         console.warn(`[RTC] Error during negotiation with ${peerId}:`, err);
       } finally {
@@ -436,7 +389,7 @@ export class RtcManager {
       }
     };
 
-    // Incoming Remote Tracks (Voice audio & Screen share video/audio)
+    // 3. Incoming Remote Tracks (Voice audio & Screen share video/audio)
     pc.ontrack = event => {
       console.log(`[RTC] Incoming remote track from ${peerId}: kind=${event.track.kind}, id=${event.track.id}`);
       const track = event.track;
@@ -473,27 +426,26 @@ export class RtcManager {
       }
     };
 
-    // 2. Pre-add Voice Track: Live Mic if active, otherwise continuous silent primer track
-    const silent = this.getSilentTrack();
-    const liveTrack = (this.localVoiceStream && !this.isMicMuted)
-      ? this.localVoiceStream.getAudioTracks()[0]
-      : null;
-    const initialTrack = liveTrack || this.localVoiceStream?.getAudioTracks()[0] || silent?.track;
-    const initialStream = this.localVoiceStream || silent?.stream;
-
-    if (initialTrack && initialStream) {
-      try {
-        peerData.audioSender = pc.addTrack(initialTrack, initialStream);
-      } catch (e) {
-        console.warn(`[RTC] Failed to add initial audio track to peer ${peerId}:`, e);
+    // 4. Attach Local Tracks:
+    // If mic is already open, attach it immediately to the peer connection
+    if (this.localVoiceStream) {
+      const audioTrack = this.localVoiceStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !this.isMicMuted;
+        try {
+          peerData.audioSender = pc.addTrack(audioTrack, this.localVoiceStream);
+        } catch (e) {
+          console.warn(`[RTC] Failed to add local audio track to peer ${peerId}:`, e);
+        }
       }
     } else {
+      // If mic is not yet active, declare ready to receive incoming audio
       try {
-        pc.addTransceiver('audio', { direction: 'sendrecv' });
+        pc.addTransceiver('audio', { direction: 'recvonly' });
       } catch (e) {}
     }
 
-    // 3. Add Screen Share Track if currently active
+    // 5. Add Screen Share Track if currently active
     if (this.localScreenStream) {
       this.localScreenStream.getTracks().forEach(track => {
         try {
@@ -523,26 +475,35 @@ export class RtcManager {
     track.enabled = true;
 
     // 1. Resume AudioContext if suspended
-    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+    this.initAudioContext();
+    if (this.audioCtx && this.audioCtx.state !== 'running') {
       this.audioCtx.resume().catch(() => {});
     }
 
-    // 2. Connect to Web Audio Analyser for VAD (Voice Activity Detection)
-    if (this.audioCtx && peerData.analyser) {
+    // 2. Web Audio API Direct Speaker Playback
+    // Connects incoming remote stream to GainNode -> audioCtx.destination (physical speakers/headphones)
+    if (this.audioCtx) {
       try {
+        if (!peerData.gainNode) {
+          peerData.gainNode = this.audioCtx.createGain();
+          peerData.gainNode.gain.value = this.masterVoiceVolume;
+          peerData.gainNode.connect(this.audioCtx.destination);
+        }
         if (peerData.source) {
-          try {
-            peerData.source.disconnect();
-          } catch {}
+          try { peerData.source.disconnect(); } catch {}
         }
         peerData.source = this.audioCtx.createMediaStreamSource(stream);
-        peerData.source.connect(peerData.analyser);
+        peerData.source.connect(peerData.gainNode);
+        if (peerData.analyser) {
+          peerData.source.connect(peerData.analyser);
+        }
+        console.log(`[RTC] Web Audio graph connected directly to speakers for ${peerData.peerId}`);
       } catch (e) {
-        console.warn('[RTC] MediaStreamSource connection warning:', e);
+        console.warn('[RTC] Web Audio connection warning:', e);
       }
     }
 
-    // 3. Native HTMLAudioElement attached to DOM as Primary Audio Output
+    // 3. HTMLAudioElement on DOM (dual fallback & Chromium WebRTC active sink)
     let audio = peerData.audioEl;
     if (!audio) {
       audio = document.createElement('audio');
@@ -550,7 +511,6 @@ export class RtcManager {
       audio.autoplay = true;
       audio.playsInline = true;
       audio.muted = false;
-      // Position off-screen instead of display: none so Chrome maintains active decoding
       audio.style.position = 'fixed';
       audio.style.left = '-9999px';
       audio.style.top = '-9999px';
@@ -568,18 +528,19 @@ export class RtcManager {
     audio.muted = false;
     audio.volume = this.masterVoiceVolume;
 
-    // Critical for Chromium: when unmuted, force audio playback
+    // Force playback resumption on un-mute
     track.onunmute = () => {
       console.log(`[RTC] Remote audio track unmuted for ${peerData.peerId}`);
+      if (this.audioCtx && this.audioCtx.state !== 'running') {
+        this.audioCtx.resume().catch(() => {});
+      }
       if (audio.paused) {
-        audio.play().catch(err => {
-          console.warn(`[RTC] Audio play error on unmute:`, err);
-        });
+        audio.play().catch(() => {});
       }
     };
 
     audio.play().catch(err => {
-      console.warn(`[RTC] Audio autoplay blocked for ${peerData.peerId}, waiting for user gesture:`, err);
+      console.warn(`[RTC] Audio element playback notice:`, err);
     });
 
     this.startVadLoop();
@@ -593,9 +554,9 @@ export class RtcManager {
     // Signal deduplication to prevent duplicate processing from dual transport (BroadcastChannel + MQTT)
     if (!peer.seenSignals) peer.seenSignals = new Set();
     const sigKey = signal.description
-      ? `${signal.description.type}_${signal.description.sdp?.slice(0, 100)}`
+      ? `${signal.description.type}#${signal.description.sdp}`
       : signal.candidate
-        ? `cand_${signal.candidate.candidate}_${signal.candidate.sdpMid}_${signal.candidate.sdpMLineIndex}`
+        ? `cand#${signal.candidate.candidate}#${signal.candidate.sdpMid}#${signal.candidate.sdpMLineIndex}`
         : null;
 
     if (sigKey) {
@@ -603,9 +564,9 @@ export class RtcManager {
         return; // Already processed
       }
       peer.seenSignals.add(sigKey);
-      if (peer.seenSignals.size > 400) {
+      if (peer.seenSignals.size > 500) {
         const it = peer.seenSignals.values();
-        for (let i = 0; i < 150; i++) peer.seenSignals.delete(it.next().value);
+        for (let i = 0; i < 200; i++) peer.seenSignals.delete(it.next().value);
       }
     }
 
@@ -622,12 +583,10 @@ export class RtcManager {
         }
 
         if (offerCollision) {
-          // Polite peer: sequentially rollback local offer then set remote offer
-          console.log(`[RTC] Polite peer rolling back offer for ${fromPeerId}`);
+          console.log(`[RTC] Polite peer sequentially rolling back offer for ${fromPeerId}`);
           await pc.setLocalDescription({ type: 'rollback' });
           await pc.setRemoteDescription(desc);
         } else {
-          // Guard against duplicate or out-of-order answers
           if (desc.type === 'answer' && pc.signalingState !== 'have-local-offer') {
             console.warn(`[RTC] Ignoring answer from ${fromPeerId} in state ${pc.signalingState}`);
             return;
@@ -650,7 +609,10 @@ export class RtcManager {
 
         if (desc.type === 'offer') {
           await pc.setLocalDescription();
-          this.sendSignal(fromPeerId, { description: pc.localDescription });
+          const descJson = pc.localDescription.toJSON
+            ? pc.localDescription.toJSON()
+            : { type: pc.localDescription.type, sdp: pc.localDescription.sdp };
+          this.sendSignal(fromPeerId, { description: descJson });
         }
       } else if (signal.candidate) {
         try {
@@ -677,6 +639,11 @@ export class RtcManager {
     if (peer.source) {
       try {
         peer.source.disconnect();
+      } catch {}
+    }
+    if (peer.gainNode) {
+      try {
+        peer.gainNode.disconnect();
       } catch {}
     }
     if (peer.analyser) {
@@ -706,8 +673,6 @@ export class RtcManager {
     if (!this.peers.size) return;
 
     for (const [peerId, peer] of this.peers.entries()) {
-      if (!peer.audioEl) continue;
-
       let volume = this.masterVoiceVolume;
 
       if (this.proximityEnabled && myPos && peerPositionsMap?.has(peerId)) {
@@ -730,7 +695,10 @@ export class RtcManager {
 
       const clampedVol = Math.max(0.35, Math.min(1, volume));
       try {
-        if (Math.abs(peer.audioEl.volume - clampedVol) > 0.02) {
+        if (peer.gainNode) {
+          peer.gainNode.gain.value = clampedVol;
+        }
+        if (peer.audioEl && Math.abs(peer.audioEl.volume - clampedVol) > 0.02) {
           peer.audioEl.volume = clampedVol;
         }
       } catch {}
@@ -738,7 +706,7 @@ export class RtcManager {
   }
 
   unlockAudioPlayback() {
-    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+    if (this.audioCtx && this.audioCtx.state !== 'running') {
       this.audioCtx.resume().catch(() => {});
     }
     for (const peer of this.peers.values()) {
@@ -755,11 +723,10 @@ export class RtcManager {
     this.proximityEnabled = !!enabled;
     if (!this.proximityEnabled) {
       for (const peer of this.peers.values()) {
-        if (peer.audioEl) {
-          try {
-            peer.audioEl.volume = this.masterVoiceVolume;
-          } catch {}
-        }
+        try {
+          if (peer.gainNode) peer.gainNode.gain.value = this.masterVoiceVolume;
+          if (peer.audioEl) peer.audioEl.volume = this.masterVoiceVolume;
+        } catch {}
       }
     }
   }
@@ -767,11 +734,10 @@ export class RtcManager {
   setMasterVoiceVolume(val) {
     this.masterVoiceVolume = Math.max(0, Math.min(1, val));
     for (const peer of this.peers.values()) {
-      if (peer.audioEl && !this.proximityEnabled) {
-        try {
-          peer.audioEl.volume = this.masterVoiceVolume;
-        } catch {}
-      }
+      try {
+        if (peer.gainNode) peer.gainNode.gain.value = this.masterVoiceVolume;
+        if (peer.audioEl) peer.audioEl.volume = this.masterVoiceVolume;
+      } catch {}
     }
   }
 
