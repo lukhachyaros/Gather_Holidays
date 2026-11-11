@@ -48,6 +48,30 @@ const EMOTE_DURATION = {
   kneel: 7000,
 };
 
+export const NAMETAG_STYLES = {
+  rainbow: { rainbow: true, border: '#f43f5e' },
+  tag_gold: { color: '#facc15', border: '#eab308' },
+  tag_emerald: { color: '#34d399', border: '#10b981' },
+  tag_amethyst: { color: '#c084fc', border: '#a855f7' },
+  tag_ice: { color: '#38bdf8', border: '#0284c7' },
+  tag_rainbow: { rainbow: true, border: '#f43f5e' },
+  tag_neon_pink: { color: '#f472b6', border: '#ec4899' },
+  tag_cyber_cyan: { color: '#22d3ee', border: '#06b6d4' },
+  tag_crimson_fire: { color: '#fb7185', border: '#e11d48' },
+  tag_phantom_purple: { color: '#e879f9', border: '#c026d3' },
+  gold: { color: '#facc15', border: '#eab308' },
+  emerald: { color: '#34d399', border: '#10b981' },
+  amethyst: { color: '#c084fc', border: '#a855f7' },
+  ice: { color: '#38bdf8', border: '#0284c7' },
+};
+
+export function resolveNametagStyle(s) {
+  if (!s) return null;
+  if (typeof s === 'object') return s;
+  const key = String(s).toLowerCase().trim();
+  return NAMETAG_STYLES[key] || NAMETAG_STYLES[key.replace(/^tag_/, '')] || { color: s };
+}
+
 function textSprite(draw, w, h, worldH) {
   const c = document.createElement('canvas');
   c.width = w;
@@ -361,7 +385,8 @@ export class Avatar {
 
     const isAdmin = isAdminUser(name);
     const displayTitle = this.title || (isAdmin ? '👑 ADMIN' : null);
-    const isRainbow = !!(displayTitle && (displayTitle === 'GAY' || displayTitle.includes('GAY'))) || !!style?.rainbow;
+    const resolvedStyle = resolveNametagStyle(style);
+    const isRainbow = !!(displayTitle && (displayTitle === 'GAY' || displayTitle.includes('GAY'))) || !!resolvedStyle?.rainbow;
     this.isRainbowNametag = isRainbow;
 
     this.label = textSprite(
@@ -377,8 +402,8 @@ export class Avatar {
           const hue = Math.floor(((animOffset * 60) % 360 + 360) % 360);
           x.strokeStyle = `hsl(${hue}, 100%, 65%)`;
           x.lineWidth = 4;
-        } else if (style?.border) {
-          x.strokeStyle = style.border;
+        } else if (resolvedStyle?.border) {
+          x.strokeStyle = resolvedStyle.border;
           x.lineWidth = 3.5;
         } else {
           x.strokeStyle = isAdmin ? 'rgba(250, 204, 21, 0.95)' : 'rgba(56, 189, 248, 0.85)';
@@ -400,11 +425,11 @@ export class Avatar {
             grad.addColorStop(1, `hsl(${(h1 + 240) % 360}, 100%, 65%)`);
             x.fillStyle = grad;
           } else {
-            x.fillStyle = isAdmin ? '#fde047' : (style?.color || '#facc15');
+            x.fillStyle = isAdmin ? '#fde047' : (resolvedStyle?.color || '#facc15');
           }
           x.fillText(displayTitle, w / 2, 28);
 
-          x.font = style?.font ? `bold 26px ${style.font}` : 'bold 26px system-ui, sans-serif';
+          x.font = resolvedStyle?.font ? `bold 26px ${resolvedStyle.font}` : 'bold 26px system-ui, sans-serif';
           if (isRainbow) {
             const h2 = Math.floor(((animOffset * 90 + 60) % 360 + 360) % 360);
             const grad = x.createLinearGradient(40, 0, w - 40, 0);
@@ -412,16 +437,16 @@ export class Avatar {
             grad.addColorStop(0.5, `hsl(${(h2 + 120) % 360}, 100%, 75%)`);
             grad.addColorStop(1, `hsl(${(h2 + 240) % 360}, 100%, 75%)`);
             x.fillStyle = grad;
-          } else if (style?.color) {
-            x.fillStyle = style.color;
+          } else if (resolvedStyle?.color) {
+            x.fillStyle = resolvedStyle.color;
           } else {
             x.fillStyle = '#f8fafc';
           }
           x.fillText(name, w / 2, 60);
         } else {
-          x.font = style?.font ? `bold 32px ${style.font}` : 'bold 32px system-ui, sans-serif';
-          if (style?.color) {
-            x.fillStyle = style.color;
+          x.font = resolvedStyle?.font ? `bold 32px ${resolvedStyle.font}` : 'bold 32px system-ui, sans-serif';
+          if (resolvedStyle?.color) {
+            x.fillStyle = resolvedStyle.color;
           } else {
             x.fillStyle = '#f8fafc';
           }

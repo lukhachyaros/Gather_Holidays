@@ -15,9 +15,9 @@ let emitOpRef = null;
 let getMeRef = null;
 let getPeersRef = null;
 
-// ---------- Chip Wallet Management (Starts strictly at 0) ----------
-let chips = parseInt(localStorage.getItem('gh_casino_chips') || '0', 10);
-if (isNaN(chips) || chips < 0) chips = 0;
+// ---------- Coin Wallet Management (Starts strictly at 0) ----------
+let coins = parseInt(localStorage.getItem('gh_player_coins') ?? localStorage.getItem('gh_casino_chips') ?? '0', 10);
+if (isNaN(coins) || coins < 0) coins = 0;
 
 export const VALID_CODES = {
   raumania: { label: 'Raumania', reward: 500 },
@@ -56,13 +56,13 @@ export function redeemCode(rawCode) {
   history[clean] = now;
   localStorage.setItem('gh_code_history', JSON.stringify(history));
 
-  addChips(cfg.reward);
-  playSfx('jackpot_voice', 'casino');
+  addCoins(cfg.reward);
+  playSfx('plinko_win', 'casino');
 
   return {
     ok: true,
     success: true,
-    msg: `🎉 Đổi mã thành công! Bạn nhận được +${cfg.reward} xu cờ bạc từ [${cfg.label}]!`,
+    msg: `🎉 Đổi mã thành công! Bạn nhận được +${cfg.reward} Xu từ [${cfg.label}]!`,
     reward: cfg.reward,
   };
 }
@@ -94,41 +94,60 @@ export function recordJackpotWin(gameType, amount = 5000) {
       toastRef?.('👑 HUYỀN THOẠI! Bạn đã thắng Jackpot ở cả 5 trò và mở khóa danh hiệu độc quyền: [👑 Vua Đỏ Đen]!');
       worldRef?.spawnFireworksShow?.(14.5, 11.5);
     } else {
-      toastRef?.(`💥 JACKPOT! Bạn đã thắng lớn ở trò ${gameType}! (Còn ${remaining.length} trò nữa để đạt danh hiệu [👑 Vua Đỏ Đen])`);
+      toastRef?.(`💥 JACKPOT! Bạn đã thắng lớn ${amount.toLocaleString()} Xu ở trò ${gameType}! (Còn ${remaining.length} trò nữa để đạt danh hiệu [👑 Vua Đỏ Đen])`);
     }
   } catch (err) {
     console.warn(err);
   }
 }
 
+export function getCoins() {
+  return coins;
+}
 export function getChips() {
-  return chips;
+  return coins;
 }
 
-export function addChips(amount) {
-  chips += amount;
-  localStorage.setItem('gh_casino_chips', String(chips));
+export function addCoins(amount) {
+  coins += amount;
+  localStorage.setItem('gh_player_coins', String(coins));
+  localStorage.setItem('gh_casino_chips', String(coins));
   updateAllWalletBadges();
 }
+export function addChips(amount) {
+  addCoins(amount);
+}
 
-export function spendChips(amount) {
-  if (chips < amount) return false;
-  chips -= amount;
-  localStorage.setItem('gh_casino_chips', String(chips));
+export function spendCoins(amount) {
+  if (coins < amount) return false;
+  coins -= amount;
+  localStorage.setItem('gh_player_coins', String(coins));
+  localStorage.setItem('gh_casino_chips', String(coins));
   updateAllWalletBadges();
   return true;
 }
+export function spendChips(amount) {
+  return spendCoins(amount);
+}
 
-export function resetChips() {
-  chips = 0;
+export function resetCoins() {
+  coins = 0;
+  localStorage.setItem('gh_player_coins', '0');
   localStorage.setItem('gh_casino_chips', '0');
   updateAllWalletBadges();
+}
+export function resetChips() {
+  resetCoins();
 }
 
 function updateAllWalletBadges() {
   document.querySelectorAll('.casino-chip-count').forEach(el => {
-    el.textContent = `$${chips.toLocaleString()}`;
+    el.textContent = `${coins.toLocaleString()} Xu`;
   });
+  const shopChips = document.getElementById('shopWalletChips');
+  if (shopChips) {
+    shopChips.textContent = coins.toLocaleString();
+  }
 }
 
 export function initCasino(world, toast, emitOp = null, getMe = null, getPeers = null) {
@@ -156,7 +175,7 @@ export function handleCasinoBroadcast(op) {
   if (!op) return;
   const { game, player, detail, isJackpot } = op;
   if (isJackpot) {
-    toastRef?.(`💥 JACKPOT! ${player} vừa trúng độc đắc $${Number(detail).toLocaleString()} ở trò ${game.toUpperCase()}! 🎉`);
+    toastRef?.(`💥 JACKPOT! ${player} vừa trúng độc đắc ${Number(detail).toLocaleString()} Xu ở trò ${game.toUpperCase()}! 🎉`);
     playSfx('jackpot_voice', 'casino');
     worldRef?.spawnFireworksShow?.(14.5, 11.5);
   } else {
@@ -196,9 +215,9 @@ function createCasinoModal(title, contentHtml) {
           <span class="casino-title">${title}</span>
         </div>
         <div style="display:flex;align-items:center;gap:12px">
-          <div class="casino-wallet-badge" id="btnCasinoModalWallet" title="Ví Chips - Thu thập code bí mật quanh 4 map để nhận thêm xu!">
-            <span>🪙 VÍ CHIPS:</span>
-            <b class="casino-chip-count">$${chips.toLocaleString()}</b>
+          <div class="casino-wallet-badge" id="btnCasinoModalWallet" title="Ví Xu - Nhập code bí mật quanh các map để nhận thêm 500 Xu!">
+            <span>🪙 VÍ XU:</span>
+            <b class="casino-chip-count">${coins.toLocaleString()} Xu</b>
           </div>
           <button class="casino-close-btn" id="btnCloseCasinoModal" title="Đóng [ESC]">✕</button>
         </div>
@@ -239,7 +258,7 @@ export function openRoulette() {
       <div class="roulette-wheel-box">
         <canvas id="rouletteCanvas" width="300" height="300"></canvas>
         <div id="rouletteResult" class="casino-result-toast" style="min-width:260px">
-          🎡 Hãy chọn chip, đặt cược trên bàn nỉ rồi bấm QUAY!
+          🎡 Hãy chọn mệnh giá Xu, đặt cược trên bàn nỉ rồi bấm QUAY!
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:10px;align-items:center">
@@ -248,11 +267,11 @@ export function openRoulette() {
         <!-- Chip Value Selector -->
         <div class="casino-chips-row" style="background:transparent;padding:0">
           <span style="font-size:12px;font-weight:700;color:#fef08a">MỆNH GIÁ CƯỢC:</span>
-          <div class="casino-chip-btn chip-10 selected" data-val="10">$10</div>
-          <div class="casino-chip-btn chip-25" data-val="25">$25</div>
-          <div class="casino-chip-btn chip-50" data-val="50">$50</div>
-          <div class="casino-chip-btn chip-100" data-val="100">$100</div>
-          <div class="casino-chip-btn chip-500" data-val="500">$500</div>
+          <div class="casino-chip-btn chip-10 selected" data-val="10">10 Xu</div>
+          <div class="casino-chip-btn chip-25" data-val="25">25 Xu</div>
+          <div class="casino-chip-btn chip-50" data-val="50">50 Xu</div>
+          <div class="casino-chip-btn chip-100" data-val="100">100 Xu</div>
+          <div class="casino-chip-btn chip-500" data-val="500">500 Xu</div>
         </div>
         <!-- Actions -->
         <div style="display:flex;gap:10px;margin-top:6px">
@@ -291,7 +310,7 @@ export function openRoulette() {
     const cell0 = document.createElement('div');
     cell0.className = 'roulette-cell cell-green';
     cell0.dataset.bet = '0';
-    cell0.innerHTML = `0 ${bets.has('0') ? `<span class="chip-badge">$${bets.get('0')}</span>` : ''}`;
+    cell0.innerHTML = `0 ${bets.has('0') ? `<span class="chip-badge">${bets.get('0')} Xu</span>` : ''}`;
     row0.appendChild(cell0);
     gridContainer.appendChild(row0);
 
@@ -305,7 +324,7 @@ export function openRoulette() {
         const cell = document.createElement('div');
         cell.className = `roulette-cell ${isRed ? 'cell-red' : 'cell-black'}`;
         cell.dataset.bet = String(num);
-        cell.innerHTML = `${num} ${bets.has(String(num)) ? `<span class="chip-badge">$${bets.get(String(num))}</span>` : ''}`;
+        cell.innerHTML = `${num} ${bets.has(String(num)) ? `<span class="chip-badge">${bets.get(String(num))} Xu</span>` : ''}`;
         row.appendChild(cell);
       }
       gridContainer.appendChild(row);
@@ -327,7 +346,7 @@ export function openRoulette() {
       const cell = document.createElement('div');
       cell.className = 'roulette-cell cell-special';
       cell.dataset.bet = sb.id;
-      cell.innerHTML = `${sb.label} ${bets.has(sb.id) ? `<span class="chip-badge">$${bets.get(sb.id)}</span>` : ''}`;
+      cell.innerHTML = `${sb.label} ${bets.has(sb.id) ? `<span class="chip-badge">${bets.get(sb.id)} Xu</span>` : ''}`;
       sideRow.appendChild(cell);
     });
     gridContainer.appendChild(sideRow);
@@ -336,8 +355,8 @@ export function openRoulette() {
     gridContainer.querySelectorAll('.roulette-cell').forEach(cell => {
       cell.onclick = () => {
         const betKey = cell.dataset.bet;
-        if (!spendChips(selectedChipVal)) {
-          toastRef?.('⚠️ Bạn không đủ Chips để đặt cược!');
+        if (!spendCoins(selectedChipVal)) {
+          toastRef?.('⚠️ Bạn không đủ Xu để đặt cược!');
           return;
         }
         bets.set(betKey, (bets.get(betKey) || 0) + selectedChipVal);
@@ -526,14 +545,14 @@ export function openRoulette() {
     });
 
     if (totalWin > 0) {
-      addChips(totalWin);
+      addCoins(totalWin);
       if (bets.has(String(winningNum))) {
         recordJackpotWin('roulette');
       } else {
         playSfx('slot_win', 'casino');
       }
       modal.querySelector('#rouletteResult').innerHTML = `
-        <span style="color:#4ade80;font-size:16px">🎉 THẮNG LỚN +$${totalWin.toLocaleString()}!</span><br>
+        <span style="color:#4ade80;font-size:16px">🎉 THẮNG LỚN +${totalWin.toLocaleString()} Xu!</span><br>
         Bóng rơi vào <b>${colName}</b>!
       `;
     } else {
@@ -583,10 +602,10 @@ export function openDuckDerby() {
       <div style="display:flex;justify-content:space-between;width:100%;align-items:center;flex-wrap:wrap;gap:10px">
         <div class="casino-chips-row" style="background:transparent;padding:0">
           <span style="font-size:12px;font-weight:700;color:#fef08a">MỨC CƯỢC:</span>
-          <div class="casino-chip-btn chip-25" data-val="25">$25</div>
-          <div class="casino-chip-btn chip-50 selected" data-val="50">$50</div>
-          <div class="casino-chip-btn chip-100" data-val="100">$100</div>
-          <div class="casino-chip-btn chip-500" data-val="500">$500</div>
+          <div class="casino-chip-btn chip-25" data-val="25">25 Xu</div>
+          <div class="casino-chip-btn chip-50 selected" data-val="50">50 Xu</div>
+          <div class="casino-chip-btn chip-100" data-val="100">100 Xu</div>
+          <div class="casino-chip-btn chip-500" data-val="500">500 Xu</div>
         </div>
         <button id="btnStartDuckRace" class="casino-action-btn">🏁 BẮT ĐẦU ĐUA (START RACE)</button>
       </div>
@@ -704,8 +723,8 @@ export function openDuckDerby() {
 
   modal.querySelector('#btnStartDuckRace').onclick = () => {
     if (isRacing) return;
-    if (!spendChips(betAmount)) {
-      toastRef?.('⚠️ Bạn không đủ Chips để đặt cược!');
+    if (!spendCoins(betAmount)) {
+      toastRef?.('⚠️ Bạn không đủ Xu để đặt cược!');
       return;
     }
 
@@ -758,11 +777,11 @@ export function openDuckDerby() {
     const winner = ducks[winIdx];
     if (winIdx === chosenDuckIdx) {
       const payout = Math.floor(betAmount * winner.odds);
-      addChips(payout);
+      addCoins(payout);
       recordJackpotWin('duck_derby');
       modal.querySelector('#duckRaceToast').innerHTML = `
         <span style="color:#4ade80;font-size:16px">🏆 VÔ ĐỊCH: #${winIdx + 1} ${winner.name}!</span>
-        Chúc mừng bạn đã đoán trúng và nhận <b>+$${payout.toLocaleString()} Chips</b>!
+        Chúc mừng bạn đã đoán trúng và nhận <b>+${payout.toLocaleString()} Xu</b>!
       `;
     } else {
       modal.querySelector('#duckRaceToast').innerHTML = `
@@ -802,10 +821,10 @@ export function openBlackjack() {
       <div class="bj-controls-row">
         <div class="casino-chips-row" style="background:transparent;padding:0">
           <span style="font-size:12px;font-weight:700;color:#fef08a">CƯỢC:</span>
-          <div class="casino-chip-btn chip-25" data-val="25">$25</div>
-          <div class="casino-chip-btn chip-50 selected" data-val="50">$50</div>
-          <div class="casino-chip-btn chip-100" data-val="100">$100</div>
-          <div class="casino-chip-btn chip-500" data-val="500">$500</div>
+          <div class="casino-chip-btn chip-25" data-val="25">25 Xu</div>
+          <div class="casino-chip-btn chip-50 selected" data-val="50">50 Xu</div>
+          <div class="casino-chip-btn chip-100" data-val="100">100 Xu</div>
+          <div class="casino-chip-btn chip-500" data-val="500">500 Xu</div>
         </div>
         <button id="btnDealBj" class="casino-action-btn">🎴 CHIA BÀI (DEAL)</button>
         <button id="btnHitBj" class="casino-action-btn" style="background:#22c55e;color:#fff" disabled>➕ RÚT (HIT)</button>
@@ -900,8 +919,8 @@ export function openBlackjack() {
 
   // DEAL
   modal.querySelector('#btnDealBj').onclick = () => {
-    if (!spendChips(betAmount)) {
-      toastRef?.('⚠️ Bạn không đủ Chips để đặt cược!');
+    if (!spendCoins(betAmount)) {
+      toastRef?.('⚠️ Bạn không đủ Xu để đặt cược!');
       return;
     }
 
@@ -915,7 +934,7 @@ export function openBlackjack() {
     modal.querySelector('#btnDealBj').disabled = true;
     modal.querySelector('#btnHitBj').disabled = false;
     modal.querySelector('#btnStandBj').disabled = false;
-    modal.querySelector('#btnDoubleBj').disabled = chips < betAmount;
+    modal.querySelector('#btnDoubleBj').disabled = coins < betAmount;
     modal.querySelector('#bjResultToast').textContent = '🃏 Lượt của bạn! Bạn muốn RÚT THÊM hay DẰNG BÀI?';
 
     updateTableUI(true);
@@ -941,7 +960,7 @@ export function openBlackjack() {
 
   // DOUBLE DOWN
   modal.querySelector('#btnDoubleBj').onclick = () => {
-    spendChips(betAmount);
+    spendCoins(betAmount);
     betAmount *= 2;
     playerCards.push(deck.pop());
     playSfx('blackjack_deal', 'casino');
@@ -990,21 +1009,21 @@ export function openBlackjack() {
       resultToast.innerHTML = '<span style="color:#ef4444">💥 BẠN BỊ QUẮC (BUST > 21)! Nhà cái thắng.</span>';
     } else if (pScore === 21 && playerCards.length === 2 && (dScore !== 21 || dealerCards.length > 2)) {
       const win = Math.floor(betAmount * 2.5); // 3:2 payout
-      addChips(win);
+      addCoins(win);
       recordJackpotWin('blackjack');
-      resultToast.innerHTML = `<span style="color:#4ade80">⭐ BLACKJACK 21 ĐIỂM! Bạn thắng lớn +$${win.toLocaleString()} Chips!</span>`;
+      resultToast.innerHTML = `<span style="color:#4ade80">⭐ BLACKJACK 21 ĐIỂM! Bạn thắng lớn +${win.toLocaleString()} Xu!</span>`;
     } else if (dScore > 21) {
       const win = betAmount * 2;
-      addChips(win);
+      addCoins(win);
       playSfx('slot_win', 'casino');
-      resultToast.innerHTML = `<span style="color:#4ade80">🎉 NHÀ CÁI BỊ QUẮC (>21)! Bạn thắng +$${win.toLocaleString()} Chips!</span>`;
+      resultToast.innerHTML = `<span style="color:#4ade80">🎉 NHÀ CÁI BỊ QUẮC (>21)! Bạn thắng +${win.toLocaleString()} Xu!</span>`;
     } else if (pScore > dScore) {
       const win = betAmount * 2;
-      addChips(win);
+      addCoins(win);
       playSfx('slot_win', 'casino');
-      resultToast.innerHTML = `<span style="color:#4ade80">🎉 BẠN THẮNG (${pScore} vs ${dScore})! Nhận +$${win.toLocaleString()} Chips!</span>`;
+      resultToast.innerHTML = `<span style="color:#4ade80">🎉 BẠN THẮNG (${pScore} vs ${dScore})! Nhận +${win.toLocaleString()} Xu!</span>`;
     } else if (pScore === dScore) {
-      addChips(betAmount); // Push
+      addCoins(betAmount); // Push
       resultToast.innerHTML = `🤝 HÒA (${pScore} điểm)! Hoàn lại tiền cược.`;
     } else {
       resultToast.innerHTML = `Nhà cái thắng (${dScore} vs ${pScore}). Hãy thử lại ván sau!`;
@@ -1032,10 +1051,10 @@ export function openSlotMachine() {
         <!-- Chip Bet & Action -->
         <div class="casino-chips-row" style="background:transparent;padding:0">
           <span style="font-size:12px;font-weight:700;color:#fef08a">CƯỢC:</span>
-          <div class="casino-chip-btn chip-10" data-val="10">$10</div>
-          <div class="casino-chip-btn chip-25 selected" data-val="25">$25</div>
-          <div class="casino-chip-btn chip-50" data-val="50">$50</div>
-          <div class="casino-chip-btn chip-100" data-val="100">$100</div>
+          <div class="casino-chip-btn chip-10" data-val="10">10 Xu</div>
+          <div class="casino-chip-btn chip-25 selected" data-val="25">25 Xu</div>
+          <div class="casino-chip-btn chip-50" data-val="50">50 Xu</div>
+          <div class="casino-chip-btn chip-100" data-val="100">100 Xu</div>
         </div>
         <button id="btnSpinSlot" class="casino-action-btn">🎰 QUAY (SPIN)</button>
       </div>
@@ -1066,8 +1085,8 @@ export function openSlotMachine() {
 
   const doSpin = () => {
     if (isSpinning) return;
-    if (!spendChips(betAmount)) {
-      toastRef?.('⚠️ Bạn không đủ Chips để quay Slot!');
+    if (!spendCoins(betAmount)) {
+      toastRef?.('⚠️ Bạn không đủ Xu để quay Slot!');
       return;
     }
 
@@ -1139,27 +1158,27 @@ export function openSlotMachine() {
 
     if (r1 === '7️⃣' && r2 === '7️⃣' && r3 === '7️⃣') {
       const jackpot = betAmount * 100;
-      addChips(jackpot);
+      addCoins(jackpot);
       recordJackpotWin('slot_machine');
       worldRef?.spawnFireworksShow(14.5, 11.5);
       modal.querySelector('#slotResultToast').innerHTML = `
         <span style="color:#facc15;font-size:18px">💥 MEGA JACKPOT 777!</span><br>
-        Bạn nhận thưởng siêu khủng <b>+$${jackpot.toLocaleString()} Chips</b>!
+        Bạn nhận thưởng siêu khủng <b>+${jackpot.toLocaleString()} Xu</b>!
       `;
     } else if (r1 === r2 && r2 === r3) {
       const win = betAmount * 30;
-      addChips(win);
+      addCoins(win);
       playSfx('slot_win', 'casino');
       modal.querySelector('#slotResultToast').innerHTML = `
         <span style="color:#4ade80">🎉 TRÚNG 3 BIỂU TƯỢNG GIỐNG NHAU!</span><br>
-        Nhận thưởng <b>+$${win.toLocaleString()} Chips</b>!
+        Nhận thưởng <b>+${win.toLocaleString()} Xu</b>!
       `;
     } else if (r1 === r2 || r2 === r3 || r1 === r3) {
       const win = betAmount * 3;
-      addChips(win);
+      addCoins(win);
       playSfx('slot_win', 'casino');
       modal.querySelector('#slotResultToast').innerHTML = `
-        <span style="color:#38bdf8">✨ Trúng cặp đôi! Thưởng +$${win.toLocaleString()} Chips!</span>
+        <span style="color:#38bdf8">✨ Trúng cặp đôi! Thưởng +${win.toLocaleString()} Xu!</span>
       `;
     } else {
       modal.querySelector('#slotResultToast').textContent = 'Chúc bạn may mắn lần sau!';
@@ -1180,10 +1199,10 @@ export function openPlinko() {
       <div style="display:flex;justify-content:space-between;width:100%;max-width:460px;align-items:center;flex-wrap:wrap;gap:8px">
         <div class="casino-chips-row" style="background:transparent;padding:0">
           <span style="font-size:12px;font-weight:700;color:#fef08a">CƯỢC / BÓNG:</span>
-          <div class="casino-chip-btn chip-10" data-val="10">$10</div>
-          <div class="casino-chip-btn chip-25 selected" data-val="25">$25</div>
-          <div class="casino-chip-btn chip-50" data-val="50">$50</div>
-          <div class="casino-chip-btn chip-100" data-val="100">$100</div>
+          <div class="casino-chip-btn chip-10" data-val="10">10 Xu</div>
+          <div class="casino-chip-btn chip-25 selected" data-val="25">25 Xu</div>
+          <div class="casino-chip-btn chip-50" data-val="50">50 Xu</div>
+          <div class="casino-chip-btn chip-100" data-val="100">100 Xu</div>
         </div>
         <button id="btnDropPlinko" class="casino-action-btn">🟡 THẢ BÓNG (DROP)</button>
       </div>
@@ -1310,7 +1329,7 @@ export function openPlinko() {
         const wonBin = bins[binIdx];
         const payout = Math.floor(ball.bet * wonBin.mult);
 
-        addChips(payout);
+        addCoins(payout);
         if (wonBin.mult >= 25) {
           recordJackpotWin('plinko');
         } else {
@@ -1319,7 +1338,7 @@ export function openPlinko() {
 
         modal.querySelector('#plinkoResultToast').innerHTML = `
           🟡 Bóng rơi vào ô <b>[${wonBin.mult}x]</b>!
-          ${payout > 0 ? `Nhận <span style="color:#4ade80;font-weight:800">+$${payout.toLocaleString()} Chips</span>!` : ''}
+          ${payout > 0 ? `Nhận <span style="color:#4ade80;font-weight:800">+${payout.toLocaleString()} Xu</span>!` : ''}
         `;
 
         balls.splice(i, 1);
@@ -1331,8 +1350,8 @@ export function openPlinko() {
   requestAnimationFrame(drawPlinko);
 
   modal.querySelector('#btnDropPlinko').onclick = () => {
-    if (!spendChips(betAmount)) {
-      toastRef?.('⚠️ Bạn không đủ Chips để thả bóng!');
+    if (!spendCoins(betAmount)) {
+      toastRef?.('⚠️ Bạn không đủ Xu để thả bóng!');
       return;
     }
 
@@ -1367,6 +1386,10 @@ export const CASINO_SHOP_ITEMS = [
   { id: 'astronaut_helmet', name: 'Mũ Phi Hành Gia NASA', icon: '👨‍🚀', price: 2500, category: 'accessory', desc: 'Kính chắn gió mạ vàng chống bức xạ vũ trụ' },
   { id: 'halo', name: 'Vòng Hào Quang Thiên Thần', icon: '😇', price: 3000, category: 'accessory', desc: 'Vòng sáng thánh thiện lơ lửng trên đỉnh đầu' },
   { id: 'devil_wings', name: 'Đôi Cánh Ác Quỷ Obsidian', icon: '🦇', price: 3500, category: 'accessory', desc: 'Đôi cánh dơi hắc ám tỏa khói đen sau lưng' },
+  { id: 'viking_helmet', name: 'Mũ Chiến Binh Viking', icon: '🪓', price: 1800, category: 'accessory', desc: 'Mũ sắt hai sừng dũng mãnh của người Viking viễn chinh' },
+  { id: 'party_hat', name: 'Nón Sinh Nhật Party', icon: '🎉', price: 700, category: 'accessory', desc: 'Nón tiệc tùng sắc màu rực rỡ vui nhộn' },
+  { id: 'golden_laurel', name: 'Vòng Nguyệt Quế Hoàng Kim', icon: '🌿', price: 2200, category: 'accessory', desc: 'Vòng lá vàng vinh quang dành cho bậc đế vương' },
+  { id: 'cyber_visor', name: 'Kính Cyberpunk Dạ Quang', icon: '🥽', price: 1600, category: 'accessory', desc: 'Kính thực tế ảo neon tương lai rực rỡ' },
 
   // 2. Hào quang lấp lánh (Auras)
   { id: 'aura_gold', name: 'Hào Quang Hoàng Kim', icon: '✨', price: 2000, category: 'aura', auraKey: 'gold', desc: 'Bụi vàng hoàng kim bay lượn quanh thân mình' },
@@ -1374,6 +1397,10 @@ export const CASINO_SHOP_ITEMS = [
   { id: 'aura_frost', name: 'Hào Quang Băng Tuyết', icon: '❄️', price: 2500, category: 'aura', auraKey: 'frost', desc: 'Hạt sương băng giá xanh biếc xoay tròn mát lạnh' },
   { id: 'aura_hearts', name: 'Hào Quang Trái Tim', icon: '💖', price: 1800, category: 'aura', auraKey: 'hearts', desc: 'Những trái tim hồng tình yêu bay bổng nồng nàn' },
   { id: 'aura_lightning', name: 'Hào Quang Sấm Sét Tím', icon: '⚡', price: 3000, category: 'aura', auraKey: 'lightning', desc: 'Tia sét tím năng lượng plasma cuộn trào uy lực' },
+  { id: 'aura_cosmic', name: 'Hào Quang Tinh Vân Vũ Trụ', icon: '🌌', price: 3200, category: 'aura', auraKey: 'cosmic', desc: 'Sắc tím tinh vân và các vì sao xoay quanh thân mình' },
+  { id: 'aura_nature', name: 'Hào Quang Rừng Thiêng Ngọc Bích', icon: '🍀', price: 2400, category: 'aura', auraKey: 'nature', desc: 'Bụi ngọc lục bảo thiên nhiên thanh khiết mát lành' },
+  { id: 'aura_sakura', name: 'Hào Quang Hoa Anh Đào Rơi', icon: '🌸', price: 2600, category: 'aura', auraKey: 'sakura', desc: 'Cánh hoa anh đào hồng phấn nhẹ nhàng rơi lượn' },
+  { id: 'aura_void', name: 'Hào Quang Hắc Ám Hư Không', icon: '🌑', price: 3800, category: 'aura', auraKey: 'void', desc: 'Bóng tối hắc ám và luồng năng lượng đỏ thẫm uy lực' },
 
   // 3. Nametag phong cách VIP
   { id: 'tag_gold', name: 'Nametag Vàng Hoàng Kim', icon: '🥇', price: 1000, category: 'nametag', style: { color: '#facc15', border: '#eab308' }, desc: 'Khung viền vàng bóng loáng rực rỡ' },
@@ -1381,6 +1408,10 @@ export const CASINO_SHOP_ITEMS = [
   { id: 'tag_amethyst', name: 'Nametag Thạch Anh Tím', icon: '🔮', price: 1200, category: 'nametag', style: { color: '#c084fc', border: '#a855f7' }, desc: 'Sắc tím hoàng gia huyền bí sang trọng' },
   { id: 'tag_ice', name: 'Nametag Băng Giá Cực Quang', icon: '🧊', price: 1200, category: 'nametag', style: { color: '#38bdf8', border: '#0284c7' }, desc: 'Viền xanh băng tuyết giá lạnh Bắc Cực' },
   { id: 'tag_rainbow', name: 'Nametag Cầu Vồng Siêu Cấp', icon: '🌈', price: 5000, category: 'nametag', style: { rainbow: true, border: '#f43f5e' }, desc: 'Chữ đổi 7 sắc cầu vồng rực rỡ độc nhất vô nhị' },
+  { id: 'tag_neon_pink', name: 'Nametag Hồng Neon Cyber', icon: '🎀', price: 1500, category: 'nametag', style: { color: '#f472b6', border: '#ec4899' }, desc: 'Viền hồng dạ quang rực sáng giữa đêm' },
+  { id: 'tag_cyber_cyan', name: 'Nametag Xanh Cyan Điện Tử', icon: '🌐', price: 1500, category: 'nametag', style: { color: '#22d3ee', border: '#06b6d4' }, desc: 'Sắc xanh tương lai công nghệ cao' },
+  { id: 'tag_crimson_fire', name: 'Nametag Hỏa Long Đỏ Rực', icon: '🔥', price: 1800, category: 'nametag', style: { color: '#fb7185', border: '#e11d48' }, desc: 'Ngọn lửa rực cháy quanh tên gọi' },
+  { id: 'tag_phantom_purple', name: 'Nametag Huyễn Ảnh Ma Thuật', icon: '🔮', price: 2000, category: 'nametag', style: { color: '#e879f9', border: '#c026d3' }, desc: 'Sắc tím ma pháp huyền bí sang trọng' },
 ];
 
 export function getInventory() {
@@ -1416,13 +1447,13 @@ export function buyShopItem(itemId) {
     return { ok: false, msg: 'Bạn đã sở hữu vật phẩm này rồi!' };
   }
 
-  if (!spendChips(item.price)) {
-    return { ok: false, msg: `Bạn không đủ xu! Cần ${item.price.toLocaleString()} Chips.` };
+  if (!spendCoins(item.price)) {
+    return { ok: false, msg: `Bạn không đủ Xu! Cần ${item.price.toLocaleString()} Xu.` };
   }
 
   inv.push(itemId);
   saveInventory(inv);
-  playSfx('jackpot_voice', 'casino');
+  playSfx('plinko_win', 'casino');
   return { ok: true, msg: `🎉 Bạn đã mua thành công [${item.name}]!` };
 }
 

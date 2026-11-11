@@ -1712,6 +1712,41 @@ export function buildAccessoryMesh(type) {
       });
       break;
     }
+    case 'viking_helmet': {
+      const ironMat = mat('#64748b', { metalness: 0.8, roughness: 0.3 });
+      const hornMat = mat('#fef08a', { roughness: 0.4 });
+      part(g, G.sph(), ironMat, [0, 0.1, 0], [0.42, 0.28, 0.42]);
+      part(g, G.torus(), goldMat, [0, 0.04, 0], [0.42, 0.42, 0.42], [Math.PI / 2, 0, 0]);
+      [-1, 1].forEach(side => {
+        part(g, G.cone(), hornMat, [side * 0.28, 0.22, 0], [0.08, 0.36, 0.08], [0, 0, -side * 0.6]);
+      });
+      break;
+    }
+    case 'party_hat': {
+      const coneMat = mat('#ec4899', { roughness: 0.3 });
+      const pomMat = mat('#38bdf8', { roughness: 0.4 });
+      part(g, G.cone(), coneMat, [0, 0.26, 0], [0.24, 0.52, 0.24]);
+      part(g, G.sph(), pomMat, [0, 0.54, 0], [0.07, 0.07, 0.07]);
+      part(g, G.torus(), goldMat, [0, 0.02, 0], [0.24, 0.24, 0.24], [Math.PI / 2, 0, 0]);
+      break;
+    }
+    case 'golden_laurel': {
+      const leafMat = mat('#fbbf24', { metalness: 0.9, roughness: 0.1 });
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 1.6 - Math.PI * 0.8;
+        const lx = Math.sin(a) * 0.36;
+        const lz = Math.cos(a) * 0.36;
+        part(g, G.box(), leafMat, [lx, 0.08, lz], [0.08, 0.04, 0.02], [0, a, 0.2]);
+      }
+      break;
+    }
+    case 'cyber_visor': {
+      const neonCyan = mat('#06b6d4', { emissive: '#22d3ee', emissiveIntensity: 1.4 });
+      const frameDark = mat('#09090b', { roughness: 0.2, metalness: 0.9 });
+      part(g, G.box(), frameDark, [0, 0.02, 0.2], [0.38, 0.08, 0.06]);
+      part(g, G.box(), neonCyan, [0, 0.02, 0.23], [0.34, 0.05, 0.02]);
+      break;
+    }
   }
 
   return g;
@@ -1722,15 +1757,21 @@ export function buildAccessoryMesh(type) {
 // ============================================================================
 export function buildAuraMesh(auraType) {
   const g = new THREE.Group();
+  const rawKey = String(auraType || 'gold').toLowerCase().trim();
+  const key = rawKey.replace(/^aura_/, '');
   const auraConfigs = {
     gold: { col: 0xfacc15, count: 18, radius: 0.85 },
     fire: { col: 0xef4444, count: 20, radius: 0.8 },
     frost: { col: 0x38bdf8, count: 18, radius: 0.85 },
     hearts: { col: 0xf43f5e, count: 16, radius: 0.75 },
     lightning: { col: 0xa855f7, count: 22, radius: 0.9 },
+    cosmic: { col: 0x8b5cf6, count: 24, radius: 0.95 },
+    nature: { col: 0x10b981, count: 20, radius: 0.85 },
+    sakura: { col: 0xf472b6, count: 20, radius: 0.85 },
+    void: { col: 0x991b1b, count: 26, radius: 1.0 },
     admin: { col: 0xffd700, count: 28, radius: 1.1 },
   };
-  const cfg = auraConfigs[auraType] || auraConfigs.gold;
+  const cfg = auraConfigs[key] || auraConfigs[rawKey] || auraConfigs.gold;
 
   const particles = [];
   const pMat = new THREE.MeshBasicMaterial({ color: cfg.col });
