@@ -1,0 +1,1210 @@
+// ============================================================================
+// CASINO & ARCADE INTERACTIVE STUDIO FOR GATHER_HOLIDAYS
+// - Roulette: Interactive betting grid, canvas wheel with physics ball orbit
+// - Duck Derby: Bettable live 4-lane duck canal race with dynamic overtaking
+// - Blackjack: Full Las Vegas VIP table with Hit, Stand, Double Down, Dealer AI
+// - Slot Machine: Authentic pull lever, blur reels spinning, 777 Mega Jackpot
+// - Plinko: Physics peg collisions, audio pings, 11 reward bins (up to 100x)
+// ============================================================================
+
+import { playSfx } from './audio.js';
+
+let worldRef = null;
+let toastRef = null;
+
+// ---------- Chip Wallet Management ----------
+let chips = parseInt(localStorage.getItem('gh_casino_chips') || '2000', 10);
+if (isNaN(chips) || chips < 100) chips = 2000;
+
+export function getChips() {
+  return chips;
+}
+
+export function addChips(amount) {
+  chips += amount;
+  localStorage.setItem('gh_casino_chips', String(chips));
+  updateAllWalletBadges();
+}
+
+export function spendChips(amount) {
+  if (chips < amount) return false;
+  chips -= amount;
+  localStorage.setItem('gh_casino_chips', String(chips));
+  updateAllWalletBadges();
+  return true;
+}
+
+export function claimFreeChips() {
+  addChips(1000);
+  playSfx('slot_win', 'casino');
+  toastRef?.('🎁 Bạn đã nhận thêm $1,000 Chips Casino miễn phí!');
+}
+
+function updateAllWalletBadges() {
+  document.querySelectorAll('.casino-chip-count').forEach(el => {
+    el.textContent = `$${chips.toLocaleString()}`;
+  });
+}
+
+export function initCasino(world, toast) {
+  worldRef = world;
+  toastRef = toast;
+}
+
+// Helper to create and show a casino modal frame
+function createCasinoModal(title, contentHtml) {
+  // Remove any existing casino overlay
+  document.querySelectorAll('.casino-modal-overlay').forEach(el => el.remove());
+
+  const overlay = document.createElement('div');
+  overlay.className = 'casino-modal-overlay';
+
+  overlay.innerHTML = `
+    <div class="casino-frame">
+      <div class="casino-header">
+        <div class="casino-title-wrap">
+          <span style="font-size:24px">🎰</span>
+          <span class="casino-title">${title}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="casino-wallet-badge">
+            <span>🪙 VÍ CHIPS:</span>
+            <b class="casino-chip-count">$${chips.toLocaleString()}</b>
+            <button id="btnClaimFreeChips" title="Nhận $1,000 chip miễn phí">+1000</button>
+          </div>
+          <button class="casino-close-btn" id="btnCloseCasinoModal" title="Đóng [ESC]">✕</button>
+        </div>
+      </div>
+      <div class="casino-body">
+        ${contentHtml}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#btnCloseCasinoModal').onclick = () => overlay.remove();
+  overlay.querySelector('#btnClaimFreeChips').onclick = claimFreeChips;
+
+  const escHandler = e => {
+    if (e.key === 'Escape') {
+      overlay.remove();
+      window.removeEventListener('keydown', escHandler);
+    }
+  };
+  window.addEventListener('keydown', escHandler);
+
+  return overlay;
+}
+
+// ============================================================================
+// 1. ROULETTE (VÒNG QUAY MÁ HỒNG)
+// ============================================================================
+export function openRoulette() {
+  const content = `
+    <div class="roulette-arena">
+      <div class="roulette-wheel-box">
+        <canvas id="rouletteCanvas" width="300" height="300"></canvas>
+        <div id="rouletteResult" class="casino-result-toast" style="min-width:260px">
+          🎡 Hãy chọn chip, đặt cược trên bàn nỉ rồi bấm QUAY!
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+        <!-- Betting Grid -->
+        <div class="roulette-bet-grid" id="rouletteGrid"></div>
+        <!-- Chip Value Selector -->
+        <div class="casino-chips-row" style="background:transparent;padding:0">
+          <span style="font-size:12px;font-weight:700;color:#fef08a">MỆNH GIÁ CƯỢC:</span>
+          <div class="casino-chip-btn chip-10 selected" data-val="10">$10</div>
+          <div class="casino-chip-btn chip-25" data-val="25">$25</div>
+          <div class="casino-chip-btn chip-50" data-val="50">$50</div>
+          <div class="casino-chip-btn chip-100" data-val="100">$100</div>
+          <div class="casino-chip-btn chip-500" data-val="500">$500</div>
+        </div>
+        <!-- Actions -->
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <button id="btnSpinRoulette" class="casino-action-btn">🎡 QUAY BÁNH XE (SPIN)</button>
+          <button id="btnClearRouletteBets" class="casino-action-btn secondary">✕ Xóa Cược</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const modal = createCasinoModal('VÒNG QUAY ROULETTE CHÂU ÂU (37 SỐ)', content);
+  const canvas = modal.querySelector('#rouletteCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let selectedChipVal = 10;
+  modal.querySelectorAll('.casino-chip-btn').forEach(btn => {
+    btn.onclick = () => {
+      modal.querySelectorAll('.casino-chip-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedChipVal = parseInt(btn.dataset.val, 10);
+      playSfx('blackjack_deal', 'casino');
+    };
+  });
+
+  // Build Betting Grid
+  const gridContainer = modal.querySelector('#rouletteGrid');
+  const bets = new Map(); // key -> totalBetAmount
+  const redNumbers = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+
+  function renderGrid() {
+    gridContainer.innerHTML = '';
+
+    // Row 0: Green 0
+    const row0 = document.createElement('div');
+    row0.className = 'roulette-grid-row';
+    const cell0 = document.createElement('div');
+    cell0.className = 'roulette-cell cell-green';
+    cell0.dataset.bet = '0';
+    cell0.innerHTML = `0 ${bets.has('0') ? `<span class="chip-badge">$${bets.get('0')}</span>` : ''}`;
+    row0.appendChild(cell0);
+    gridContainer.appendChild(row0);
+
+    // Rows 1-36 in 12 columns of 3
+    for (let r = 0; r < 3; r++) {
+      const row = document.createElement('div');
+      row.className = 'roulette-grid-row';
+      for (let c = 0; c < 12; c++) {
+        const num = c * 3 + (3 - r);
+        const isRed = redNumbers.has(num);
+        const cell = document.createElement('div');
+        cell.className = `roulette-cell ${isRed ? 'cell-red' : 'cell-black'}`;
+        cell.dataset.bet = String(num);
+        cell.innerHTML = `${num} ${bets.has(String(num)) ? `<span class="chip-badge">$${bets.get(String(num))}</span>` : ''}`;
+        row.appendChild(cell);
+      }
+      gridContainer.appendChild(row);
+    }
+
+    // Outside Bets Row
+    const sideRow = document.createElement('div');
+    sideRow.className = 'roulette-grid-row';
+    const sideBets = [
+      { id: '1-12', label: '1st 12' },
+      { id: '13-24', label: '2nd 12' },
+      { id: '25-36', label: '3rd 12' },
+      { id: 'RED', label: 'RED' },
+      { id: 'BLACK', label: 'BLACK' },
+      { id: 'EVEN', label: 'EVEN' },
+      { id: 'ODD', label: 'ODD' },
+    ];
+    sideBets.forEach(sb => {
+      const cell = document.createElement('div');
+      cell.className = 'roulette-cell cell-special';
+      cell.dataset.bet = sb.id;
+      cell.innerHTML = `${sb.label} ${bets.has(sb.id) ? `<span class="chip-badge">$${bets.get(sb.id)}</span>` : ''}`;
+      sideRow.appendChild(cell);
+    });
+    gridContainer.appendChild(sideRow);
+
+    // Attach click listeners to cells
+    gridContainer.querySelectorAll('.roulette-cell').forEach(cell => {
+      cell.onclick = () => {
+        const betKey = cell.dataset.bet;
+        if (!spendChips(selectedChipVal)) {
+          toastRef?.('⚠️ Bạn không đủ Chips để đặt cược!');
+          return;
+        }
+        bets.set(betKey, (bets.get(betKey) || 0) + selectedChipVal);
+        playSfx('slot_lever', 'casino');
+        renderGrid();
+      };
+    });
+  }
+  renderGrid();
+
+  modal.querySelector('#btnClearRouletteBets').onclick = () => {
+    let refund = 0;
+    bets.forEach(v => (refund += v));
+    bets.clear();
+    addChips(refund);
+    renderGrid();
+    toastRef?.('Đã xóa toàn bộ cược trên bàn.');
+  };
+
+  // Wheel Rendering & Animation
+  // European wheel sequence: 0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26
+  const wheelNumbers = [
+    0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10,
+    5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26
+  ];
+  let wheelAngle = 0;
+  let ballAngle = 0;
+  let ballRadius = 115;
+  let isSpinning = false;
+
+  function drawWheel() {
+    const cx = 150, cy = 150, r = 135;
+    ctx.clearRect(0, 0, 300, 300);
+
+    // Outer Mahogany Rim
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 10, 0, Math.PI * 2);
+    ctx.fillStyle = '#5c2207';
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#d97706';
+    ctx.stroke();
+
+    // Wheel Pockets
+    const slice = (Math.PI * 2) / wheelNumbers.length;
+    for (let i = 0; i < wheelNumbers.length; i++) {
+      const angle = wheelAngle + i * slice;
+      const num = wheelNumbers[i];
+      const isGreen = num === 0;
+      const isRed = redNumbers.has(num);
+
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, angle, angle + slice);
+      ctx.closePath();
+      ctx.fillStyle = isGreen ? '#16a34a' : isRed ? '#dc2626' : '#18181b';
+      ctx.fill();
+      ctx.strokeStyle = '#fef08a';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      // Number label
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle + slice / 2);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.fillText(String(num), r - 12, 3);
+      ctx.restore();
+    }
+
+    // Inner Brass Centerpiece
+    ctx.beginPath();
+    ctx.arc(cx, cy, 55, 0, Math.PI * 2);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#78350f';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+    ctx.fillStyle = '#d97706';
+    ctx.fill();
+
+    // Ivory Ball
+    const bx = cx + Math.cos(ballAngle) * ballRadius;
+    const by = cy + Math.sin(ballAngle) * ballRadius;
+    ctx.beginPath();
+    ctx.arc(bx, by, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#94a3b8';
+    ctx.stroke();
+  }
+  drawWheel();
+
+  // Spin Logic
+  modal.querySelector('#btnSpinRoulette').onclick = () => {
+    if (isSpinning) return;
+    if (bets.size === 0) {
+      toastRef?.('⚠️ Vui lòng đặt cược ít nhất vào 1 ô trên bàn!');
+      return;
+    }
+
+    isSpinning = true;
+    modal.querySelector('#btnSpinRoulette').disabled = true;
+    modal.querySelector('#btnClearRouletteBets').disabled = true;
+    modal.querySelector('#rouletteResult').innerHTML = '🎡 Bánh xe và bóng đang quay tít...';
+
+    playSfx('roulette_spin', 'casino');
+
+    // Trigger 3D world table spin
+    const rt = worldRef?.casinoObjs?.find(o => o.userData?.type === 'roulette');
+    rt?.userData?.spin();
+
+    // Random Winning Number (0-36)
+    const winningNum = Math.floor(Math.random() * 37);
+    const winIdx = wheelNumbers.indexOf(winningNum);
+    const slice = (Math.PI * 2) / wheelNumbers.length;
+
+    let wheelSpeed = 0.28 + Math.random() * 0.08;
+    let ballSpeed = -0.38 - Math.random() * 0.08;
+    ballRadius = 120;
+
+    const startTime = performance.now();
+    const duration = 5200; // 5.2s spin
+
+    function animate(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+
+      if (progress < 1) {
+        wheelAngle += wheelSpeed;
+        ballAngle += ballSpeed;
+        wheelSpeed *= 0.988;
+        ballSpeed *= 0.985;
+        if (progress > 0.65) {
+          ballRadius = 120 - ((progress - 0.65) / 0.35) * 45; // spiral inwards to pocket
+        }
+        drawWheel();
+        requestAnimationFrame(animate);
+      } else {
+        // Snap to exact winning pocket
+        ballAngle = wheelAngle + winIdx * slice + slice / 2;
+        ballRadius = 75;
+        drawWheel();
+        finishSpin(winningNum);
+      }
+    }
+    requestAnimationFrame(animate);
+  };
+
+  function finishSpin(winningNum) {
+    isSpinning = false;
+    modal.querySelector('#btnSpinRoulette').disabled = false;
+    modal.querySelector('#btnClearRouletteBets').disabled = false;
+
+    const isRed = redNumbers.has(winningNum);
+    const colName = winningNum === 0 ? '🟢 Số 0 XANH' : isRed ? `🔴 Số ${winningNum} ĐỎ` : `⚫ Số ${winningNum} ĐEN`;
+    const isEven = winningNum !== 0 && winningNum % 2 === 0;
+
+    // Calculate Payouts
+    let totalWin = 0;
+    bets.forEach((betAmt, betKey) => {
+      if (betKey === String(winningNum)) {
+        totalWin += betAmt * 36; // Straight up 35:1 (returns 36x)
+      } else if (betKey === 'RED' && isRed) {
+        totalWin += betAmt * 2;
+      } else if (betKey === 'BLACK' && !isRed && winningNum !== 0) {
+        totalWin += betAmt * 2;
+      } else if (betKey === 'EVEN' && isEven) {
+        totalWin += betAmt * 2;
+      } else if (betKey === 'ODD' && winningNum !== 0 && !isEven) {
+        totalWin += betAmt * 2;
+      } else if (betKey === '1-12' && winningNum >= 1 && winningNum <= 12) {
+        totalWin += betAmt * 3;
+      } else if (betKey === '13-24' && winningNum >= 13 && winningNum <= 24) {
+        totalWin += betAmt * 3;
+      } else if (betKey === '25-36' && winningNum >= 25 && winningNum <= 36) {
+        totalWin += betAmt * 3;
+      }
+    });
+
+    if (totalWin > 0) {
+      addChips(totalWin);
+      playSfx('slot_win', 'casino');
+      modal.querySelector('#rouletteResult').innerHTML = `
+        <span style="color:#4ade80;font-size:16px">🎉 THẮNG LỚN +$${totalWin.toLocaleString()}!</span><br>
+        Bóng rơi vào <b>${colName}</b>!
+      `;
+    } else {
+      modal.querySelector('#rouletteResult').innerHTML = `
+        Bóng rơi vào <b>${colName}</b>. Chúc bạn may mắn lần sau!
+      `;
+    }
+    bets.clear();
+    renderGrid();
+  }
+}
+
+// ============================================================================
+// 2. DUCK DERBY (ĐUA VỊT CAO SU TRỰC TIẾP)
+// ============================================================================
+export function openDuckDerby() {
+  const content = `
+    <div class="duck-derby-arena">
+      <canvas id="duckRaceCanvas" width="760" height="220"></canvas>
+      <div id="duckRaceToast" class="casino-result-toast" style="width:100%">
+        🦆 Chọn chú vịt cưng và mức cược của bạn, sau đó nhấn BẮT ĐẦU ĐUA!
+      </div>
+      <!-- Duck Selection Cards -->
+      <div class="duck-cards-row">
+        <div class="duck-card selected" data-duck="0">
+          <span class="duck-card-icon">⚡🐥</span>
+          <span class="duck-card-name" style="color:#facc15">#1 Vịt Vàng Tia Chớp</span>
+          <span class="duck-card-odds">Tỉ lệ cược: 2.5x</span>
+        </div>
+        <div class="duck-card" data-duck="1">
+          <span class="duck-card-icon">🎀🦆</span>
+          <span class="duck-card-name" style="color:#ec4899">#2 Vịt Hồng Kiêu Kỳ</span>
+          <span class="duck-card-odds">Tỉ lệ cược: 3.0x</span>
+        </div>
+        <div class="duck-card" data-duck="2">
+          <span class="duck-card-icon">🌪️🦆</span>
+          <span class="duck-card-name" style="color:#10b981">#3 Vịt Xanh Bão Tố</span>
+          <span class="duck-card-odds">Tỉ lệ cược: 4.0x</span>
+        </div>
+        <div class="duck-card" data-duck="3">
+          <span class="duck-card-icon">🚀🦆</span>
+          <span class="duck-card-name" style="color:#8b5cf6">#4 Vịt Tím Thần Tốc</span>
+          <span class="duck-card-odds">Tỉ lệ cược: 5.0x</span>
+        </div>
+      </div>
+      <!-- Chips & Actions -->
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center;flex-wrap:wrap;gap:10px">
+        <div class="casino-chips-row" style="background:transparent;padding:0">
+          <span style="font-size:12px;font-weight:700;color:#fef08a">MỨC CƯỢC:</span>
+          <div class="casino-chip-btn chip-25" data-val="25">$25</div>
+          <div class="casino-chip-btn chip-50 selected" data-val="50">$50</div>
+          <div class="casino-chip-btn chip-100" data-val="100">$100</div>
+          <div class="casino-chip-btn chip-500" data-val="500">$500</div>
+        </div>
+        <button id="btnStartDuckRace" class="casino-action-btn">🏁 BẮT ĐẦU ĐUA (START RACE)</button>
+      </div>
+    </div>
+  `;
+
+  const modal = createCasinoModal('TRƯỜNG ĐUA VỊT CAO SU DUCK DERBY', content);
+  const canvas = modal.querySelector('#duckRaceCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let chosenDuckIdx = 0;
+  let betAmount = 50;
+  let isRacing = false;
+
+  modal.querySelectorAll('.duck-card').forEach(card => {
+    card.onclick = () => {
+      if (isRacing) return;
+      modal.querySelectorAll('.duck-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      chosenDuckIdx = parseInt(card.dataset.duck, 10);
+      playSfx('duck_quack', 'casino');
+    };
+  });
+
+  modal.querySelectorAll('.casino-chip-btn').forEach(btn => {
+    btn.onclick = () => {
+      if (isRacing) return;
+      modal.querySelectorAll('.casino-chip-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      betAmount = parseInt(btn.dataset.val, 10);
+      playSfx('blackjack_deal', 'casino');
+    };
+  });
+
+  const ducks = [
+    { name: 'Vịt Vàng Tia Chớp', color: '#facc15', odds: 2.5, x: 50, speed: 0 },
+    { name: 'Vịt Hồng Kiêu Kỳ', color: '#ec4899', odds: 3.0, x: 50, speed: 0 },
+    { name: 'Vịt Xanh Bão Tố', color: '#10b981', odds: 4.0, x: 50, speed: 0 },
+    { name: 'Vịt Tím Thần Tốc', color: '#8b5cf6', odds: 5.0, x: 50, speed: 0 },
+  ];
+
+  function drawTrack() {
+    ctx.clearRect(0, 0, 760, 220);
+
+    // Water canal background
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(0, 0, 760, 220);
+
+    // Water wave lines
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.5;
+    for (let l = 1; l < 4; l++) {
+      const y = l * 55;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(760, y);
+      ctx.stroke();
+    }
+
+    // Finish Line Checkered Banner at x = 700
+    const finishX = 700;
+    for (let y = 0; y < 220; y += 11) {
+      for (let x = finishX; x < finishX + 22; x += 11) {
+        ctx.fillStyle = ((x + y) / 11) % 2 === 0 ? '#ffffff' : '#000000';
+        ctx.fillRect(x, y, 11, 11);
+      }
+    }
+
+    // Draw Ducks
+    ducks.forEach((d, i) => {
+      const y = i * 55 + 28;
+      // Water ripples behind duck
+      ctx.beginPath();
+      ctx.arc(d.x - 14, y + 4, 10, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fill();
+
+      // Duck Body
+      ctx.beginPath();
+      ctx.ellipse(d.x, y, 16, 12, 0, 0, Math.PI * 2);
+      ctx.fillStyle = d.color;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#0f172a';
+      ctx.stroke();
+
+      // Duck Head
+      ctx.beginPath();
+      ctx.arc(d.x + 10, y - 8, 8, 0, Math.PI * 2);
+      ctx.fillStyle = d.color;
+      ctx.fill();
+      ctx.stroke();
+
+      // Beak
+      ctx.beginPath();
+      ctx.moveTo(d.x + 16, y - 8);
+      ctx.lineTo(d.x + 23, y - 6);
+      ctx.lineTo(d.x + 16, y - 4);
+      ctx.fillStyle = '#ea580c';
+      ctx.fill();
+
+      // Eye
+      ctx.beginPath();
+      ctx.arc(d.x + 13, y - 10, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = '#000000';
+      ctx.fill();
+
+      // Bib Number
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.fillText(`#${i + 1}`, d.x - 4, y + 3);
+    });
+  }
+  drawTrack();
+
+  modal.querySelector('#btnStartDuckRace').onclick = () => {
+    if (isRacing) return;
+    if (!spendChips(betAmount)) {
+      toastRef?.('⚠️ Bạn không đủ Chips để đặt cược!');
+      return;
+    }
+
+    isRacing = true;
+    modal.querySelector('#btnStartDuckRace').disabled = true;
+    modal.querySelector('#duckRaceToast').innerHTML = '🏁 CÁC CHÚ VỊT ĐANG BƠI RƯỢT ĐUỔI KỊCH TÍNH...';
+
+    playSfx('duck_quack', 'casino');
+
+    // Trigger 3D world duck track
+    const dd = worldRef?.casinoObjs?.find(o => o.userData?.type === 'duck_derby');
+    dd?.userData?.startRace();
+
+    ducks.forEach(d => {
+      d.x = 40;
+      d.speed = 2.2 + Math.random() * 2.5;
+    });
+
+    let winnerIdx = -1;
+    function raceLoop() {
+      let reached = false;
+      ducks.forEach((d, i) => {
+        // Dynamic speed variations (surge & slow down)
+        d.speed += (Math.random() - 0.5) * 0.45;
+        d.speed = Math.max(1.5, Math.min(6.2, d.speed));
+        d.x += d.speed;
+
+        if (d.x >= 700 && winnerIdx === -1) {
+          winnerIdx = i;
+          reached = true;
+        }
+      });
+
+      drawTrack();
+
+      if (!reached) {
+        requestAnimationFrame(raceLoop);
+      } else {
+        finishRace(winnerIdx);
+      }
+    }
+    requestAnimationFrame(raceLoop);
+  };
+
+  function finishRace(winIdx) {
+    isRacing = false;
+    modal.querySelector('#btnStartDuckRace').disabled = false;
+
+    const winner = ducks[winIdx];
+    if (winIdx === chosenDuckIdx) {
+      const payout = Math.floor(betAmount * winner.odds);
+      addChips(payout);
+      playSfx('slot_win', 'casino');
+      modal.querySelector('#duckRaceToast').innerHTML = `
+        <span style="color:#4ade80;font-size:16px">🏆 VÔ ĐỊCH: #${winIdx + 1} ${winner.name}!</span>
+        Chúc mừng bạn đã đoán trúng và nhận <b>+$${payout.toLocaleString()} Chips</b>!
+      `;
+    } else {
+      modal.querySelector('#duckRaceToast').innerHTML = `
+        🏆 Vô địch là: <b>#${winIdx + 1} ${winner.name}</b>. Chúc bạn may mắn ở vòng đua sau!
+      `;
+    }
+  }
+}
+
+// ============================================================================
+// 3. BLACKJACK (XÌ DÁCH CASINO LAS VEGAS VIP)
+// ============================================================================
+export function openBlackjack() {
+  const content = `
+    <div class="blackjack-arena">
+      <!-- Dealer Area -->
+      <div class="bj-hand-box">
+        <div class="bj-hand-header">
+          <span>🤵 NHÀ CÁI (DEALER)</span>
+          <span id="dealerScore">Điểm: ?</span>
+        </div>
+        <div class="bj-cards-row" id="dealerCards"></div>
+      </div>
+      <!-- Center Result Toast -->
+      <div id="bjResultToast" class="casino-result-toast">
+        🃏 Hãy chọn mức cược và nhấn CHIA BÀI (DEAL) để bắt đầu ván bài 21 điểm!
+      </div>
+      <!-- Player Area -->
+      <div class="bj-hand-box">
+        <div class="bj-hand-header">
+          <span>🧑 BẠN (PLAYER)</span>
+          <span id="playerScore">Điểm: 0</span>
+        </div>
+        <div class="bj-cards-row" id="playerCards"></div>
+      </div>
+      <!-- Controls -->
+      <div class="bj-controls-row">
+        <div class="casino-chips-row" style="background:transparent;padding:0">
+          <span style="font-size:12px;font-weight:700;color:#fef08a">CƯỢC:</span>
+          <div class="casino-chip-btn chip-25" data-val="25">$25</div>
+          <div class="casino-chip-btn chip-50 selected" data-val="50">$50</div>
+          <div class="casino-chip-btn chip-100" data-val="100">$100</div>
+          <div class="casino-chip-btn chip-500" data-val="500">$500</div>
+        </div>
+        <button id="btnDealBj" class="casino-action-btn">🎴 CHIA BÀI (DEAL)</button>
+        <button id="btnHitBj" class="casino-action-btn" style="background:#22c55e;color:#fff" disabled>➕ RÚT (HIT)</button>
+        <button id="btnStandBj" class="casino-action-btn" style="background:#ef4444;color:#fff" disabled>✋ DẰNG (STAND)</button>
+        <button id="btnDoubleBj" class="casino-action-btn" style="background:#3b82f6;color:#fff" disabled>⚡ GẤP ĐÔI (DOUBLE)</button>
+      </div>
+    </div>
+  `;
+
+  const modal = createCasinoModal('BÀN XÌ DÁCH CASINO VIP (BLACKJACK)', content);
+
+  let betAmount = 50;
+  let deck = [];
+  let playerCards = [];
+  let dealerCards = [];
+  let isGameOver = true;
+
+  modal.querySelectorAll('.casino-chip-btn').forEach(btn => {
+    btn.onclick = () => {
+      if (!isGameOver) return;
+      modal.querySelectorAll('.casino-chip-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      betAmount = parseInt(btn.dataset.val, 10);
+      playSfx('blackjack_deal', 'casino');
+    };
+  });
+
+  function createDeck() {
+    const suits = ['♠', '♥', '♦', '♣'];
+    const values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+    const d = [];
+    for (const suit of suits) {
+      for (const val of values) {
+        d.push({
+          val,
+          suit,
+          isRed: suit === '♥' || suit === '♦',
+          num: ['J', 'Q', 'K'].includes(val) ? 10 : val === 'A' ? 11 : parseInt(val, 10),
+        });
+      }
+    }
+    // Fisher-Yates shuffle
+    for (let i = d.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [d[i], d[j]] = [d[j], d[i]];
+    }
+    return d;
+  }
+
+  function calcHandScore(cards) {
+    let score = cards.reduce((sum, c) => sum + c.num, 0);
+    let aces = cards.filter(c => c.val === 'A').length;
+    while (score > 21 && aces > 0) {
+      score -= 10;
+      aces--;
+    }
+    return score;
+  }
+
+  function renderCard(c, hidden = false) {
+    if (hidden) {
+      return `<div class="playing-card card-back">♠</div>`;
+    }
+    return `
+      <div class="playing-card ${c.isRed ? 'card-red' : 'card-black'}">
+        <div style="font-size:14px">${c.val}${c.suit}</div>
+        <div style="font-size:24px;text-align:center">${c.suit}</div>
+        <div style="font-size:14px;text-align:right">${c.val}${c.suit}</div>
+      </div>
+    `;
+  }
+
+  function updateTableUI(hideDealerCard = true) {
+    const pContainer = modal.querySelector('#playerCards');
+    const dContainer = modal.querySelector('#dealerCards');
+
+    pContainer.innerHTML = playerCards.map(c => renderCard(c)).join('');
+    dContainer.innerHTML = dealerCards
+      .map((c, i) => renderCard(c, i === 1 && hideDealerCard))
+      .join('');
+
+    const pScore = calcHandScore(playerCards);
+    modal.querySelector('#playerScore').textContent = `Điểm: ${pScore}`;
+
+    if (hideDealerCard && dealerCards.length > 0) {
+      modal.querySelector('#dealerScore').textContent = `Điểm: ${dealerCards[0].num}`;
+    } else {
+      const dScore = calcHandScore(dealerCards);
+      modal.querySelector('#dealerScore').textContent = `Điểm: ${dScore}`;
+    }
+  }
+
+  // DEAL
+  modal.querySelector('#btnDealBj').onclick = () => {
+    if (!spendChips(betAmount)) {
+      toastRef?.('⚠️ Bạn không đủ Chips để đặt cược!');
+      return;
+    }
+
+    deck = createDeck();
+    playerCards = [deck.pop(), deck.pop()];
+    dealerCards = [deck.pop(), deck.pop()];
+    isGameOver = false;
+
+    playSfx('blackjack_deal', 'casino');
+
+    modal.querySelector('#btnDealBj').disabled = true;
+    modal.querySelector('#btnHitBj').disabled = false;
+    modal.querySelector('#btnStandBj').disabled = false;
+    modal.querySelector('#btnDoubleBj').disabled = chips < betAmount;
+    modal.querySelector('#bjResultToast').textContent = '🃏 Lượt của bạn! Bạn muốn RÚT THÊM hay DẰNG BÀI?';
+
+    updateTableUI(true);
+
+    // Natural Blackjack 21 check
+    if (calcHandScore(playerCards) === 21) {
+      finishGame();
+    }
+  };
+
+  // HIT
+  modal.querySelector('#btnHitBj').onclick = () => {
+    playerCards.push(deck.pop());
+    playSfx('blackjack_deal', 'casino');
+    modal.querySelector('#btnDoubleBj').disabled = true;
+    updateTableUI(true);
+
+    if (calcHandScore(playerCards) > 21) {
+      // Bust
+      finishGame();
+    }
+  };
+
+  // DOUBLE DOWN
+  modal.querySelector('#btnDoubleBj').onclick = () => {
+    spendChips(betAmount);
+    betAmount *= 2;
+    playerCards.push(deck.pop());
+    playSfx('blackjack_deal', 'casino');
+    updateTableUI(true);
+    finishGame();
+  };
+
+  // STAND
+  modal.querySelector('#btnStandBj').onclick = () => {
+    finishGame();
+  };
+
+  function finishGame() {
+    isGameOver = true;
+    modal.querySelector('#btnHitBj').disabled = true;
+    modal.querySelector('#btnStandBj').disabled = true;
+    modal.querySelector('#btnDoubleBj').disabled = true;
+
+    // Reveal Dealer's card
+    updateTableUI(false);
+
+    // Dealer AI: Draw until >= 17
+    function dealerTurn() {
+      let dScore = calcHandScore(dealerCards);
+      const pScore = calcHandScore(playerCards);
+
+      if (pScore <= 21 && dScore < 17) {
+        dealerCards.push(deck.pop());
+        playSfx('blackjack_deal', 'casino');
+        updateTableUI(false);
+        setTimeout(dealerTurn, 500);
+      } else {
+        evaluateWinner();
+      }
+    }
+    setTimeout(dealerTurn, 400);
+  }
+
+  function evaluateWinner() {
+    modal.querySelector('#btnDealBj').disabled = false;
+    const pScore = calcHandScore(playerCards);
+    const dScore = calcHandScore(dealerCards);
+    const resultToast = modal.querySelector('#bjResultToast');
+
+    if (pScore > 21) {
+      resultToast.innerHTML = '<span style="color:#ef4444">💥 BẠN BỊ QUẮC (BUST > 21)! Nhà cái thắng.</span>';
+    } else if (pScore === 21 && playerCards.length === 2 && (dScore !== 21 || dealerCards.length > 2)) {
+      const win = Math.floor(betAmount * 2.5); // 3:2 payout
+      addChips(win);
+      playSfx('slot_win', 'casino');
+      resultToast.innerHTML = `<span style="color:#4ade80">⭐ BLACKJACK 21 ĐIỂM! Bạn thắng lớn +$${win.toLocaleString()} Chips!</span>`;
+    } else if (dScore > 21) {
+      const win = betAmount * 2;
+      addChips(win);
+      playSfx('slot_win', 'casino');
+      resultToast.innerHTML = `<span style="color:#4ade80">🎉 NHÀ CÁI BỊ QUẮC (>21)! Bạn thắng +$${win.toLocaleString()} Chips!</span>`;
+    } else if (pScore > dScore) {
+      const win = betAmount * 2;
+      addChips(win);
+      playSfx('slot_win', 'casino');
+      resultToast.innerHTML = `<span style="color:#4ade80">🎉 BẠN THẮNG (${pScore} vs ${dScore})! Nhận +$${win.toLocaleString()} Chips!</span>`;
+    } else if (pScore === dScore) {
+      addChips(betAmount); // Push
+      resultToast.innerHTML = `🤝 HÒA (${pScore} điểm)! Hoàn lại tiền cược.`;
+    } else {
+      resultToast.innerHTML = `Nhà cái thắng (${dScore} vs ${pScore}). Hãy thử lại ván sau!`;
+    }
+  }
+}
+
+// ============================================================================
+// 4. SLOT MACHINE (MÁY ĐÁNH BẠC 777 JACKPOT)
+// ============================================================================
+export function openSlotMachine() {
+  const content = `
+    <div class="slot-machine-arena">
+      <div class="slot-cabinet">
+        <div class="slot-marquee-top">💎 777 MEGA JACKPOT 💎</div>
+        <!-- 3 Spinning Reels -->
+        <div class="slot-reels-window">
+          <div class="slot-reel" id="reel0">7️⃣</div>
+          <div class="slot-reel" id="reel1">7️⃣</div>
+          <div class="slot-reel" id="reel2">7️⃣</div>
+        </div>
+        <div id="slotResultToast" class="casino-result-toast" style="min-width:260px">
+          🎰 Chọn mức cược rồi kéo cần gạt để quay Jackpot!
+        </div>
+        <!-- Chip Bet & Action -->
+        <div class="casino-chips-row" style="background:transparent;padding:0">
+          <span style="font-size:12px;font-weight:700;color:#fef08a">CƯỢC:</span>
+          <div class="casino-chip-btn chip-10" data-val="10">$10</div>
+          <div class="casino-chip-btn chip-25 selected" data-val="25">$25</div>
+          <div class="casino-chip-btn chip-50" data-val="50">$50</div>
+          <div class="casino-chip-btn chip-100" data-val="100">$100</div>
+        </div>
+        <button id="btnSpinSlot" class="casino-action-btn">🎰 QUAY (SPIN)</button>
+      </div>
+      <!-- Pull Lever -->
+      <div class="slot-lever-handle" id="slotLever" title="Nhấn để kéo cần gạt!">
+        <div class="slot-lever-rod">
+          <div class="slot-lever-knob"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const modal = createCasinoModal('MÁY ĐÁNH BẠC SLOT MACHINE 777 VEGAS', content);
+
+  let betAmount = 25;
+  let isSpinning = false;
+  const symbols = ['7️⃣', '💎', '🔔', '🍀', '🍒', '⭐'];
+
+  modal.querySelectorAll('.casino-chip-btn').forEach(btn => {
+    btn.onclick = () => {
+      if (isSpinning) return;
+      modal.querySelectorAll('.casino-chip-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      betAmount = parseInt(btn.dataset.val, 10);
+      playSfx('blackjack_deal', 'casino');
+    };
+  });
+
+  const doSpin = () => {
+    if (isSpinning) return;
+    if (!spendChips(betAmount)) {
+      toastRef?.('⚠️ Bạn không đủ Chips để quay Slot!');
+      return;
+    }
+
+    isSpinning = true;
+    modal.querySelector('#btnSpinSlot').disabled = true;
+    modal.querySelector('#slotResultToast').innerHTML = '🎰 Cuộn quay đang lăn tốc độ cao...';
+
+    // Mechanical pull lever animation
+    const lever = modal.querySelector('#slotLever');
+    lever.classList.add('pulled');
+    playSfx('slot_lever', 'casino');
+    setTimeout(() => lever.classList.remove('pulled'), 350);
+
+    // Trigger 3D world slot machine lever
+    const sm = worldRef?.casinoObjs?.find(o => o.userData?.type === 'slot_machine');
+    sm?.userData?.pullLever();
+
+    // Reels roll animation
+    const reels = [modal.querySelector('#reel0'), modal.querySelector('#reel1'), modal.querySelector('#reel2')];
+    const results = [
+      symbols[Math.floor(Math.random() * symbols.length)],
+      symbols[Math.floor(Math.random() * symbols.length)],
+      symbols[Math.floor(Math.random() * symbols.length)],
+    ];
+
+    // High jackpot chance for fun
+    if (Math.random() < 0.18) {
+      results[0] = results[1] = results[2] = '7️⃣';
+    } else if (Math.random() < 0.3) {
+      results[0] = results[1] = '💎';
+    }
+
+    const intervals = reels.map((reel, idx) => {
+      return setInterval(() => {
+        reel.textContent = symbols[Math.floor(Math.random() * symbols.length)];
+      }, 70);
+    });
+
+    // Stop reels one by one
+    setTimeout(() => {
+      clearInterval(intervals[0]);
+      reels[0].textContent = results[0];
+      playSfx('blackjack_deal', 'casino');
+    }, 1200);
+
+    setTimeout(() => {
+      clearInterval(intervals[1]);
+      reels[1].textContent = results[1];
+      playSfx('blackjack_deal', 'casino');
+    }, 1800);
+
+    setTimeout(() => {
+      clearInterval(intervals[2]);
+      reels[2].textContent = results[2];
+      playSfx('blackjack_deal', 'casino');
+
+      finishSlotSpin(results);
+    }, 2400);
+  };
+
+  modal.querySelector('#btnSpinSlot').onclick = doSpin;
+  modal.querySelector('#slotLever').onclick = doSpin;
+
+  function finishSlotSpin(res) {
+    isSpinning = false;
+    modal.querySelector('#btnSpinSlot').disabled = false;
+    const [r1, r2, r3] = res;
+
+    if (r1 === '7️⃣' && r2 === '7️⃣' && r3 === '7️⃣') {
+      const jackpot = betAmount * 100;
+      addChips(jackpot);
+      playSfx('slot_win', 'casino');
+      worldRef?.spawnFireworksShow(14.5, 11.5);
+      modal.querySelector('#slotResultToast').innerHTML = `
+        <span style="color:#facc15;font-size:18px">💥 MEGA JACKPOT 777!</span><br>
+        Bạn nhận thưởng siêu khủng <b>+$${jackpot.toLocaleString()} Chips</b>!
+      `;
+    } else if (r1 === r2 && r2 === r3) {
+      const win = betAmount * 30;
+      addChips(win);
+      playSfx('slot_win', 'casino');
+      modal.querySelector('#slotResultToast').innerHTML = `
+        <span style="color:#4ade80">🎉 TRÚNG 3 BIỂU TƯỢNG GIỐNG NHAU!</span><br>
+        Nhận thưởng <b>+$${win.toLocaleString()} Chips</b>!
+      `;
+    } else if (r1 === r2 || r2 === r3 || r1 === r3) {
+      const win = betAmount * 3;
+      addChips(win);
+      playSfx('slot_win', 'casino');
+      modal.querySelector('#slotResultToast').innerHTML = `
+        <span style="color:#38bdf8">✨ Trúng cặp đôi! Thưởng +$${win.toLocaleString()} Chips!</span>
+      `;
+    } else {
+      modal.querySelector('#slotResultToast').textContent = 'Chúc bạn may mắn lần sau!';
+    }
+  }
+}
+
+// ============================================================================
+// 5. PLINKO (THÁP THẢ BÓNG ĐINH CHÔNG)
+// ============================================================================
+export function openPlinko() {
+  const content = `
+    <div class="plinko-arena">
+      <canvas id="plinkoCanvas" width="460" height="420"></canvas>
+      <div id="plinkoResultToast" class="casino-result-toast" style="min-width:320px">
+        ⚡ Chọn tiền cược cho mỗi quả bóng và nhấn THẢ BÓNG!
+      </div>
+      <div style="display:flex;justify-content:space-between;width:100%;max-width:460px;align-items:center;flex-wrap:wrap;gap:8px">
+        <div class="casino-chips-row" style="background:transparent;padding:0">
+          <span style="font-size:12px;font-weight:700;color:#fef08a">CƯỢC / BÓNG:</span>
+          <div class="casino-chip-btn chip-10" data-val="10">$10</div>
+          <div class="casino-chip-btn chip-25 selected" data-val="25">$25</div>
+          <div class="casino-chip-btn chip-50" data-val="50">$50</div>
+          <div class="casino-chip-btn chip-100" data-val="100">$100</div>
+        </div>
+        <button id="btnDropPlinko" class="casino-action-btn">🟡 THẢ BÓNG (DROP)</button>
+      </div>
+    </div>
+  `;
+
+  const modal = createCasinoModal('THÁP THẢ BÓNG PLINKO (MEGA MULTIPLIERS)', content);
+  const canvas = modal.querySelector('#plinkoCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let betAmount = 25;
+  modal.querySelectorAll('.casino-chip-btn').forEach(btn => {
+    btn.onclick = () => {
+      modal.querySelectorAll('.casino-chip-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      betAmount = parseInt(btn.dataset.val, 10);
+      playSfx('blackjack_deal', 'casino');
+    };
+  });
+
+  // Setup Triangular Pegs Grid (10 Rows)
+  const rows = 10;
+  const pegs = [];
+  const startY = 55;
+  const rowHeight = 32;
+  const pegSpacing = 36;
+
+  for (let r = 0; r < rows; r++) {
+    const pinsInRow = r + 3;
+    const y = startY + r * rowHeight;
+    const startX = 230 - ((pinsInRow - 1) * pegSpacing) / 2;
+    for (let c = 0; c < pinsInRow; c++) {
+      pegs.push({
+        x: startX + c * pegSpacing,
+        y,
+        flash: 0,
+      });
+    }
+  }
+
+  // 11 Reward Bins at bottom
+  const bins = [
+    { mult: 100, color: '#dc2626' },
+    { mult: 25, color: '#ea580c' },
+    { mult: 5, color: '#eab308' },
+    { mult: 2, color: '#22c55e' },
+    { mult: 0.5, color: '#06b6d4' },
+    { mult: 0.2, color: '#3b82f6' },
+    { mult: 0.5, color: '#06b6d4' },
+    { mult: 2, color: '#22c55e' },
+    { mult: 5, color: '#eab308' },
+    { mult: 25, color: '#ea580c' },
+    { mult: 100, color: '#dc2626' },
+  ];
+  const binWidth = 400 / bins.length;
+  const binStartX = 30;
+  const binY = 385;
+
+  const balls = [];
+
+  function drawPlinko() {
+    ctx.clearRect(0, 0, 460, 420);
+
+    // Pegs
+    pegs.forEach(peg => {
+      ctx.beginPath();
+      ctx.arc(peg.x, peg.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = peg.flash > 0 ? '#fef08a' : '#d97706';
+      ctx.fill();
+      if (peg.flash > 0) {
+        ctx.shadowColor = '#facc15';
+        ctx.shadowBlur = 10;
+        peg.flash -= 0.05;
+      } else {
+        ctx.shadowBlur = 0;
+      }
+    });
+
+    // Reward Bins
+    bins.forEach((b, i) => {
+      const bx = binStartX + i * binWidth;
+      ctx.fillStyle = b.color;
+      ctx.fillRect(bx + 1, binY, binWidth - 2, 28);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${b.mult}x`, bx + binWidth / 2, binY + 18);
+    });
+
+    // Active Balls
+    for (let i = balls.length - 1; i >= 0; i--) {
+      const ball = balls[i];
+      ball.vy += 0.28; // gravity
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Peg collisions
+      for (const peg of pegs) {
+        const dx = ball.x - peg.x;
+        const dy = ball.y - peg.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 10) {
+          peg.flash = 1.0;
+          playSfx('plinko_peg', 'casino');
+          ball.vx = (dx > 0 ? 1 : -1) * (1.2 + Math.random() * 1.5);
+          ball.vy = -Math.abs(ball.vy) * 0.42;
+          ball.y = peg.y - 4;
+          break;
+        }
+      }
+
+      // Draw Ball
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#facc15';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+
+      // Check Land in Bottom Bins
+      if (ball.y >= binY) {
+        const binIdx = Math.max(0, Math.min(bins.length - 1, Math.floor((ball.x - binStartX) / binWidth)));
+        const wonBin = bins[binIdx];
+        const payout = Math.floor(ball.bet * wonBin.mult);
+
+        addChips(payout);
+        playSfx(wonBin.mult >= 2 ? 'slot_win' : 'plinko_win', 'casino');
+
+        modal.querySelector('#plinkoResultToast').innerHTML = `
+          🟡 Bóng rơi vào ô <b>[${wonBin.mult}x]</b>!
+          ${payout > 0 ? `Nhận <span style="color:#4ade80;font-weight:800">+$${payout.toLocaleString()} Chips</span>!` : ''}
+        `;
+
+        balls.splice(i, 1);
+      }
+    }
+
+    requestAnimationFrame(drawPlinko);
+  }
+  requestAnimationFrame(drawPlinko);
+
+  modal.querySelector('#btnDropPlinko').onclick = () => {
+    if (!spendChips(betAmount)) {
+      toastRef?.('⚠️ Bạn không đủ Chips để thả bóng!');
+      return;
+    }
+
+    balls.push({
+      x: 230 + (Math.random() - 0.5) * 6,
+      y: 25,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: 0.5,
+      bet: betAmount,
+    });
+
+    // Trigger 3D world plinko ball
+    const pk = worldRef?.casinoObjs?.find(o => o.userData?.type === 'plinko');
+    pk?.userData?.dropBall();
+
+    playSfx('plinko_peg', 'casino');
+  };
+}

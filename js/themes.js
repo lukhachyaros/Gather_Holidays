@@ -55,6 +55,19 @@ export const THEMES = {
     decor: ['🌹', '🌷', '💝', '💌', '💘', '🕯️', '✨', '💗', '🦢', '💐'],
     particles: { emoji: ['🌸', '💗', '✨'], count: 34, vy: [0.25, 0.75], vx: [-0.35, 0.35] },
   },
+  casino: {
+    name: '🎰 Casino & Arcade (Test)',
+    bg: '#0a0a1a',
+    floor: ['#1e1b4b', '#181438'],
+    path: '#2e1065',
+    wall: '#451a03',
+    water: '#0284c7',
+    rug: '#7f1d1d',
+    tree: '🌴',
+    prop: '🎰',
+    decor: ['🎰', '🎲', '🪙', '🃏', '🦆', '✨', '💎', '👑', '🍒', '🔔', '7️⃣'],
+    particles: { emoji: ['🪙', '✨', '🎲', '💎'], count: 35, vy: [0.25, 0.75], vx: [-0.35, 0.35] },
+  },
 };
 
 export const COSTUMES = {

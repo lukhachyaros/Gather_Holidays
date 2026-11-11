@@ -891,3 +891,567 @@ export function buildEnvelope() {
   g.userData.bob = true;
   return g;
 }
+
+// ============================================================================
+// 1. ROULETTE TABLE (VÒNG QUAY ROULETTE)
+// ============================================================================
+export function buildRouletteTable() {
+  const g = new THREE.Group();
+
+  // Table base & legs
+  const woodMat = mat('#3b1a0a', { roughness: 0.35, metalness: 0.1 });
+  const brassMat = mat('#d97706', { roughness: 0.2, metalness: 0.85 });
+  const feltMat = mat('#047857', { roughness: 0.85 }); // Green casino felt
+
+  // Main table top slab (rounded rectangle)
+  part(g, G.box(), woodMat, [0, 0.88, 0], [4.4, 0.14, 2.2]);
+  part(g, G.box(), feltMat, [0.45, 0.96, 0], [3.2, 0.03, 1.9]);
+
+  // 4 Brass trimmed wooden legs
+  [[-1.9, 0.44, -0.85], [1.9, 0.44, -0.85], [-1.9, 0.44, 0.85], [1.9, 0.44, 0.85]].forEach(p => {
+    part(g, G.cyl(), woodMat, p, [0.18, 0.88, 0.18]);
+    part(g, G.torus(), brassMat, [p[0], 0.1, p[2]], [0.28, 0.28, 0.28], [Math.PI / 2, 0, 0]);
+  });
+
+  // Brass footrest rail around bottom
+  part(g, G.box(), brassMat, [0, 0.16, -0.85], [3.8, 0.05, 0.05]);
+  part(g, G.box(), brassMat, [0, 0.16, 0.85], [3.8, 0.05, 0.05]);
+
+  // Roulette Wheel Assembly (Left side of table)
+  const wheelBase = new THREE.Group();
+  wheelBase.position.set(-1.25, 0.96, 0);
+
+  // Outer wooden bowl
+  part(wheelBase, G.cyl(), woodMat, [0, 0.06, 0], [1.4, 0.12, 1.4]);
+  // Brass outer track ring
+  part(wheelBase, G.torus(), brassMat, [0, 0.14, 0], [1.32, 1.32, 1.32], [Math.PI / 2, 0, 0]);
+
+  // Spinning Rotor Group
+  const rotor = new THREE.Group();
+  rotor.position.set(0, 0.14, 0);
+
+  // Rotor cylinder
+  part(rotor, G.cyl(), brassMat, [0, 0, 0], [1.1, 0.06, 1.1]);
+
+  // 37 Number Pockets (Red & Black alternating, 0 green)
+  const redMat = mat('#dc2626', { roughness: 0.4 });
+  const blackMat = mat('#18181b', { roughness: 0.4 });
+  const greenMat = mat('#16a34a', { roughness: 0.4 });
+  const pockets = 37;
+  for (let i = 0; i < pockets; i++) {
+    const angle = (i / pockets) * Math.PI * 2;
+    const pMat = i === 0 ? greenMat : (i % 2 === 1 ? redMat : blackMat);
+    const px = Math.cos(angle) * 0.48;
+    const pz = Math.sin(angle) * 0.48;
+    part(rotor, G.box(), pMat, [px, 0.035, pz], [0.07, 0.02, 0.07], [0, -angle, 0]);
+  }
+
+  // Center Brass Turret & 4 Spoke Crosshead
+  part(rotor, G.cyl(), brassMat, [0, 0.08, 0], [0.16, 0.12, 0.16]);
+  part(rotor, G.sph(), brassMat, [0, 0.16, 0], [0.12, 0.12, 0.12]);
+  part(rotor, G.box(), brassMat, [0, 0.12, 0], [0.46, 0.03, 0.03]);
+  part(rotor, G.box(), brassMat, [0, 0.12, 0], [0.03, 0.03, 0.46]);
+
+  wheelBase.add(rotor);
+
+  // Ivory Ball on circular track
+  const ballGroup = new THREE.Group();
+  ballGroup.position.set(0, 0.16, 0);
+  const ball = part(ballGroup, G.sph(), mat('#ffffff', { roughness: 0.1, metalness: 0.05 }), [0.55, 0, 0], [0.055, 0.055, 0.055]);
+  wheelBase.add(ballGroup);
+
+  g.add(wheelBase);
+
+  // Felt Betting Grid Canvas Texture (Numbers 1-36, Red, Black, Even, Odd)
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#065f46';
+  ctx.fillRect(0, 0, 512, 256);
+  ctx.strokeStyle = '#fef08a';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(10, 10, 492, 236);
+
+  // Draw 0 green spot
+  ctx.fillStyle = '#16a34a';
+  ctx.fillRect(16, 16, 50, 224);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 32px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('0', 41, 128);
+
+  // Draw 12 rows of 3 numbers
+  for (let col = 0; col < 12; col++) {
+    for (let row = 0; row < 3; row++) {
+      const num = col * 3 + (3 - row);
+      const isRed = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36].includes(num);
+      const x = 70 + col * 35;
+      const y = 16 + row * 62;
+      ctx.fillStyle = isRed ? '#b91c1c' : '#18181b';
+      ctx.fillRect(x + 2, y + 2, 31, 58);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 19px sans-serif';
+      ctx.fillText(String(num), x + 17, y + 31);
+    }
+  }
+
+  // Draw Red / Black / Even / Odd side bets
+  ctx.fillStyle = '#b91c1c';
+  ctx.fillRect(70, 206, 100, 36);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillText('RED', 120, 224);
+
+  ctx.fillStyle = '#18181b';
+  ctx.fillRect(175, 206, 100, 36);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('BLACK', 225, 224);
+
+  ctx.fillStyle = '#047857';
+  ctx.strokeStyle = '#fef08a';
+  ctx.strokeRect(280, 206, 100, 36);
+  ctx.fillText('EVEN', 330, 224);
+  ctx.strokeRect(385, 206, 100, 36);
+  ctx.fillText('ODD', 435, 224);
+
+  const feltTex = new THREE.CanvasTexture(c);
+  feltTex.colorSpace = THREE.SRGBColorSpace;
+  const gridPlane = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.5), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.85 }));
+  gridPlane.rotation.x = -Math.PI / 2;
+  gridPlane.position.set(0.65, 0.98, 0);
+  g.add(gridPlane);
+
+  // Stack of poker chips on betting layout
+  const chipColors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#18181b'];
+  [ [0.3, 0.2], [0.8, -0.3], [1.4, 0.1], [1.8, -0.2] ].forEach((cp, ci) => {
+    for (let h = 0; h < 5; h++) {
+      part(g, G.cyl(), mat(chipColors[(ci + h) % chipColors.length], { metalness: 0.2 }), [cp[0], 0.99 + h * 0.015, cp[1]], [0.1, 0.012, 0.1]);
+    }
+  });
+
+  // Overhead Brass Lamp
+  const lamp = new THREE.Group();
+  lamp.position.set(0, 3.2, 0);
+  part(lamp, G.cyl(), brassMat, [0, 0, 0], [0.03, 1.2, 0.03]);
+  part(lamp, G.cone(), brassMat, [0, -0.6, 0], [0.85, 0.45, 0.85]);
+  const light = new THREE.PointLight(0xfff1d6, 1.6, 6);
+  light.position.set(0, -0.7, 0);
+  lamp.add(light);
+  g.add(lamp);
+
+  // Floating 3D Title
+  const tag = labelSprite('🎰 VÒNG QUAY ROULETTE', 'rgba(15,23,42,0.92)', '#fef08a', 0.55);
+  tag.position.set(0, 2.3, 0);
+  g.add(tag);
+
+  g.userData = {
+    type: 'roulette',
+    rotor,
+    ballGroup,
+    isSpinning: false,
+    speed: 0,
+    ballSpeed: 0,
+    spin(onComplete) {
+      if (this.isSpinning) return;
+      this.isSpinning = true;
+      this.speed = 18.0 + Math.random() * 8.0;
+      this.ballSpeed = -24.0 - Math.random() * 8.0;
+      this.onComplete = onComplete;
+    }
+  };
+
+  return g;
+}
+
+// ============================================================================
+// 2. DUCK DERBY TRACK (TRƯỜNG ĐUA VỊT)
+// ============================================================================
+export function buildDuckDerbyTrack() {
+  const g = new THREE.Group();
+
+  const woodMat = mat('#78350f', { roughness: 0.5 });
+  const waterMat = mat('#0284c7', { roughness: 0.1, metalness: 0.25, transparent: true, opacity: 0.88 });
+  const brassMat = mat('#f59e0b', { roughness: 0.2, metalness: 0.8 });
+
+  // Outer basin boundary (8m x 4.2m oval)
+  part(g, G.box(), woodMat, [0, 0.42, 0], [8.4, 0.84, 4.4]);
+  // Water canal surface
+  const water = part(g, G.box(), waterMat, [0, 0.78, 0], [7.8, 0.1, 3.8]);
+
+  // Center island divider
+  part(g, G.box(), woodMat, [0, 0.55, 0], [4.6, 0.88, 1.2]);
+
+  // Start / Finish Line Gantry Arch
+  const arch = new THREE.Group();
+  arch.position.set(0, 0.88, 1.3);
+  part(arch, G.cyl(), brassMat, [-1.3, 1.2, 0], [0.08, 2.4, 0.08]);
+  part(arch, G.cyl(), brassMat, [1.3, 1.2, 0], [0.08, 2.4, 0.08]);
+  part(arch, G.box(), brassMat, [0, 2.35, 0], [2.7, 0.1, 0.1]);
+
+  const archBanner = labelSprite('🏁 DUCK DERBY · XUẤT PHÁT 🏁', 'rgba(2,132,199,0.92)', '#ffffff', 0.52);
+  archBanner.position.set(0, 2.7, 0);
+  arch.add(archBanner);
+  g.add(arch);
+
+  // Build a cute Rubber Duck
+  function createDuck(colorHex, numberStr) {
+    const duck = new THREE.Group();
+    const dMat = mat(colorHex, { roughness: 0.35, metalness: 0.05 });
+    const beakMat = mat('#ea580c', { roughness: 0.4 });
+    const eyeMat = mat('#09090b');
+
+    // Body
+    part(duck, G.sph(), dMat, [0, 0.18, 0], [0.42, 0.34, 0.52]);
+    // Tail flip
+    part(duck, G.cone(), dMat, [0, 0.24, -0.26], [0.18, 0.25, 0.18], [-0.85, 0, 0]);
+    // Head
+    part(duck, G.sph(), dMat, [0, 0.42, 0.16], [0.28, 0.28, 0.28]);
+    // Beak
+    part(duck, G.cone(), beakMat, [0, 0.38, 0.35], [0.18, 0.22, 0.1], [Math.PI / 2, 0, 0]);
+    // Eyes
+    part(duck, G.sph(), eyeMat, [-0.11, 0.46, 0.26], [0.04, 0.04, 0.04]);
+    part(duck, G.sph(), eyeMat, [0.11, 0.46, 0.26], [0.04, 0.04, 0.04]);
+
+    // Number Bib on chest
+    const bib = labelSprite(`#${numberStr}`, 'rgba(15,23,42,0.85)', '#ffffff', 0.22);
+    bib.position.set(0, 0.22, 0.28);
+    duck.add(bib);
+
+    duck.scale.setScalar(0.75);
+    return duck;
+  }
+
+  // 4 Colorful Ducks positioned in starting lanes
+  const duckConfigs = [
+    { color: '#facc15', num: '1', name: 'Vịt Vàng Tia Chớp' },
+    { color: '#ec4899', num: '2', name: 'Vịt Hồng Kiêu Kỳ' },
+    { color: '#10b981', num: '3', name: 'Vịt Xanh Bão Tố' },
+    { color: '#8b5cf6', num: '4', name: 'Vịt Tím Thần Tốc' },
+  ];
+
+  const ducks = [];
+  duckConfigs.forEach((cfg, idx) => {
+    const d = createDuck(cfg.color, cfg.num);
+    const laneX = -0.75 + idx * 0.5;
+    d.position.set(laneX, 0.85, 1.3);
+    d.rotation.y = Math.PI / 2; // facing forward along canal
+    g.add(d);
+    ducks.push({
+      group: d,
+      cfg,
+      progress: 0,
+      laneOffset: laneX,
+      speed: 0,
+    });
+  });
+
+  // Floating Title
+  const tag = labelSprite('🦆 TRƯỜNG ĐUA VỊT CAO SU', 'rgba(120,53,15,0.95)', '#fef08a', 0.55);
+  tag.position.set(0, 3.2, 0);
+  g.add(tag);
+
+  g.userData = {
+    type: 'duck_derby',
+    ducks,
+    isRacing: false,
+    startRace(onFinish) {
+      if (this.isRacing) return;
+      this.isRacing = true;
+      this.onFinish = onFinish;
+      this.ducks.forEach(d => {
+        d.progress = 0;
+        d.speed = 0.8 + Math.random() * 0.4;
+      });
+    }
+  };
+
+  return g;
+}
+
+// ============================================================================
+// 3. BLACKJACK TABLE (BÀN XÌ DÁCH CASINO VIP)
+// ============================================================================
+export function buildBlackjackTable() {
+  const g = new THREE.Group();
+
+  const woodMat = mat('#3b1a0a', { roughness: 0.35, metalness: 0.1 });
+  const leatherMat = mat('#18181b', { roughness: 0.55 });
+  const feltMat = mat('#064e3b', { roughness: 0.9 });
+  const brassMat = mat('#d97706', { roughness: 0.2, metalness: 0.85 });
+
+  // Semi-circular table top
+  const tableCyl = part(g, G.cyl(), woodMat, [0, 0.88, 0], [4.2, 0.14, 2.6]);
+  // Green felt top
+  part(g, G.cyl(), feltMat, [0, 0.96, 0.05], [3.9, 0.03, 2.35]);
+  // Padded leather armrest bumper
+  part(g, G.torus(), leatherMat, [0, 0.97, 0], [2.05, 2.05, 2.05], [Math.PI / 2, 0, 0]);
+
+  // Center Pedestal Base with brass ring
+  part(g, G.cyl(), woodMat, [0, 0.44, 0], [1.1, 0.88, 1.1]);
+  part(g, G.torus(), brassMat, [0, 0.08, 0], [0.95, 0.95, 0.95], [Math.PI / 2, 0, 0]);
+
+  // Blackjack Felt Markings Canvas
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#064e3b';
+  ctx.fillRect(0, 0, 512, 256);
+
+  ctx.strokeStyle = '#fef08a';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(256, 40, 190, 0, Math.PI);
+  ctx.stroke();
+
+  ctx.fillStyle = '#fef08a';
+  ctx.font = 'bold 22px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('BLACKJACK PAYS 3 TO 2', 256, 110);
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillText('Dealer must draw to 16 and stand on all 17s', 256, 135);
+  ctx.fillText('INSURANCE PAYS 2 TO 1', 256, 155);
+
+  // 3 Player betting circles
+  [120, 256, 392].forEach(bx => {
+    ctx.strokeStyle = '#fef08a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(bx, 195, 28, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+
+  const feltTex = new THREE.CanvasTexture(c);
+  feltTex.colorSpace = THREE.SRGBColorSpace;
+  const feltMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 1.8), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.85 }));
+  feltMesh.rotation.x = -Math.PI / 2;
+  feltMesh.position.set(0, 0.98, 0.15);
+  g.add(feltMesh);
+
+  // Acrylic Dealing Shoe & Discard Holder
+  const acrylicMat = mat('#38bdf8', { transparent: true, opacity: 0.65, roughness: 0.1 });
+  part(g, G.box(), acrylicMat, [-1.2, 1.05, -0.4], [0.25, 0.18, 0.5], [0, 0.4, 0.2]);
+  part(g, G.box(), acrylicMat, [1.2, 1.03, -0.4], [0.22, 0.15, 0.35]);
+
+  // Dealer Chip Tray
+  part(g, G.box(), mat('#09090b', { metalness: 0.4 }), [0, 1.0, -0.55], [1.1, 0.08, 0.28]);
+  for (let ci = 0; ci < 6; ci++) {
+    const cx = -0.4 + ci * 0.16;
+    const chipCol = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#18181b', '#8b5cf6'][ci];
+    for (let h = 0; h < 6; h++) {
+      part(g, G.cyl(), mat(chipCol, { metalness: 0.2 }), [cx, 1.03 + h * 0.015, -0.55], [0.08, 0.012, 0.08]);
+    }
+  }
+
+  // 3 Casino Swivel Barstools (Opposite dealer side)
+  [-1.25, 0, 1.25].forEach(sx => {
+    const stool = new THREE.Group();
+    stool.position.set(sx, 0, 1.35);
+    part(stool, G.cyl(), brassMat, [0, 0.32, 0], [0.06, 0.64, 0.06]);
+    part(stool, G.cyl(), brassMat, [0, 0.02, 0], [0.45, 0.04, 0.45]);
+    part(stool, G.cyl(), leatherMat, [0, 0.66, 0], [0.44, 0.12, 0.44]);
+    g.add(stool);
+  });
+
+  // Floating Title
+  const tag = labelSprite('🃏 BÀN XÌ DÁCH CASINO (BLACKJACK)', 'rgba(6,78,59,0.95)', '#fef08a', 0.55);
+  tag.position.set(0, 2.4, 0);
+  g.add(tag);
+
+  g.userData = {
+    type: 'blackjack',
+    dealHand(onResult) {
+      if (onResult) onResult();
+    }
+  };
+
+  return g;
+}
+
+// ============================================================================
+// 4. SLOT MACHINE (MÁY ĐÁNH BẠC 777)
+// ============================================================================
+export function buildSlotMachine() {
+  const g = new THREE.Group();
+
+  const chromeMat = mat('#cbd5e1', { roughness: 0.15, metalness: 0.85 });
+  const darkMat = mat('#0f172a', { roughness: 0.4 });
+  const neonPink = mat('#f43f5e', { emissive: '#e11d48', emissiveIntensity: 0.8 });
+  const neonCyan = mat('#06b6d4', { emissive: '#0891b2', emissiveIntensity: 0.8 });
+  const goldMat = mat('#f59e0b', { roughness: 0.2, metalness: 0.85 });
+
+  // Main Cabinet Body (approx 1.2m wide, 2.2m tall, 0.9m deep)
+  part(g, G.box(), darkMat, [0, 1.1, 0], [1.1, 2.2, 0.85]);
+  part(g, G.box(), chromeMat, [0, 1.1, 0.43], [1.14, 2.24, 0.06]); // Chrome trim frame
+
+  // Top Lightbox Marquee: "777 JACKPOT"
+  part(g, G.box(), goldMat, [0, 2.05, 0.46], [1.02, 0.35, 0.12]);
+  const marqueeTag = labelSprite('💎 777 JACKPOT 💎', 'rgba(245,158,11,0.95)', '#ffffff', 0.38);
+  marqueeTag.position.set(0, 2.05, 0.53);
+  g.add(marqueeTag);
+
+  // Side Neon Glow Strip Bars
+  part(g, G.box(), neonPink, [-0.56, 1.1, 0.44], [0.04, 2.0, 0.04]);
+  part(g, G.box(), neonCyan, [0.56, 1.1, 0.44], [0.04, 2.0, 0.04]);
+
+  // Display Window Glass
+  const glassMat = mat('#38bdf8', { transparent: true, opacity: 0.4, roughness: 0.1 });
+  part(g, G.box(), glassMat, [0, 1.45, 0.44], [0.88, 0.55, 0.04]);
+
+  // 3 Spinning Cylindrical Reels
+  const reels = [];
+  const reelMat = mat('#ffffff', { roughness: 0.3 });
+  [-0.26, 0, 0.26].forEach(rx => {
+    const reel = new THREE.Group();
+    reel.position.set(rx, 1.45, 0.36);
+    reel.rotation.z = Math.PI / 2; // spin around X axis
+
+    const cyl = part(reel, G.cyl(), reelMat, [0, 0, 0], [0.38, 0.22, 0.38]);
+
+    // Add colorful symbol bands
+    const symbols = ['7️⃣', '💎', '🍒', '🔔', '🍀', '⭐'];
+    symbols.forEach((sym, sIdx) => {
+      const sAngle = (sIdx / symbols.length) * Math.PI * 2;
+      const spr = emojiSprite(sym, 0.18);
+      spr.position.set(Math.cos(sAngle) * 0.21, 0, Math.sin(sAngle) * 0.21);
+      spr.rotation.y = -sAngle;
+      reel.add(spr);
+    });
+
+    g.add(reel);
+    reels.push({ group: reel, angle: 0, speed: 0, targetAngle: 0, stopped: true });
+  });
+
+  // Pull Lever Assembly (Right Side)
+  const leverGroup = new THREE.Group();
+  leverGroup.position.set(0.62, 1.35, 0);
+
+  // Base pivot
+  part(leverGroup, G.cyl(), chromeMat, [0, 0, 0], [0.12, 0.12, 0.12], [0, 0, Math.PI / 2]);
+
+  // Lever Shaft & Red Knob
+  const leverArm = new THREE.Group();
+  part(leverArm, G.cyl(), chromeMat, [0, 0.32, 0], [0.03, 0.64, 0.03]);
+  part(leverArm, G.sph(), mat('#dc2626', { roughness: 0.2, metalness: 0.2 }), [0, 0.66, 0], [0.12, 0.12, 0.12]);
+  leverGroup.add(leverArm);
+  g.add(leverGroup);
+
+  // Coin Tray at the bottom
+  part(g, G.box(), chromeMat, [0, 0.25, 0.48], [0.85, 0.22, 0.25]);
+  // Golden coins in tray
+  for (let ci = 0; ci < 8; ci++) {
+    const cx = -0.28 + (ci % 4) * 0.18;
+    const cz = 0.42 + Math.floor(ci / 4) * 0.1;
+    part(g, G.cyl(), goldMat, [cx, 0.32, cz], [0.07, 0.015, 0.07]);
+  }
+
+  // Floating Title
+  const tag = labelSprite('🎰 MÁY ĐÁNH BẠC 777', 'rgba(15,23,42,0.95)', '#fef08a', 0.52);
+  tag.position.set(0, 2.5, 0);
+  g.add(tag);
+
+  g.userData = {
+    type: 'slot_machine',
+    reels,
+    leverArm,
+    isSpinning: false,
+    pullLever(onResult) {
+      if (this.isSpinning) return;
+      this.isSpinning = true;
+      this.leverArm.rotation.x = 0.85; // pull forward/down
+      setTimeout(() => { this.leverArm.rotation.x = 0; }, 320);
+
+      this.reels.forEach((r, idx) => {
+        r.speed = 22.0 + idx * 4.0;
+        r.stopped = false;
+        setTimeout(() => {
+          r.stopped = true;
+        }, 1200 + idx * 600);
+      });
+
+      setTimeout(() => {
+        this.isSpinning = false;
+        if (onResult) onResult();
+      }, 2600);
+    }
+  };
+
+  return g;
+}
+
+// ============================================================================
+// 5. PLINKO BOARD (THÁP THẢ BÓNG PLINKO)
+// ============================================================================
+export function buildPlinkoBoard() {
+  const g = new THREE.Group();
+
+  const darkMat = mat('#0b0f19', { roughness: 0.35 });
+  const brassMat = mat('#fbbf24', { roughness: 0.15, metalness: 0.9 });
+  const neonCyan = mat('#06b6d4', { emissive: '#0891b2', emissiveIntensity: 0.85 });
+  const neonPink = mat('#f43f5e', { emissive: '#e11d48', emissiveIntensity: 0.85 });
+  const acrylicMat = mat('#38bdf8', { transparent: true, opacity: 0.35, roughness: 0.1 });
+
+  // Stand & Backboard (Approx 2.4m wide, 3.4m tall, 0.4m deep)
+  part(g, G.box(), darkMat, [0, 1.8, 0], [2.6, 3.5, 0.22]);
+  part(g, G.box(), acrylicMat, [0, 1.8, 0.14], [2.4, 3.3, 0.04]); // Clear acrylic front plate
+
+  // Triangular Neon Borders
+  part(g, G.box(), neonCyan, [-1.22, 1.8, 0.14], [0.06, 3.3, 0.06]);
+  part(g, G.box(), neonPink, [1.22, 1.8, 0.14], [0.06, 3.3, 0.06]);
+
+  // Top Drop Funnel
+  part(g, G.cone(), brassMat, [0, 3.4, 0.12], [0.45, 0.35, 0.45], [Math.PI, 0, 0]);
+
+  // Triangular Grid of Brass Pegs / Pins (9 Rows, staggered)
+  const pegs = [];
+  const rows = 9;
+  for (let r = 0; r < rows; r++) {
+    const pinsInRow = r + 3;
+    const y = 3.1 - r * 0.28;
+    const spacing = 0.22;
+    const startX = -((pinsInRow - 1) * spacing) / 2;
+    for (let c = 0; c < pinsInRow; c++) {
+      const px = startX + c * spacing;
+      const pegMesh = part(g, G.cyl(), brassMat, [px, y, 0.1], [0.028, 0.1, 0.028], [Math.PI / 2, 0, 0]);
+      pegs.push({ x: px, y, mesh: pegMesh });
+    }
+  }
+
+  // Bottom Reward Bins with Multipliers: [100x, 29x, 5x, 2x, 0.5x, 0.2x, 0.5x, 2x, 5x, 29x, 100x]
+  const multipliers = ['100x', '29x', '5x', '2x', '0.5x', '0.2x', '0.5x', '2x', '5x', '29x', '100x'];
+  const binColors = ['#dc2626', '#ea580c', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#06b6d4', '#22c55e', '#eab308', '#ea580c', '#dc2626'];
+  const binW = 2.1 / multipliers.length;
+  multipliers.forEach((mult, bi) => {
+    const bx = -1.05 + bi * binW + binW / 2;
+    part(g, G.box(), mat(binColors[bi], { emissive: binColors[bi], emissiveIntensity: 0.35 }), [bx, 0.36, 0.12], [binW * 0.9, 0.24, 0.15]);
+    part(g, G.box(), darkMat, [bx - binW / 2, 0.38, 0.12], [0.02, 0.3, 0.16]); // divider nail
+  });
+
+  // Floating Title
+  const tag = labelSprite('🟡 THÁP THẢ BÓNG PLINKO', 'rgba(11,15,25,0.95)', '#fef08a', 0.55);
+  tag.position.set(0, 3.8, 0);
+  g.add(tag);
+
+  g.userData = {
+    type: 'plinko',
+    pegs,
+    activeBalls: [],
+    dropBall(onLand) {
+      const ballMat = mat('#facc15', { emissive: '#eab308', emissiveIntensity: 0.75, roughness: 0.2 });
+      const b = part(g, G.sph(), ballMat, [ (Math.random() - 0.5) * 0.08, 3.35, 0.12 ], [0.07, 0.07, 0.07]);
+      this.activeBalls.push({
+        mesh: b,
+        x: b.position.x,
+        y: b.position.y,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: 0,
+        onLand,
+      });
+    }
+  };
+
+  return g;
+}
+

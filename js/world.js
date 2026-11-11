@@ -25,6 +25,11 @@ import {
   buildValentineHeartTree,
   buildLoveFountain,
   buildRoseArch,
+  buildRouletteTable,
+  buildDuckDerbyTrack,
+  buildBlackjackTable,
+  buildSlotMachine,
+  buildPlinkoBoard,
   emojiTexture,
   geo,
   mat,
@@ -33,7 +38,7 @@ import {
 
 export const TILE = 2; // meters per grid tile
 export const WALL_H = 1.6; // parkour-friendly wall height
-const DARK = new Set(['halloween', 'tet', 'christmas', 'valentine']);
+const DARK = new Set(['halloween', 'tet', 'christmas', 'valentine', 'casino']);
 
 const rnd = seed => {
   let s = 0;
@@ -84,6 +89,7 @@ export class World {
     this.vampireNPC = null;
     this.vampireSwoop = null; // { tx, tz, until }
     this.screenObj = null;
+    this.casinoObjs = [];
     this.features = { hotspots: [], seats: [], colliders: [], extraProps: [] };
     this.t = 0;
   }
@@ -180,6 +186,7 @@ export class World {
     this.campfires = [];
     this.maiEnvelopes = [];
     this.valentineObjs = [];
+    this.casinoObjs = [];
     this.treeSlots = [];
     this.vampireNPC = null;
     this.ornamentKey = '';
@@ -351,6 +358,35 @@ export class World {
         lf.position.set(h.x * TILE, 0, h.y * TILE);
         this.group.add(lf);
         this.valentineObjs.push(lf);
+      } else if (h.type === 'roulette') {
+        const rt = buildRouletteTable();
+        rt.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(rt);
+        this.casinoObjs.push(rt);
+      } else if (h.type === 'duck_derby') {
+        const dd = buildDuckDerbyTrack();
+        dd.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(dd);
+        this.casinoObjs.push(dd);
+      } else if (h.type === 'blackjack') {
+        const bj = buildBlackjackTable();
+        bj.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(bj);
+        this.casinoObjs.push(bj);
+      } else if (h.type === 'slot_machine') {
+        [-0.85, 0, 0.85].forEach(ox => {
+          const sm = buildSlotMachine();
+          sm.position.set((h.x + ox) * TILE, 0, h.y * TILE);
+          sm.rotation.y = Math.PI;
+          this.group.add(sm);
+          this.casinoObjs.push(sm);
+        });
+      } else if (h.type === 'plinko') {
+        const pk = buildPlinkoBoard();
+        pk.position.set(h.x * TILE, 0, h.y * TILE);
+        pk.rotation.y = Math.PI;
+        this.group.add(pk);
+        this.casinoObjs.push(pk);
       }
     }
 
@@ -605,5 +641,86 @@ export class World {
     this.decorObjs.forEach(anim);
     this.cardObjs.forEach(anim);
     this.valentineObjs.forEach(anim);
+
+    // 8. Casino Arcade 3D models animation & physics
+    for (const co of this.casinoObjs) {
+      const u = co.userData;
+      if (!u) continue;
+      if (u.type === 'roulette') {
+        if (u.isSpinning) {
+          u.rotor.rotation.y += u.speed * dt;
+          u.ballGroup.rotation.y += u.ballSpeed * dt;
+          u.speed *= Math.pow(0.965, dt * 60);
+          u.ballSpeed *= Math.pow(0.962, dt * 60);
+          if (Math.abs(u.speed) < 0.25) {
+            u.isSpinning = false;
+            u.speed = 0;
+            u.ballSpeed = 0;
+            u.onComplete?.();
+          }
+        } else {
+          u.rotor.rotation.y += 0.25 * dt;
+        }
+      } else if (u.type === 'duck_derby') {
+        u.ducks.forEach((d, i) => {
+          if (u.isRacing) {
+            d.progress += d.speed * dt * 0.12;
+            const theta = d.progress * Math.PI * 2;
+            const rx = 3.2, rz = 1.35;
+            d.group.position.x = Math.sin(theta) * rx + (Math.sin(theta * 2) * 0.1);
+            d.group.position.z = Math.cos(theta) * rz + (d.laneOffset * 0.25);
+            d.group.position.y = 0.85 + Math.sin(this.t * 12 + i) * 0.04;
+            d.group.rotation.y = theta + Math.PI / 2;
+            if (d.progress >= 1.0) {
+              u.isRacing = false;
+              u.onFinish?.(d.cfg);
+            }
+          } else {
+            d.group.position.y = 0.85 + Math.sin(this.t * 3.0 + i) * 0.025;
+          }
+        });
+      } else if (u.type === 'slot_machine') {
+        u.reels.forEach(r => {
+          if (!r.stopped) {
+            r.group.rotation.x += r.speed * dt;
+          }
+        });
+      } else if (u.type === 'plinko') {
+        for (let bi = u.activeBalls.length - 1; bi >= 0; bi--) {
+          const b = u.activeBalls[bi];
+          b.vy -= 9.8 * dt;
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+
+          // Check collisions against pegs
+          for (const peg of u.pegs) {
+            const dx = b.x - peg.x;
+            const dy = b.y - peg.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 0.09) {
+              b.vx = (dx > 0 ? 1 : -1) * (0.45 + Math.random() * 0.55);
+              b.vy = Math.abs(b.vy) * 0.42 + 0.2;
+              b.y = peg.y + 0.09;
+              break;
+            }
+          }
+
+          b.mesh.position.x = b.x;
+          b.mesh.position.y = b.y;
+
+          if (b.y <= 0.48) {
+            // Reached reward bin! Calculate bin index
+            const binW = 2.1 / 11;
+            const binIdx = Math.max(0, Math.min(10, Math.floor((b.x + 1.05) / binW)));
+            const mults = ['100x', '29x', '5x', '2x', '0.5x', '0.2x', '0.5x', '2x', '5x', '29x', '100x'];
+            b.onLand?.(mults[binIdx] || '1x');
+            setTimeout(() => {
+              co.remove(b.mesh);
+            }, 1200);
+            u.activeBalls.splice(bi, 1);
+          }
+        }
+      }
+    }
   }
 }

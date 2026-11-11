@@ -74,6 +74,15 @@ export function buildThemeMap(themeKey = 'christmas') {
     // Decorative reflecting pools in the outer corners.
     rect(3, 4, 5, 5, '~');
     rect(24, 4, 26, 5, '~');
+  } else if (themeKey === 'casino') {
+    // Luxurious velvet carpets for the 5 arcade stations
+    rect(11, 10, 18, 14, 'R'); // Central Duck Derby water canal
+    rect(4, 10, 10, 13, 'R');  // West Roulette Plaza
+    rect(19, 10, 25, 13, 'R'); // East Blackjack Plaza
+    rect(4, 15, 10, 19, 'R');  // Southwest Slots row
+    rect(19, 15, 25, 19, 'R'); // Southeast Plinko tower
+    // Walkways connecting all game plazas
+    rect(6, 16, 23, 17, 'P');
   }
 
   return {
@@ -436,6 +445,96 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
     [
       { id: 'valentine_sofa_left', x: 8.6, y: 16.9 },
       { id: 'valentine_sofa_right', x: 20.4, y: 16.9 },
+    ].forEach(cs => {
+      seats.push({
+        id: cs.id,
+        kind: 'couple',
+        x: cs.x,
+        y: cs.y,
+        rot: Math.PI,
+        slots: [
+          { id: cs.id + '_L', sofaId: cs.id, x: cs.x - 0.24, y: cs.y, rot: Math.PI, lean: -1 },
+          { id: cs.id + '_R', sofaId: cs.id, x: cs.x + 0.24, y: cs.y, rot: Math.PI, lean: 1 },
+        ],
+      });
+    });
+  } else if (themeKey === 'casino') {
+    // 1. Roulette Table (West Plaza, x=7.0, y=11.5)
+    hotspots.push({
+      id: 'casino_roulette',
+      type: 'roulette',
+      x: 7.0,
+      y: 11.5,
+      radius: 2.4,
+      prompt: '🎡 Vòng Quay Roulette · [E] Đặt cược & Quay bánh xe má hồng',
+    });
+    colliders.push({ x: 7.0, y: 11.5, r: 0.95 });
+
+    // 2. Duck Derby Raceway (Central Plaza, x=14.5, y=12.0)
+    hotspots.push({
+      id: 'casino_duck_derby',
+      type: 'duck_derby',
+      x: 14.5,
+      y: 12.0,
+      radius: 3.2,
+      prompt: '🦆 Đua Vịt Duck Derby · [E] Bắt đầu chặng đua kịch tính 4 chú vịt',
+    });
+    colliders.push({ x: 14.5, y: 12.0, r: 1.15 });
+
+    // 3. Blackjack Table (East Plaza, x=22.0, y=11.5)
+    hotspots.push({
+      id: 'casino_blackjack',
+      type: 'blackjack',
+      x: 22.0,
+      y: 11.5,
+      radius: 2.4,
+      prompt: '🃏 Bàn Xì Dách Blackjack · [E] Chia bài 21 điểm (Hit/Stand)',
+    });
+    colliders.push({ x: 22.0, y: 11.5, r: 0.95 });
+
+    // Blackjack Barstools (3 seats)
+    const bjSeats = [
+      { id: 'casino_bj_seat_1', x: 21.25, y: 12.4 },
+      { id: 'casino_bj_seat_2', x: 22.0, y: 12.65 },
+      { id: 'casino_bj_seat_3', x: 22.75, y: 12.4 },
+    ];
+    bjSeats.forEach(s => {
+      seats.push({
+        id: s.id,
+        kind: 'single',
+        x: s.x,
+        y: s.y,
+        rot: Math.PI,
+        slots: [{ id: `${s.id}_0`, x: s.x, y: s.y + 0.05, rot: Math.PI, lean: 0 }],
+      });
+    });
+
+    // 4. Slot Machines (Southwest Plaza, x=7.0, y=17.5)
+    hotspots.push({
+      id: 'casino_slot_machine',
+      type: 'slot_machine',
+      x: 7.0,
+      y: 17.5,
+      radius: 2.2,
+      prompt: '🎰 Máy Đánh Bạc Slot Machine · [E] Gạt cần quay Jackpot 777',
+    });
+    colliders.push({ x: 7.0, y: 17.5, r: 0.8 });
+
+    // 5. Plinko Board (Southeast Plaza, x=22.0, y=17.5)
+    hotspots.push({
+      id: 'casino_plinko',
+      type: 'plinko',
+      x: 22.0,
+      y: 17.5,
+      radius: 2.2,
+      prompt: '⚡ Tháp Đinh Plinko · [E] Thả bóng chông nảy 100x',
+    });
+    colliders.push({ x: 22.0, y: 17.5, r: 0.8 });
+
+    // VIP Lounge Sofas in front of southern arcade
+    [
+      { id: 'casino_sofa_left', x: 11.0, y: 17.5 },
+      { id: 'casino_sofa_right', x: 18.0, y: 17.5 },
     ].forEach(cs => {
       seats.push({
         id: cs.id,

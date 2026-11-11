@@ -9,6 +9,7 @@ export const BGM_TRACKS = {
   tet: 'https://files.catbox.moe/87vqx2.mp3',
   halloween: 'https://files.catbox.moe/5b1qly.mp3',
   christmas: 'https://files.catbox.moe/n4lzai.mp3',
+  casino: 'https://files.catbox.moe/87vqx2.mp3',
 };
 
 let audioCtx = null;
@@ -434,6 +435,103 @@ export function playSfx(name, theme = currentTheme) {
           osc.start(now + idx * 0.06);
           osc.stop(now + idx * 0.06 + 0.2);
         });
+        break;
+      }
+      // ===== CASINO & ARCADE THEME SFX =====
+      case 'roulette_spin': {
+        // Ball rolling in wheel track (rapid diminishing clicks)
+        for (let i = 0; i < 12; i++) {
+          const t = now + i * 0.08 + Math.pow(i * 0.04, 1.4);
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(800 + (12 - i) * 30, t);
+          gain.gain.setValueAtTime(0.2, t);
+          gain.gain.exponentialRampToValueAtTime(0.005, t + 0.025);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.03);
+        }
+        break;
+      }
+      case 'duck_quack': {
+        // Comic duck quack (wa-wa pitch sweep)
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(460, now + 0.08);
+        osc.frequency.exponentialRampToValueAtTime(280, now + 0.22);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.26);
+        break;
+      }
+      case 'blackjack_deal': {
+        // Snappy card sliding and chip clink
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1400, now);
+        osc.frequency.exponentialRampToValueAtTime(600, now + 0.06);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.09);
+        break;
+      }
+      case 'slot_lever': {
+        // Heavy mechanical lever pull
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.exponentialRampToValueAtTime(70, now + 0.18);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.22);
+        break;
+      }
+      case 'slot_win':
+      case 'plinko_win': {
+        // Vegas Casino Jackpot celebratory arpeggio (C-E-G-C-E-G)
+        [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+          gain.gain.setValueAtTime(0.25, now + idx * 0.07);
+          gain.gain.exponentialRampToValueAtTime(0.005, now + idx * 0.07 + 0.45);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + idx * 0.07);
+          osc.stop(now + idx * 0.07 + 0.5);
+        });
+        break;
+      }
+      case 'plinko_peg': {
+        // High-pitched crystal ping on nail contact
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        const freqs = [1046.5, 1174.66, 1318.51, 1567.98, 1760.0, 2093.0];
+        const f = freqs[Math.floor(Math.random() * freqs.length)];
+        osc.frequency.setValueAtTime(f, now);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.005, now + 0.09);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.1);
         break;
       }
       default:

@@ -43,6 +43,15 @@ import {
   getBgmVolume,
 } from './audio.js';
 import { MinigameManager } from './minigames.js';
+import {
+  initCasino,
+  openRoulette,
+  openDuckDerby,
+  openBlackjack,
+  openSlotMachine,
+  openPlinko,
+  getChips,
+} from './casino.js';
 
 let rtc = null;
 let minigames = null;
@@ -277,8 +286,9 @@ const OFFICIAL_ROOMS = [
   { id: 'lau-dai-halloween', title: 'Lâu Đài Halloween', theme: 'halloween', official: true },
   { id: 'pho-hoa-ngay-tet', title: 'Phố Hoa Ngày Tết', theme: 'tet', official: true },
   { id: 'vuon-tinh-yeu-valentine', title: 'Vườn Tình Yêu Valentine', theme: 'valentine', official: true },
+  { id: 'sanh-casino-arcade-test', title: '🎰 Sòng Bài Casino & Arcade (Map Test)', theme: 'casino', official: true },
 ];
-const THEME_ICON = { christmas: '🎄', halloween: '🎃', tet: '🧧', valentine: '💝' };
+const THEME_ICON = { christmas: '🎄', halloween: '🎃', tet: '🧧', valentine: '💝', casino: '🎰' };
 
 // ---------- State ----------
 let net,
@@ -332,6 +342,7 @@ try {
   world = new World(scene);
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
   initAudio();
+  initCasino(world, toast);
 } catch (e) {
   console.error(e);
   document.addEventListener('DOMContentLoaded', () => toast('Trình duyệt không hỗ trợ WebGL'));
@@ -2587,6 +2598,17 @@ function updateHud() {
   if ($('btnView')) $('btnView').textContent = mode === 'fps' ? '👁️ FPS' : '🎥 TPS';
   if (me?.av) me.av.root.visible = mode !== 'fps' && camDist > 0.55;
   updateLockHud();
+
+  if ($('btnCasinoWallet')) {
+    const isCasino = state?.theme === 'casino';
+    $('btnCasinoWallet').classList.toggle('hidden', !isCasino);
+    const countEl = $('btnCasinoWallet').querySelector('.casino-chip-count');
+    if (countEl) countEl.textContent = `$${getChips().toLocaleString()}`;
+    $('btnCasinoWallet').onclick = () => {
+      claimFreeChips();
+      updateHud();
+    };
+  }
 }
 
 // ---------- Seat & Hotspot Proximity / Interaction ----------
@@ -2821,6 +2843,21 @@ function triggerInteract(target = activeTarget) {
         me.av?.playEmote('interact');
         emitOp({ k: 'firework', x: h.x, y: h.y, kind: 'cracker', by: me.name });
         toast('🧨 Pháo nổ lách tách rộn ràng góc sân!');
+        break;
+      case 'roulette':
+        openRoulette();
+        break;
+      case 'duck_derby':
+        openDuckDerby();
+        break;
+      case 'blackjack':
+        openBlackjack();
+        break;
+      case 'slot_machine':
+        openSlotMachine();
+        break;
+      case 'plinko':
+        openPlinko();
         break;
     }
   }
