@@ -100,6 +100,7 @@ export class World {
     this.casinoObjs = [];
     this.features = { hotspots: [], seats: [], colliders: [], extraProps: [] };
     this.t = 0;
+    this.timeOfDay = 'day';
   }
 
   /** Reconcile scene with shared room state. */
@@ -113,6 +114,7 @@ export class World {
       }
       this.buildMap(state.map, state.theme, roomSeed);
     }
+    this.setDayNightTime(state.timeOfDay || this.timeOfDay);
 
     // Sync user-placed decorations & ground cards
     this.syncList(state.decor || [], this.decorObjs, d => {
@@ -182,7 +184,22 @@ export class World {
     this.hemi.intensity = key === 'halloween' ? 0.72 : key === 'valentine' ? 0.88 : 0.92;
     this.sun.color.set(key === 'halloween' ? '#c4b5fd' : key === 'valentine' ? '#fecdd3' : '#fff1d6');
     this.sun.intensity = key === 'halloween' ? 0.68 : key === 'valentine' ? 0.96 : 1.15;
+    this.dayHemiIntensity = this.hemi.intensity;
+    this.daySunIntensity = this.sun.intensity;
+    this.dayFogColor = bg.clone();
+    this.setDayNightTime(this.timeOfDay);
     this.initParticles(th.particles);
+  }
+
+  setDayNightTime(time) {
+    const mode = String(time || '').toLowerCase();
+    if (mode !== 'day' && mode !== 'night') return false;
+    this.timeOfDay = mode;
+    const factor = mode === 'night' ? 0.3 : 1;
+    this.hemi.intensity = this.dayHemiIntensity * factor;
+    this.sun.intensity = this.daySunIntensity * factor;
+    this.scene.fog.color.copy(this.dayFogColor).multiplyScalar(factor);
+    return true;
   }
 
   buildMap(map, themeKey, roomSeed = 'lobby') {

@@ -614,6 +614,70 @@
   background: rgba(0, 0, 0, 0.4);
 }
 
+/* Live Multiplayer Activity Ticker */
+.casino-live-ticker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.9);
+  border-top: 1px solid rgba(251, 191, 36, 0.25);
+  padding: 8px 16px;
+  font-size: 12.5px;
+  color: #cbd5e1;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ticker-pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 800;
+  color: #ef4444;
+  letter-spacing: 0.5px;
+}
+.ticker-text {
+  font-weight: 600;
+  color: #fde047;
+  animation: tickerSlideIn 0.3s ease-out;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+@keyframes tickerSlideIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Peer chip badge on Roulette */
+.peer-chip-badge {
+  display: inline-block;
+  background: #0284c7;
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 8px;
+  margin-left: 3px;
+  border: 1px solid #38bdf8;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+}
+
+/* Trường Giang Slime Floating Speech Bubble */
+.speech-bubble-3d {
+  background: #ffffff;
+  color: #1e1b4b;
+  font-weight: 800;
+  font-size: 13px;
+  border: 2px solid #f59e0b;
+  border-radius: 12px;
+  padding: 6px 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  position: absolute;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+  animation: speechPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
 /* Blinded screen effect for admin troll command */
 body.blinded-screen #game,
 body.blinded-screen #hud,

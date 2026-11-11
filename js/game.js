@@ -53,6 +53,7 @@ import {
   getChips,
   addChips,
   resetChips,
+  resetCoins,
   redeemCode,
   handleCasinoBroadcast,
   VALID_CODES,
@@ -63,13 +64,9 @@ import {
   equipShopItem,
   unequipShopItem,
 } from './casino.js';
-import {
-  AvatarCustomizerModal,
-  loadSavedAvatarConfig,
-  saveAvatarConfig,
-} from './customizer.js';
+import { loadAvatarCustomization, openAvatarStudioModal } from './avatar_customizer.js';
 
-let customizerModal = null;
+let myAvatarCustom = loadAvatarCustomization();
 let rtc = null;
 let minigames = null;
 
@@ -113,6 +110,8 @@ function initRtc(selfId) {
 // Unlock remote WebRTC audio playback on user gesture
 window.addEventListener('pointerdown', () => rtc?.unlockAudioPlayback(), { passive: true });
 window.addEventListener('keydown', () => rtc?.unlockAudioPlayback(), { passive: true });
+window.addEventListener('click', () => rtc?.unlockAudioPlayback(), { passive: true });
+window.addEventListener('touchstart', () => rtc?.unlockAudioPlayback(), { passive: true });
 
 function updateMicUI(isEnabled) {
   const btn = $('btnMic');
@@ -140,6 +139,7 @@ function updateMicUI(isEnabled) {
 
 async function toggleMic() {
   if (!rtc) return;
+  rtc.unlockAudioPlayback();
   await rtc.toggleMic();
 }
 
@@ -353,10 +353,30 @@ let jailedPos = null;
 let currentGravity = 20;
 let adminSpinUntil = 0;
 let mobileMoveVector = { x: 0, y: 0 };
-const adminBanList = new Set();
-const adminMuteList = new Set();
+const adminFireEffects = new WeakMap();
 
 const isHost = () => !!(state && net && state.hostId === net.selfId);
+const requireRoomHost = () => {
+  if (isHost()) return true;
+  toast('⛔ Lệnh này chỉ Chủ phòng mới có thể thực hiện!');
+  return false;
+};
+const normalizePlayerName = name => String(name || '').trim().toLowerCase();
+const isAdminTarget = (target, name) =>
+  normalizePlayerName(target) === 'all' || normalizePlayerName(target) === normalizePlayerName(name);
+
+function applyTemporaryAdminFire(avatar, fallbackAura) {
+  if (!avatar) return;
+  const activeEffect = adminFireEffects.get(avatar);
+  if (activeEffect) clearTimeout(activeEffect.timer);
+  const previousAura = activeEffect?.previousAura ?? avatar.auraKey ?? fallbackAura ?? null;
+  avatar.setAura('fire');
+  const timer = setTimeout(() => {
+    if (avatar.auraKey === 'fire') avatar.setAura(previousAura);
+    adminFireEffects.delete(avatar);
+  }, 5000);
+  adminFireEffects.set(avatar, { previousAura, timer });
+}
 
 // FPS Counter state
 let frameCount = 0,
@@ -420,13 +440,13 @@ function initGameSplashScreen() {
 }
 
 function initMobileControls() {
-  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.innerWidth <= 840;
+  const isMobile =
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    window.matchMedia('(pointer: coarse)').matches;
   const container = $('mobileControls');
   if (!container) return;
 
-  if (isTouch) {
-    container.classList.remove('hidden');
-  }
+  container.classList.toggle('hidden', !isMobile);
 
   const joystickZone = $('joystickZone');
   const joystickBase = $('joystickBase');
@@ -645,6 +665,21 @@ $('inName').addEventListener('change', () => {
     }
   }
 });
+
+function openMyAvatarStudio() {
+  openAvatarStudioModal(myAvatarCustom, (newCfg) => {
+    myAvatarCustom = newCfg;
+    if (me?.av) {
+      me.avatarCustom = newCfg;
+      me.av.applyCustomization(newCfg);
+      syncMyAppearance();
+    }
+    toast('✨ Đã lưu diện mạo Avatar mới!');
+  });
+}
+
+$('btnOpenCustomizeFromLobby')?.addEventListener('click', openMyAvatarStudio);
+$('btnOpenAvatarStudio')?.addEventListener('click', openMyAvatarStudio);
 
 let manualRoomIdEdited = false;
 $('inRoom').addEventListener('input', () => {
@@ -1008,6 +1043,8 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
   initRtc(net.selfId);
   $('roomInfo').textContent = `📍 ${roomTitle}`;
   updateLiveStats();
+  updateCasinoChipsUI();
+  updateTitleUI();
 
   initPlayer('yt', onMediaEnded, onPlayerStateChanged);
 
@@ -1023,7 +1060,10 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
       hostId: net.selfId,
       hostName: me.name,
       kickedIds: [],
+      bannedNames: [],
+      mutedNames: [],
       theme: selectedTheme,
+      timeOfDay: 'day',
       map: buildThemeMap(selectedTheme),
       decor: [],
       cards: [],
@@ -1073,6 +1113,11 @@ window.addEventListener('hashchange', () => {
 async function start() {
   if (!me || me.started || isKicked || !state) return;
 
+  if (state.bannedNames?.includes(normalizePlayerName(me.name))) {
+    handleSelfKicked(state.hostName);
+    return;
+  }
+
   // If this room has a password and the player hasn't verified it yet (e.g. joined via direct link)
   if (state.passHash && state.hostId !== net.selfId && verifiedPassHash !== state.passHash) {
     promptRoomPassword(
@@ -1081,6 +1126,9 @@ async function start() {
     );
     return;
   }
+
+  // Reset coin wallet to 0 upon entering/joining room (only codes nạp xu)
+  resetCoins();
 
   me.started = true;
   await loadCharacter();
@@ -1115,6 +1163,12 @@ async function start() {
     console.warn('Error loading equipped items:', err);
   }
 
+  // Apply saved avatar customization
+  if (myAvatarCustom) {
+    me.avatarCustom = myAvatarCustom;
+    me.av.applyCustomization(myAvatarCustom);
+  }
+
   scene.add(me.av.root);
 
   // Immediately synchronize 3D world before starting animation loop
@@ -1133,6 +1187,7 @@ async function start() {
   updateMediaDialog();
   updateLiveStats();
   updateCasinoChipsUI();
+  updateTitleUI();
   updateAdminUIStatus();
   broadcastMyRoomToLobby();
 
@@ -1158,6 +1213,7 @@ const pubInfo = () => ({
   nametagStyle: me.nametagStyle || null,
   isAdmin: typeof isAdminVerified === 'function' ? isAdminVerified() : false,
   seatId: me.seatSlot?.id || null,
+  avatarCustom: me.avatarCustom || null,
 });
 
 function syncMyAppearance() {
@@ -1327,6 +1383,7 @@ async function addOrUpdatePeer(id, d) {
     pumpkinHat: d.pumpkinHat || null,
     heldItem: d.heldItem || null,
     seatId: d.seatId || null,
+    avatarCustom: d.avatarCustom !== undefined ? d.avatarCustom : p.avatarCustom,
   });
   if (state && id === state.hostId && d.name) {
     state.hostName = d.name;
@@ -1344,6 +1401,7 @@ async function addOrUpdatePeer(id, d) {
     p.av.setAccessory(p.accessory);
     p.av.setAura(p.aura);
     p.av.setAdminAura?.(!!p.isAdmin);
+    if (p.avatarCustom) p.av.applyCustomization(p.avatarCustom);
     return;
   }
   if (p.loading) return;
@@ -1357,6 +1415,7 @@ async function addOrUpdatePeer(id, d) {
     costume: p.costume,
     pumpkinHat: p.pumpkinHat,
   });
+  if (p.avatarCustom) p.av.applyCustomization(p.avatarCustom);
   p.av.setHeldItem(p.heldItem);
   p.av.setAccessory(p.accessory);
   p.av.setAura(p.aura);
@@ -1427,6 +1486,13 @@ const handlers = {
     broadcastMyRoomToLobby();
   },
   hello(d, id) {
+    const name = String(d?.name || '').trim();
+    if (state?.bannedNames?.includes(normalizePlayerName(name))) {
+      if (isHost()) {
+        emitOp({ k: 'kick', targetId: id, targetName: name, byHost: state.hostId });
+      }
+      return;
+    }
     addOrUpdatePeer(id, d);
     rtc?.getOrCreatePeer(id);
   },
@@ -1468,6 +1534,9 @@ const handlers = {
 
     const first = !state;
     state = s;
+    state.kickedIds = Array.isArray(state.kickedIds) ? state.kickedIds : [];
+    state.bannedNames = Array.isArray(state.bannedNames) ? state.bannedNames : [];
+    state.mutedNames = Array.isArray(state.mutedNames) ? state.mutedNames : [];
     if (s.roomTitle) roomTitle = s.roomTitle;
     gotState = true;
 
@@ -1494,6 +1563,7 @@ const handlers = {
   chat(d, id) {
     if (state?.kickedIds?.includes(id)) return;
     const p = peers.get(id);
+    if (state?.mutedNames?.includes(normalizePlayerName(p?.name))) return;
     if (p) {
       p.av?.say(d.t);
       logChat(p.name, d.t, { fromId: id, hue: d.hue || p.hue });
@@ -1604,6 +1674,41 @@ function applyOp(op, senderId = null) {
         broadcastMyRoomToLobby();
         toast(`🚫 Chủ phòng đã mời ${op.targetName || p.name} ra khỏi phòng.`);
       }
+      break;
+    }
+    case 'admin_ban': {
+      state.bannedNames = state.bannedNames || [];
+      const target = normalizePlayerName(op.name);
+      if (!target) break;
+      state.bannedNames = state.bannedNames.filter(name => normalizePlayerName(name) !== target);
+      if (op.banned) {
+        state.bannedNames.push(target);
+        const pEntry = findPeerByName(op.name);
+        if (isHost() && pEntry) {
+          emitOp({ k: 'kick', targetId: pEntry[0], targetName: pEntry[1].name, byHost: state.hostId });
+        }
+      }
+      break;
+    }
+    case 'admin_mute': {
+      state.mutedNames = state.mutedNames || [];
+      const target = normalizePlayerName(op.name);
+      if (!target) break;
+      state.mutedNames = state.mutedNames.filter(name => normalizePlayerName(name) !== target);
+      if (op.muted) state.mutedNames.push(target);
+      break;
+    }
+    case 'admin_time': {
+      if (!world.setDayNightTime(op.time)) break;
+      state.timeOfDay = op.time;
+      toast(`☀️ Đã chỉnh thời gian sang: ${op.time}`);
+      break;
+    }
+    case 'admin_clearmap': {
+      state.decor = [];
+      state.cards = [];
+      world.sync(state, roomName);
+      toast('🧹 Đã dọn dẹp sạch sẽ đồ trang trí trên sàn!');
       break;
     }
     case 'card+':
@@ -1745,14 +1850,14 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_freeze': {
-      if (op.target === me.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me.name)) {
         isFrozen = !!op.frozen;
         toast(isFrozen ? '🧊 Bạn đã bị Admin đóng băng!' : '🔥 Bạn đã được giải phóng!');
       }
       break;
     }
     case 'admin_jail': {
-      if (op.target === me.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me.name)) {
         isJailed = !!op.jailed;
         if (isJailed) {
           jailedPos = { x: me.x, y: me.y };
@@ -1765,7 +1870,7 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_teleport': {
-      if (op.target === me.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me.name)) {
         me.x = op.toX;
         me.y = op.toY;
         me.h = 0;
@@ -1774,7 +1879,7 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_kill': {
-      if (op.target === me.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me.name)) {
         me.x = 14.5;
         me.y = 18.5;
         me.h = 0;
@@ -1783,7 +1888,7 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_respawn': {
-      if (op.target === me.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me.name)) {
         me.x = 14.5;
         me.y = 18.5;
         me.h = 0;
@@ -1792,7 +1897,7 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_blind': {
-      if (op.target === me.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me.name)) {
         if (op.blind) {
           document.body.classList.add('blinded-screen');
           toast('🕶️ Bạn đã bị Admin làm mù mắt tạm thời!');
@@ -1804,29 +1909,31 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_size': {
-      if (op.target === me?.name || op.target === 'all') {
+      const targetsMe = isAdminTarget(op.target, me?.name);
+      if (targetsMe) {
         if (me?.av) me.av.root.scale.set(op.scale, op.scale, op.scale);
       }
-      if (op.target !== me?.name) {
-        if (op.target === 'all') {
-          peers.forEach(p => {
-            if (p.av) p.av.root.scale.set(op.scale, op.scale, op.scale);
-          });
-        } else {
-          const pEntry = findPeerByName(op.target);
-          if (pEntry && pEntry[1].av) {
-            pEntry[1].av.root.scale.set(op.scale, op.scale, op.scale);
-          }
+      if (normalizePlayerName(op.target) === 'all') {
+        peers.forEach(p => {
+          if (p.av) p.av.root.scale.set(op.scale, op.scale, op.scale);
+        });
+      } else if (!targetsMe) {
+        const pEntry = findPeerByName(op.target);
+        if (pEntry && pEntry[1].av) {
+          pEntry[1].av.root.scale.set(op.scale, op.scale, op.scale);
         }
       }
       break;
     }
     case 'admin_fire': {
-      if (op.target === me?.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me?.name)) {
         playSfx('firecracker', 'tet');
-        me.av?.showTomatoSplat?.();
-        toast('🔥 Bạn đang bị Admin đốt lửa bốc khói dữ dội!');
+        applyTemporaryAdminFire(me.av, me.aura);
+        toast('🔥 Bạn đang bốc cháy trong 5 giây!');
       }
+      peers.forEach(p => {
+        if (isAdminTarget(op.target, p.name)) applyTemporaryAdminFire(p.av, p.aura);
+      });
       break;
     }
     case 'admin_gravity': {
@@ -1839,7 +1946,7 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_spin': {
-      if (op.target === me?.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me?.name)) {
         adminSpinUntil = performance.now() + 6500;
         toast('💫 Bạn bị Admin làm xoay mòng mòng chóng mặt!');
       }
@@ -1867,7 +1974,7 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_rocket': {
-      if (op.target === me?.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me?.name)) {
         me.vy = 42;
         me.h += 3;
         playSfx('firework_rocket', 'tet');
@@ -1876,26 +1983,26 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_slap': {
-      if (op.target === me?.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me?.name)) {
         me.vy = 6;
         me.h += 0.8;
         me.x += (Math.random() - 0.5) * 4;
         me.y += (Math.random() - 0.5) * 4;
-        me.av?.showTomatoSplat?.();
+        me.av?.triggerSplat?.(4500);
         playSfx('splat', 'halloween');
         toast(`🍅 BỐP! Bạn vừa bị Admin ${op.by} tát lộn mèo + Cà chua dính đầy mặt!`);
       }
       break;
     }
     case 'admin_dance': {
-      if (op.target === me?.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me?.name)) {
         me.av?.playEmote?.('dance');
         toast('💃 Nhạc lên là quẩy! Toàn server cùng nhảy múa!');
       }
       break;
     }
     case 'admin_clown': {
-      if (op.target === me?.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me?.name)) {
         me.pumpkinHat = me.pumpkinHat ? null : 'classic';
         me.av?.setPumpkinHat?.(me.pumpkinHat);
         syncMyAppearance();
@@ -1904,12 +2011,12 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_limb_state': {
-      if (op.target === me?.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me?.name)) {
         me.av?.setLimbState?.(op.limbs);
         playSfx('splat', 'halloween');
       }
       peers.forEach(p => {
-        if (op.target === p.name || op.target === 'all') {
+        if (isAdminTarget(op.target, p.name)) {
           p.av?.setLimbState?.(op.limbs);
         }
       });
@@ -1950,12 +2057,12 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_dinnerbone': {
-      if (op.target === me.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me.name)) {
         me.isDinnerbone = !me.isDinnerbone;
         me.av?.setDinnerbone?.(me.isDinnerbone);
       }
       peers.forEach(p => {
-        if (op.target === p.name || op.target === 'all') {
+        if (isAdminTarget(op.target, p.name)) {
           p.isDinnerbone = !p.isDinnerbone;
           p.av?.setDinnerbone?.(p.isDinnerbone);
         }
@@ -1970,28 +2077,36 @@ function applyOp(op, senderId = null) {
       spawnGuillotineStrike(op.target);
       break;
     }
+    case 'admin_truonggiang': {
+      if (op.active) {
+        spawnTruongGiangSlime(op.target, op.by);
+      } else {
+        removeTruongGiangSlime();
+      }
+      break;
+    }
     case 'admin_golden': {
-      if (op.target === me?.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me?.name)) {
         me.av?.setMidasGolden?.(true);
         toast(`✨ Bạn vừa được Admin ${op.by} hóa thành TƯỢNG VÀNG RỰC RỠ!`);
       }
       peers.forEach(p => {
-        if (op.target === p.name || op.target === 'all') p.av?.setMidasGolden?.(true);
+        if (isAdminTarget(op.target, p.name)) p.av?.setMidasGolden?.(true);
       });
       break;
     }
     case 'admin_ghost': {
-      if (op.target === me?.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me?.name)) {
         me.av?.setGhostMode?.(true);
         toast(`👻 Bạn vừa được Admin ${op.by} hóa thành HỒN MA TRONG SUỐT!`);
       }
       peers.forEach(p => {
-        if (op.target === p.name || op.target === 'all') p.av?.setGhostMode?.(true);
+        if (isAdminTarget(op.target, p.name)) p.av?.setGhostMode?.(true);
       });
       break;
     }
     case 'admin_rainbow': {
-      if (op.target === me?.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me?.name)) {
         me.nametagStyle = 'rainbow';
         me.aura = 'lightning';
         me.av?.setName(me.name, me.title, 'rainbow');
@@ -2002,7 +2117,7 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_heal': {
-      if (op.target === me?.name || op.target === 'all') {
+      if (isAdminTarget(op.target, me?.name)) {
         document.querySelectorAll('.tomato-splat-overlay').forEach(el => el.remove());
         me.av?.playEmote?.('cheer');
         toast(`💖 Bạn đã được Admin ${op.by} hồi phục sinh lực và rửa sạch cà chua!`);
@@ -2045,20 +2160,26 @@ function applyOp(op, senderId = null) {
       currentGravity = 20;
       adminSpinUntil = 0;
       adminBuilderMode = false;
+      $('btoolsHud')?.classList.add('hidden');
       world.clearBuilderBlocks();
+      removeTruongGiangSlime();
       document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active', 'matrix-active', 'builder-mode-active');
       document.querySelectorAll('.tomato-splat-overlay, .laser-flash-overlay').forEach(el => el.remove());
       if (me?.av) {
+        me.isDinnerbone = false;
         me.av.root.scale.set(1, 1, 1);
         me.av.root.visible = true;
+        me.av.setDinnerbone?.(false);
         me.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
         me.av.setMidasGolden?.(false);
         me.av.setGhostMode?.(false);
       }
       peers.forEach(p => {
+        p.isDinnerbone = false;
         if (p.av) {
           p.av.root.scale.set(1, 1, 1);
           p.av.root.visible = true;
+          p.av.setDinnerbone?.(false);
           p.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
           p.av.setMidasGolden?.(false);
           p.av.setGhostMode?.(false);
@@ -2234,7 +2355,7 @@ function sendChatMessage(text) {
     const handled = executeAdminCommand(t);
     if (handled) return;
   }
-  if (adminMuteList.has(me.name.toLowerCase())) {
+  if (state?.mutedNames?.includes(normalizePlayerName(me.name))) {
     toast('🔇 Bạn đã bị Admin cấm phát ngôn trong phòng!');
     return;
   }
@@ -2790,6 +2911,10 @@ const openDialog = id => {
   keys.clear();
   $(id).classList.remove('hidden');
 };
+const closeDialog = id => {
+  keys.clear();
+  $(id)?.classList.add('hidden');
+};
 document.querySelectorAll('[data-close]').forEach(b => (b.onclick = () => {
   keys.clear();
   b.closest('.overlay').classList.add('hidden');
@@ -2942,6 +3067,14 @@ $('topTheme').onchange = e => {
   emitOp({ k: 'theme', theme: e.target.value, byHost: net.selfId });
 };
 
+$('btnDrawerAvatarStudio').onclick = () => {
+  closeVerticalDrawer();
+  openMyAvatarStudio();
+};
+$('btnDrawerCustomize').onclick = () => {
+  closeVerticalDrawer();
+  openMyAvatarStudio();
+};
 $('btnLobby').onclick = () => { closeVerticalDrawer(); openLobbyOverlay(); };
 $('btnOpenLobbyFromSettings').onclick = () => {
   $('dlgSettings').classList.add('hidden');
@@ -3565,7 +3698,8 @@ function triggerInteract(target = activeTarget) {
         break;
       case 'secret_passage':
         playSfx('wishing_fountain', 'valentine');
-        openPassageRiddleDialog(state?.theme || 'christmas');
+        toast('✨ Mật đạo mở ra! Bạn được đưa thẳng tới Mật Thất Casino!');
+        enterSecretCasino();
         break;
       case 'casino_exit':
         playSfx('pop');
@@ -4710,6 +4844,7 @@ function updateCasinoChipsUI() {
 
 $('btnEnterCode').onclick = openCodeDialog;
 $('btnCasinoWallet').onclick = openCodeDialog;
+if ($('statWalletBtn')) $('statWalletBtn').onclick = openCodeDialog;
 window.addEventListener('gh_open_code_dialog', openCodeDialog);
 
 $('btnSubmitCode').onclick = () => {
@@ -4878,11 +5013,25 @@ function selectTitle(titleItem) {
   }
   localStorage.setItem('gh_selected_title', chosenTitle);
   syncMyAppearance();
+  updateTitleUI();
   toast(`👑 Bạn đã trang bị danh hiệu: [${chosenTitle || 'Không'}]`);
   closeDialog('dlgTitles');
 }
 
+function updateTitleUI() {
+  const t = me?.title || localStorage.getItem('gh_selected_title') || '';
+  const lbl = $('statTitleLabel');
+  if (lbl) {
+    lbl.textContent = t || 'Danh Hiệu';
+  }
+  const btn = $('statTitleBtn');
+  if (btn) {
+    btn.title = t ? `Danh hiệu hiện tại: ${t} (Bấm để xem & đổi danh hiệu)` : 'Bộ Sưu Tập Danh Hiệu (Bấm để chọn danh hiệu)';
+  }
+}
+
 $('btnTitles').onclick = openTitlesDialog;
+if ($('statTitleBtn')) $('statTitleBtn').onclick = openTitlesDialog;
 
 // ============================================================================
 // ROBLOX ADMIN COMMANDS SYSTEM & PASSWORD AUTHENTICATION ("grinding shit")
@@ -5416,7 +5565,7 @@ function spawnMobAttack(mobType = 'bat', targetName, byAdmin = 'Admin') {
     let ty = me.h + 0.5;
     let tz = me.y * TILE;
 
-    if (targetName && targetName !== me.name && targetName !== 'all') {
+    if (targetName && !isAdminTarget(targetName, me.name)) {
       const pEntry = findPeerByName(targetName);
       if (pEntry) {
         tx = pEntry[1].x * TILE;
@@ -5440,7 +5589,7 @@ function spawnMobAttack(mobType = 'bat', targetName, byAdmin = 'Admin') {
       playSfx('explosion', 'tet');
       playSfx('splat', 'halloween');
 
-      if (targetName === me.name || targetName === 'all' || !targetName) {
+      if (isAdminTarget(targetName, me.name) || !targetName) {
         me.av?.showTomatoSplat?.();
         document.body.classList.add('earthquake-active');
         setTimeout(() => document.body.classList.remove('earthquake-active'), 1200);
@@ -5464,7 +5613,7 @@ function spawnMobAttack(mobType = 'bat', targetName, byAdmin = 'Admin') {
       }
 
       peers.forEach(p => {
-        if (targetName === p.name || targetName === 'all') {
+        if (isAdminTarget(targetName, p.name)) {
           p.av?.showTomatoSplat?.();
           p.av?.spawnLegoPop?.(0, 1.2, 0);
           p.av?.playEmote?.('scared');
@@ -5487,7 +5636,7 @@ function spawnCloneHorde(targetName) {
 
   let tx = me.x * TILE;
   let tz = me.y * TILE;
-  if (targetName && targetName !== me.name && targetName !== 'all') {
+  if (targetName && !isAdminTarget(targetName, me.name)) {
     const pEntry = findPeerByName(targetName);
     if (pEntry) {
       tx = pEntry[1].x * TILE;
@@ -5542,7 +5691,7 @@ function spawnCloneHorde(targetName) {
       requestAnimationFrame(animClones);
     } else {
       playSfx('explosion', 'tet');
-      if (targetName === me.name || targetName === 'all' || !targetName) {
+      if (isAdminTarget(targetName, me.name) || !targetName) {
         me.av?.spawnLegoPop?.(0, 1.2, 0);
         toast(`💀 ĐÀN PHÂN THÂN ĐÃ TÚM ĐƯỢC VÀ DẬP BẠN TƠI TẢ!`);
         me.vy = 8;
@@ -5557,7 +5706,7 @@ function spawnGuillotineStrike(targetName) {
   toast(`⚔️ MÁY CHÉM GUILLOTINE KHỔNG LỒ GIÁNG XUỐNG [${targetName || 'Mục tiêu'}]!`);
   let tx = me.x * TILE;
   let tz = me.y * TILE;
-  if (targetName && targetName !== me.name && targetName !== 'all') {
+  if (targetName && !isAdminTarget(targetName, me.name)) {
     const pEntry = findPeerByName(targetName);
     if (pEntry) {
       tx = pEntry[1].x * TILE;
@@ -5601,7 +5750,7 @@ function spawnGuillotineStrike(targetName) {
       // Trúng đích: XOẸT!
       playSfx('wood');
       playSfx('splat', 'halloween');
-      if (targetName === me.name || targetName === 'all' || !targetName) {
+      if (isAdminTarget(targetName, me.name) || !targetName) {
         me.av?.spawnLegoPop?.(0, 1.4, 0);
         me.av?.setLimbState?.({ head: false });
         toast('🪓 XOẸT! Bạn đã bị chém bay đầu rơi Lego!');
@@ -5610,7 +5759,7 @@ function spawnGuillotineStrike(targetName) {
         }, 3500);
       }
       peers.forEach(p => {
-        if (targetName === p.name || targetName === 'all') {
+        if (isAdminTarget(targetName, p.name)) {
           p.av?.spawnLegoPop?.(0, 1.4, 0);
           p.av?.setLimbState?.({ head: false });
           setTimeout(() => p.av?.setLimbState?.({ head: true }), 3500);
@@ -5620,6 +5769,224 @@ function spawnGuillotineStrike(targetName) {
     }
   };
   requestAnimationFrame(animBlade);
+}
+
+// ============================================================================
+// TRƯỜNG GIANG SLIME CUBE TROLL ENTITY (:truonggiang)
+// Minecraft style slime bouncing cube with 6-sided comedian Trường Giang face,
+// hopping around and chasing a random non-admin player with funny quotes
+// ============================================================================
+let activeTruongGiangSlime = null;
+let truongGiangAnimFrame = null;
+let truongGiangSpeechTimer = null;
+
+export function removeTruongGiangSlime() {
+  if (activeTruongGiangSlime) {
+    if (activeTruongGiangSlime.speechEl) activeTruongGiangSlime.speechEl.remove();
+    scene.remove(activeTruongGiangSlime.group);
+    activeTruongGiangSlime = null;
+  }
+  if (truongGiangAnimFrame) {
+    cancelAnimationFrame(truongGiangAnimFrame);
+    truongGiangAnimFrame = null;
+  }
+  if (truongGiangSpeechTimer) {
+    clearTimeout(truongGiangSpeechTimer);
+    truongGiangSpeechTimer = null;
+  }
+}
+
+export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin') {
+  removeTruongGiangSlime();
+
+  // If no target specified or if target is admin, automatically find a non-admin player in room
+  let target = targetName;
+  if (!target) {
+    const nonAdminPeers = [];
+    peers.forEach(p => {
+      if (p.name && !isAdminUser(p.name) && !p.isAdmin) {
+        nonAdminPeers.push(p.name);
+      }
+    });
+    if (nonAdminPeers.length > 0) {
+      target = nonAdminPeers[Math.floor(Math.random() * nonAdminPeers.length)];
+    } else {
+      const allPeers = [];
+      peers.forEach(p => { if (p.name) allPeers.push(p.name); });
+      target = allPeers.length > 0 ? allPeers[0] : me.name;
+    }
+  }
+
+  toast(`🤪 ${byAdmin} đã triệu hồi Khối Slime TRƯỜNG GIANG săn đuổi [${target}]!`);
+  playSfx('duck_quack', 'casino');
+
+  const slimeGroup = new THREE.Group();
+  const texLoader = new THREE.TextureLoader();
+  const tgTex = texLoader.load('assets/truonggiang.webp');
+  tgTex.colorSpace = THREE.SRGBColorSpace;
+
+  const cubeGeo = new THREE.BoxGeometry(1.25, 1.25, 1.25);
+  // Apply Trường Giang face to all 6 faces of the cube
+  const cubeMat = new THREE.MeshStandardMaterial({
+    map: tgTex,
+    roughness: 0.35,
+    metalness: 0.1,
+  });
+  const slimeMesh = new THREE.Mesh(cubeGeo, cubeMat);
+  slimeMesh.castShadow = true;
+  slimeMesh.position.y = 0.625;
+  slimeGroup.add(slimeMesh);
+
+  // Position slime near admin or target
+  slimeGroup.position.set(me.x * TILE + 2, 0, me.y * TILE + 2);
+  scene.add(slimeGroup);
+
+  // Speech bubble DOM element attached to 3D world position
+  const speechEl = document.createElement('div');
+  speechEl.className = 'speech-bubble-3d';
+  speechEl.style.display = 'none';
+  document.body.appendChild(speechEl);
+
+  const funnyQuotes = [
+    'Ủa alo?! Gì dị ba?! 😱',
+    'Ai đó cứu tui dới chèn ơi! 😭',
+    'Em xui quá anh em ơi! 🤦‍♂️',
+    'Mười Khó tới kiếm chuyện nè! 💥',
+    'Chạy đâu cho thoát hả cưng! 🏃💨',
+    'Nhìn cái mặt tui quạu ghê hôn?! 😡',
+    'Trời ơi là trời! Đau ruột thừa ghê! 🤣',
+    'Bữa nay xui tận mạng rồi! 💀',
+    'Ủa em làm cái gì sai hả đại ca?! 🥺',
+    'Đứng lại đó nói chiện đàng hoàng coi! 🥊',
+    'Né ra coi, mỡ nó dồn lên não rồi! 😂',
+  ];
+
+  function showSpeech(text, durationMs = 2800) {
+    speechEl.textContent = text;
+    speechEl.style.display = 'block';
+    if (truongGiangSpeechTimer) clearTimeout(truongGiangSpeechTimer);
+    truongGiangSpeechTimer = setTimeout(() => {
+      speechEl.style.display = 'none';
+    }, durationMs);
+  }
+
+  showSpeech('Mười Khó xuất chiêu! Chạy đâu con sâu! 🏃💨', 3200);
+
+  let vy = 0;
+  let onGround = true;
+  let hopTimer = 0.4;
+  let pesterCooldown = 0;
+  let lastTime = performance.now();
+
+  activeTruongGiangSlime = {
+    group: slimeGroup,
+    mesh: slimeMesh,
+    speechEl,
+    target,
+  };
+
+  function updateSlime() {
+    if (!activeTruongGiangSlime) return;
+
+    const now = performance.now();
+    const dt = Math.min((now - lastTime) / 1000, 0.1);
+    lastTime = now;
+
+    // Determine target world position
+    let tx = me.x * TILE;
+    let tz = me.y * TILE;
+    if (!isAdminTarget(target, me.name)) {
+      const pEntry = findPeerByName(target);
+      if (pEntry) {
+        tx = pEntry[1].x * TILE;
+        tz = pEntry[1].y * TILE;
+      }
+    }
+
+    const dx = tx - slimeGroup.position.x;
+    const dz = tz - slimeGroup.position.z;
+    const dist = Math.hypot(dx, dz);
+
+    if (onGround) {
+      hopTimer -= dt;
+      // Slime squashing effect on ground
+      slimeMesh.scale.set(1.4, 0.6, 1.4);
+
+      if (hopTimer <= 0) {
+        // Slime jump launch!
+        onGround = false;
+        vy = 7.0 + Math.random() * 2.5; // Jump vertical velocity
+        slimeMesh.scale.set(0.75, 1.4, 0.75); // Stretch
+        hopTimer = 0.6 + Math.random() * 0.4;
+        playSfx('plinko_peg', 'casino');
+      }
+    } else {
+      // In air physics
+      vy -= 22.0 * dt; // gravity
+      slimeGroup.position.y += vy * dt;
+
+      // Move horizontally toward target while in air
+      if (dist > 0.3) {
+        const speed = 4.8;
+        slimeGroup.position.x += (dx / dist) * speed * dt;
+        slimeGroup.position.z += (dz / dist) * speed * dt;
+        slimeGroup.rotation.y = Math.atan2(dx, dz);
+      }
+
+      // Air rotation spin
+      slimeMesh.rotation.x += dt * 3.5;
+
+      // Check ground landing
+      if (slimeGroup.position.y <= 0) {
+        slimeGroup.position.y = 0;
+        vy = 0;
+        onGround = true;
+        slimeMesh.rotation.x = 0;
+        slimeMesh.scale.set(1.4, 0.6, 1.4); // Land squash
+        playSfx('plinko_peg', 'casino');
+
+        // Check if close enough to pester target
+        pesterCooldown -= 0.6;
+        if (dist < 2.0 && pesterCooldown <= 0) {
+          pesterCooldown = 3.0;
+          const randomQuote = funnyQuotes[Math.floor(Math.random() * funnyQuotes.length)];
+          showSpeech(randomQuote, 2500);
+          playSfx('slap', 'casino');
+
+          if (isAdminTarget(target, me.name)) {
+            toast(`🤪 Trường Giang Slime vừa ủi mông trêu chọc bạn: "${randomQuote}"`);
+            me.vx = (Math.random() - 0.5) * 6;
+            me.vy = 4;
+            me.av?.showTomatoSplat?.();
+          } else {
+            const pEntry = findPeerByName(target);
+            if (pEntry) {
+              pEntry[1].av?.showTomatoSplat?.();
+            }
+          }
+        }
+      }
+    }
+
+    // Update floating speech bubble screen projection
+    if (speechEl.style.display !== 'none' && camera) {
+      const slimePos = slimeGroup.position.clone();
+      slimePos.y += 1.8;
+      slimePos.project(camera);
+      if (slimePos.z < 1) {
+        const sx = (slimePos.x * 0.5 + 0.5) * window.innerWidth;
+        const sy = (-(slimePos.y * 0.5) + 0.5) * window.innerHeight;
+        speechEl.style.left = `${sx}px`;
+        speechEl.style.top = `${sy}px`;
+      } else {
+        speechEl.style.display = 'none';
+      }
+    }
+
+    truonggiangAnimFrame = requestAnimationFrame(updateSlime);
+  }
+
+  truonggiangAnimFrame = requestAnimationFrame(updateSlime);
 }
 
 // ============================================================================
@@ -5656,7 +6023,7 @@ function spawnLaserStrike(x, y, targetName, byAdmin = 'Admin') {
   document.body.appendChild(flash);
   setTimeout(() => flash.remove(), 700);
 
-  if (targetName === me.name || targetName === 'all') {
+  if (isAdminTarget(targetName, me.name)) {
     me.vy = 8;
     me.h += 1.2;
     me.av?.showTomatoSplat?.();
@@ -5665,7 +6032,7 @@ function spawnLaserStrike(x, y, targetName, byAdmin = 'Admin') {
   }
 
   peers.forEach(p => {
-    if (targetName === p.name || targetName === 'all') {
+    if (isAdminTarget(targetName, p.name)) {
       p.av?.showTomatoSplat?.();
     }
   });
@@ -5823,7 +6190,7 @@ function spawnTornado(targetName, byAdmin = 'Admin') {
 
   let tx = me.x * TILE;
   let tz = me.y * TILE;
-  if (targetName && targetName !== me.name && targetName !== 'all') {
+  if (targetName && !isAdminTarget(targetName, me.name)) {
     const pEntry = findPeerByName(targetName);
     if (pEntry) {
       tx = pEntry[1].x * TILE;
@@ -5842,7 +6209,7 @@ function spawnTornado(targetName, byAdmin = 'Admin') {
       return;
     }
     tornadoGroup.rotation.y += 0.25;
-    if (targetName === me.name || targetName === 'all') {
+    if (isAdminTarget(targetName, me.name)) {
       me.vy = 8.5;
       me.r += 0.2;
     }
@@ -5930,7 +6297,8 @@ export const ADMIN_COMMAND_CATALOG = [
   { cmd: ':blind', usage: ':blind <tên>', desc: 'Làm tối đen màn hình mục tiêu' },
   { cmd: ':unblind', usage: ':unblind <tên>', desc: 'Gỡ tối đen màn hình mục tiêu' },
   { cmd: ':blindall', usage: ':blindall', desc: 'Làm tối đen màn hình toàn server' },
-  { cmd: ':unblindall', usage: ':unblindall', desc: 'Gỡ tối đen màn hình toàn server' },
+  { cmd: ':truonggiang', usage: ':truonggiang [tên]', desc: 'Thả Khối Slime Trường Giang 6 mặt nhảy tâng tâng rượt đuổi troll' },
+  { cmd: ':untruonggiang', usage: ':untruonggiang', desc: 'Thu hồi Khối Slime Trường Giang' },
   { cmd: ':chips', usage: ':chips <số>', desc: 'Tự cấp thêm xu cờ bạc vào ví' },
 
   // 5. Khôi phục & Reset
@@ -6089,12 +6457,11 @@ function setupAdminCommandAutocomplete() {
         applySuggestion(currentSuggestions[targetIdx]);
       }
     } else if (e.key === 'Enter') {
+      e.preventDefault();
       if (selectedSuggestIndex >= 0 && currentSuggestions[selectedSuggestIndex]) {
-        e.preventDefault();
         applySuggestion(currentSuggestions[selectedSuggestIndex]);
-      } else {
-        runAndCloseAdminCmd();
       }
+      runAndCloseAdminCmd();
     } else if (e.key === 'Escape') {
       hideAdminSuggestions();
     }
@@ -6105,6 +6472,19 @@ function setupAdminCommandAutocomplete() {
       hideAdminSuggestions();
     }
   });
+
+  // Make cheatsheet command codes clickable to execute and close immediately
+  setTimeout(() => {
+    document.querySelectorAll('#dlgAdmin code').forEach(codeEl => {
+      codeEl.style.cursor = 'pointer';
+      codeEl.title = 'Bấm để thực thi ngay lệnh này';
+      codeEl.onclick = (e) => {
+        e.stopPropagation();
+        const text = codeEl.textContent.trim().split('—')[0].trim().split(' ')[0];
+        if (text) executeAdminCommand(text);
+      };
+    });
+  }, 100);
 }
 
 function runAndCloseAdminCmd() {
@@ -6112,17 +6492,20 @@ function runAndCloseAdminCmd() {
   if (!input) return;
   const cmd = input.value.trim();
   if (cmd) {
-    executeAdminCommand(cmd);
     input.value = '';
     hideAdminSuggestions();
-    // Tự động đóng modal ngay lập tức để người chơi quan sát kết quả trên màn hình
     closeDialog('dlgAdmin');
+    executeAdminCommand(cmd);
   }
 }
 
 $('btnRunAdminCmd').onclick = runAndCloseAdminCmd;
 
 function executeAdminCommand(raw) {
+  // Tự động đóng modal ngay lập tức để người chơi quan sát kết quả trên màn hình
+  closeDialog('dlgAdmin');
+  hideAdminSuggestions();
+
   let cmdStr = (raw || '').trim();
   if (cmdStr.startsWith(':') || cmdStr.startsWith(';') || cmdStr.startsWith('/')) {
     cmdStr = cmdStr.slice(1).trim();
@@ -6164,7 +6547,8 @@ function executeAdminCommand(raw) {
   switch (cmd) {
     // === 1. PLAYER MANAGEMENT ===
     case 'kick': {
-      const targetName = args[0];
+      if (!requireRoomHost()) return true;
+      const targetName = args.join(' ').trim();
       if (!targetName) { toast('⚠️ Cú pháp: :kick <tên_người_chơi>'); return true; }
       const pEntry = findPeerByName(targetName);
       if (!pEntry) { toast(`⚠️ Không tìm thấy người chơi "${targetName}"`); return true; }
@@ -6173,33 +6557,36 @@ function executeAdminCommand(raw) {
       return true;
     }
     case 'ban': {
-      const targetName = args[0];
+      if (!requireRoomHost()) return true;
+      const targetName = args.join(' ').trim();
       if (!targetName) { toast('⚠️ Cú pháp: :ban <tên_người_chơi>'); return true; }
       const pEntry = findPeerByName(targetName);
-      if (pEntry) {
-        emitOp({ k: 'kick', targetId: pEntry[0], targetName: pEntry[1].name, byHost: net.selfId });
-        adminBanList.add(pEntry[1].name.toLowerCase());
-      } else {
-        adminBanList.add(targetName.toLowerCase());
-      }
+      emitOp({ k: 'admin_ban', name: pEntry?.[1].name || targetName, banned: true });
       toast(`🚫 Đã đưa "${targetName}" vào danh sách cấm tham gia!`);
       return true;
     }
     case 'unban': {
-      const targetName = args[0];
-      if (targetName) adminBanList.delete(targetName.toLowerCase());
+      if (!requireRoomHost()) return true;
+      const targetName = args.join(' ').trim();
+      if (!targetName) { toast('⚠️ Cú pháp: :unban <tên_người_chơi>'); return true; }
+      emitOp({ k: 'admin_ban', name: targetName, banned: false });
       toast(`✅ Đã gỡ cấm cho "${targetName}"!`);
       return true;
     }
     case 'mute': {
-      const targetName = args[0];
-      if (targetName) adminMuteList.add(targetName.toLowerCase());
+      if (!requireRoomHost()) return true;
+      const targetName = args.join(' ').trim();
+      if (!targetName) { toast('⚠️ Cú pháp: :mute <tên_người_chơi>'); return true; }
+      const pEntry = findPeerByName(targetName);
+      emitOp({ k: 'admin_mute', name: pEntry?.[1].name || targetName, muted: true });
       toast(`🔇 Đã cấm chat người chơi "${targetName}"!`);
       return true;
     }
     case 'unmute': {
-      const targetName = args[0];
-      if (targetName) adminMuteList.delete(targetName.toLowerCase());
+      if (!requireRoomHost()) return true;
+      const targetName = args.join(' ').trim();
+      if (!targetName) { toast('⚠️ Cú pháp: :unmute <tên_người_chơi>'); return true; }
+      emitOp({ k: 'admin_mute', name: targetName, muted: false });
       toast(`🔊 Đã bỏ cấm chat người chơi "${targetName}"!`);
       return true;
     }
@@ -6347,7 +6734,6 @@ function executeAdminCommand(raw) {
     case 'size': {
       const s = parseFloat(args[0]) || 1;
       const finalScale = Math.max(0.2, Math.min(6, s));
-      if (me.av) me.av.root.scale.set(finalScale, finalScale, finalScale);
       emitOp({ k: 'admin_size', target: me.name, scale: finalScale });
       toast(`📏 Đã chỉnh kích thước nhân vật: ${finalScale}x`);
       return true;
@@ -6355,9 +6741,6 @@ function executeAdminCommand(raw) {
     case 'giant': {
       const targetName = args[0] || me.name;
       const s = 3.5;
-      if (targetName === me.name || targetName === 'all') {
-        if (me?.av) me.av.root.scale.set(s, s, s);
-      }
       emitOp({ k: 'admin_size', target: targetName, scale: s });
       toast(`🦕 Đã biến ${targetName} thành người khổng lồ 3.5x!`);
       return true;
@@ -6365,9 +6748,6 @@ function executeAdminCommand(raw) {
     case 'tiny': {
       const targetName = args[0] || me.name;
       const s = 0.35;
-      if (targetName === me.name || targetName === 'all') {
-        if (me?.av) me.av.root.scale.set(s, s, s);
-      }
       emitOp({ k: 'admin_size', target: targetName, scale: s });
       toast(`🐜 Đã biến ${targetName} thành người tí hon 0.35x!`);
       return true;
@@ -6382,21 +6762,23 @@ function executeAdminCommand(raw) {
       return true;
     }
     case 'time': {
-      const t = args[0] || 'day';
-      world.setDayNightTime?.(t);
-      toast(`☀️ Đã chỉnh thời gian sang: ${t}`);
+      const t = (args[0] || 'day').toLowerCase();
+      if (t !== 'day' && t !== 'night') {
+        toast('⚠️ Cú pháp: :time <day|night>');
+        return true;
+      }
+      emitOp({ k: 'admin_time', time: t });
       return true;
     }
     case 'gravity': {
       const g = parseFloat(args[0]) || 20;
-      currentGravity = Math.max(0, Math.min(50, g));
-      emitOp({ k: 'admin_gravity', gravity: currentGravity });
-      toast(`🌍 Trọng lực đã đặt thành: ${currentGravity}`);
+      const gravity = Math.max(0, Math.min(50, g));
+      emitOp({ k: 'admin_gravity', gravity });
       return true;
     }
     case 'shutdown': {
-      emitOp({ k: 'closeRoom', hostName: me.name });
-      toast('🛑 Đã tắt phòng!');
+      if (!requireRoomHost()) return true;
+      closeRoomByHost();
       return true;
     }
 
@@ -6410,10 +6792,21 @@ function executeAdminCommand(raw) {
       toast(`🪙 Admin: Đã cấp thêm ${num.toLocaleString()} xu vào ví!`);
       return true;
     }
+    case 'truonggiang':
+    case 'tg': {
+      const targetName = args[0] || null;
+      emitOp({ k: 'admin_truonggiang', target: targetName, active: true, by: me.name });
+      return true;
+    }
+    case 'untruonggiang':
+    case 'untg': {
+      emitOp({ k: 'admin_truonggiang', active: false, by: me.name });
+      toast('💨 Đã thu hồi Khối Slime Trường Giang!');
+      return true;
+    }
     case 'fire': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_fire', target: targetName });
-      toast(`🔥 Đã đốt lửa người chơi ${targetName}!`);
       return true;
     }
     case 'blind': {
@@ -6432,72 +6825,37 @@ function executeAdminCommand(raw) {
     case 'spinall': {
       const targetName = (cmd === 'spinall' || args[0] === 'all') ? 'all' : (args[0] || me.name);
       emitOp({ k: 'admin_spin', target: targetName, by: me.name });
-      if (targetName === me.name || targetName === 'all') adminSpinUntil = performance.now() + 6500;
-      toast(`💫 Đã kích hoạt xoay mòng mòng cho ${targetName}!`);
       return true;
     }
     case 'disco': {
       emitOp({ k: 'admin_disco', by: me.name });
-      document.body.classList.toggle('disco-active');
-      toast('🪩 Đã bật/tắt sàn nhảy Disco lung linh toàn phòng!');
       return true;
     }
     case 'earthquake': {
       emitOp({ k: 'admin_earthquake', by: me.name });
-      document.body.classList.add('earthquake-active');
-      playSfx('explosion', 'tet');
-      toast('🌋 ĐÃ KÍCH HOẠT ĐỘNG ĐẤT RUNG CHUYỂN SERVER!');
-      setTimeout(() => document.body.classList.remove('earthquake-active'), 5500);
       return true;
     }
     case 'nuke': {
       emitOp({ k: 'admin_nuke', by: me.name });
-      const flash = document.createElement('div');
-      flash.className = 'nuke-flash-overlay';
-      document.body.appendChild(flash);
-      playSfx('explosion', 'tet');
-      toast('💥 BOM HẠT NHÂN ADMIN VỪA KÍCH NỔ!');
-      setTimeout(() => flash.remove(), 2600);
       return true;
     }
     case 'rocket': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_rocket', target: targetName, by: me.name });
-      if (targetName === me.name || targetName === 'all') {
-        me.vy = 42;
-        me.h += 3;
-        playSfx('firework_rocket', 'tet');
-      }
-      toast(`🚀 Phóng ${targetName} lên mây xanh như tên lửa!`);
       return true;
     }
     case 'slap': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_slap', target: targetName, by: me.name });
-      if (targetName === me.name || targetName === 'all') {
-        me.vy = 6;
-        me.h += 0.8;
-        me.av?.showTomatoSplat?.();
-        playSfx('splat', 'halloween');
-      }
-      toast(`🍅 BỐP! Đã tát ${targetName} lộn mèo và ném cà chua bét nhè!`);
       return true;
     }
     case 'danceall': {
       emitOp({ k: 'admin_dance', target: 'all', by: me.name });
-      me.av?.playEmote?.('dance');
-      toast('💃 Toàn bộ server cùng nhau nhảy múa!');
       return true;
     }
     case 'clown': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_clown', target: targetName, by: me.name });
-      if (targetName === me.name || targetName === 'all') {
-        me.pumpkinHat = me.pumpkinHat ? null : 'classic';
-        me.av?.setPumpkinHat?.(me.pumpkinHat);
-        syncMyAppearance();
-      }
-      toast(`🤡 Đã phong chú hề cho ${targetName}!`);
       return true;
     }
 
@@ -6511,7 +6869,7 @@ function executeAdminCommand(raw) {
     // === BUILDER TOOLS ===
     case 'btools':
     case 'build': {
-      adminBuilderMode = !adminBuilderMode;
+      adminBuilderMode = cmd === 'build' ? true : !adminBuilderMode;
       document.body.classList.toggle('builder-mode-active', adminBuilderMode);
       $('btoolsHud')?.classList.toggle('hidden', !adminBuilderMode);
       if (adminBuilderMode && document.pointerLockElement) {
@@ -6527,29 +6885,17 @@ function executeAdminCommand(raw) {
     case 'dinnerbone': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_dinnerbone', target: targetName, by: me.name });
-      if (targetName === me.name || targetName === 'all') {
-        me.isDinnerbone = !me.isDinnerbone;
-        me.av?.setDinnerbone?.(me.isDinnerbone);
-      }
-      peers.forEach(p => {
-        if (targetName === p.name || targetName === 'all') {
-          p.isDinnerbone = !p.isDinnerbone;
-          p.av?.setDinnerbone?.(p.isDinnerbone);
-        }
-      });
       toast(`🙃 Đã đảo ngược đầu dưới đất chân trên trời (Dinnerbone) cho ${targetName}!`);
       return true;
     }
     case 'clone': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_clone', target: targetName, by: me.name });
-      spawnCloneHorde(targetName);
       return true;
     }
     case 'guillotine': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_guillotine', target: targetName, by: me.name });
-      spawnGuillotineStrike(targetName);
       return true;
     }
 
@@ -6563,7 +6909,6 @@ function executeAdminCommand(raw) {
         targetName = args[1];
       }
       emitOp({ k: 'admin_summon_mob', mob: mobType, target: targetName, by: me.name });
-      spawnMobAttack(mobType, targetName, me.name);
       return true;
     }
 
@@ -6571,35 +6916,30 @@ function executeAdminCommand(raw) {
     case 'headless': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_limb_state', target: targetName, limbs: { head: false } });
-      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ head: false });
       toast(`🪓 Đã tháo bay đầu của ${targetName} rớt Lego!`);
       return true;
     }
     case 'disarm': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_limb_state', target: targetName, limbs: { leftArm: false, rightArm: false } });
-      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ leftArm: false, rightArm: false });
       toast(`🦾 Đã tháo mất 2 cánh tay của ${targetName}!`);
       return true;
     }
     case 'amputate': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_limb_state', target: targetName, limbs: { leftArm: false, rightArm: false, legs: false } });
-      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ leftArm: false, rightArm: false, legs: false });
       toast(`🦿 Đã tháo rụng tứ chi của ${targetName}!`);
       return true;
     }
     case 'lego': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_limb_state', target: targetName, limbs: { head: false, leftArm: false, rightArm: false, legs: false } });
-      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ head: false, leftArm: false, rightArm: false, legs: false });
       toast(`🧱 Đã nổ tung người ${targetName} thành các khối Lego rời rạc!`);
       return true;
     }
     case 'rearm': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_limb_state', target: targetName, limbs: { head: true, leftArm: true, rightArm: true, legs: true } });
-      if (targetName === me.name || targetName === 'all') me.av?.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
       toast(`✨ Đã lắp ráp lại tứ chi nguyên vẹn cho ${targetName}!`);
       return true;
     }
@@ -6610,7 +6950,7 @@ function executeAdminCommand(raw) {
       const targetName = args[0] || me.name;
       let tx = me.x;
       let ty = me.y;
-      if (targetName !== me.name && targetName !== 'all') {
+      if (!isAdminTarget(targetName, me.name)) {
         const pEntry = findPeerByName(targetName);
         if (pEntry) {
           tx = pEntry[1].x;
@@ -6618,113 +6958,61 @@ function executeAdminCommand(raw) {
         }
       }
       emitOp({ k: 'admin_laser', x: tx, y: ty, target: targetName, by: me.name });
-      spawnLaserStrike(tx, ty, targetName, me.name);
       return true;
     }
     case 'tornado':
     case 'cyclone': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_tornado', target: targetName, by: me.name });
-      spawnTornado(targetName, me.name);
       return true;
     }
     case 'blackhole':
     case 'vortex': {
       emitOp({ k: 'admin_blackhole', by: me.name });
-      spawnBlackHole(me.name);
       return true;
     }
     case 'confetti':
     case 'party': {
       emitOp({ k: 'admin_confetti', by: me.name });
-      spawnConfettiShower(me.name);
       return true;
     }
     case 'golden':
     case 'midas': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_golden', target: targetName, by: me.name });
-      if (targetName === me.name || targetName === 'all') {
-        me.av?.setMidasGolden?.(true);
-      }
-      peers.forEach(p => {
-        if (targetName === p.name || targetName === 'all') p.av?.setMidasGolden?.(true);
-      });
-      toast(`✨ Đã hóa tượng vàng Midas cho ${targetName}!`);
       return true;
     }
     case 'ghost': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_ghost', target: targetName, by: me.name });
-      if (targetName === me.name || targetName === 'all') {
-        me.av?.setGhostMode?.(true);
-      }
-      peers.forEach(p => {
-        if (targetName === p.name || targetName === 'all') p.av?.setGhostMode?.(true);
-      });
-      toast(`👻 Đã hóa hồn ma trong suốt cho ${targetName}!`);
       return true;
     }
     case 'rainbow': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_rainbow', target: targetName, by: me.name });
-      if (targetName === me.name || targetName === 'all') {
-        me.nametagStyle = 'rainbow';
-        me.aura = 'lightning';
-        me.av?.setName(me.name, me.title, 'rainbow');
-        me.av?.setAura('lightning');
-        syncMyAppearance();
-      }
-      toast(`🌈 Đã ban tặng hào quang cầu vồng RGB cho ${targetName}!`);
       return true;
     }
     case 'heal':
     case 'revive': {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_heal', target: targetName, by: me.name });
-      if (targetName === me.name || targetName === 'all') {
-        document.querySelectorAll('.tomato-splat-overlay').forEach(el => el.remove());
-        me.av?.playEmote?.('cheer');
-      }
-      toast(`💖 Đã hồi phục sinh lực và làm sạch cà chua cho ${targetName}!`);
       return true;
     }
     case 'matrix': {
       emitOp({ k: 'admin_matrix', by: me.name });
-      document.body.classList.add('matrix-active');
-      adminSpeedMultiplier = 0.3;
-      toast(`🕶️ KÍCH HOẠT MA TRẬN: Toàn server chậm lại 70%!`);
-      playSfx('spooky_laugh', 'halloween');
-      setTimeout(() => {
-        document.body.classList.remove('matrix-active');
-        if (adminSpeedMultiplier === 0.3) adminSpeedMultiplier = 1.0;
-        toast('⚡ Thời gian đã trở lại tốc độ bình thường.');
-      }, 5500);
       return true;
     }
     case 'gravityflip':
     case 'invertr': {
       emitOp({ k: 'admin_gravity_flip', by: me.name });
-      currentGravity = -15;
-      me.vy = 4;
-      toast(`🌀 TRỌNG LỰC ĐẢO NGƯỢC! Mọi người đang lộn ngược trôi lên trần nhà!`);
-      playSfx('firework_rocket', 'tet');
-      setTimeout(() => {
-        currentGravity = 20;
-        toast('🌍 Trọng lực đã trở lại bình thường.');
-      }, 6500);
       return true;
     }
     case 'blindall': {
       emitOp({ k: 'admin_blind', target: 'all', blind: true });
-      document.body.classList.add('blinded-screen');
-      toast('🕶️ Đã làm tối đen màn hình toàn server!');
       return true;
     }
     case 'unblindall': {
       emitOp({ k: 'admin_blind', target: 'all', blind: false });
-      document.body.classList.remove('blinded-screen');
-      toast('👀 Đã gỡ tối đen màn hình toàn server!');
       return true;
     }
     case 'tp': {
@@ -6752,38 +7040,6 @@ function executeAdminCommand(raw) {
     case 'resetall':
     case 'clean': {
       emitOp({ k: 'admin_reset_all', by: me.name });
-      adminSpeedMultiplier = 1.0;
-      adminJumpPower = 8.2;
-      adminFlying = false;
-      adminNoclip = false;
-      adminGodMode = false;
-      window.adminGodMode = false;
-      isFrozen = false;
-      isJailed = false;
-      jailedPos = null;
-      currentGravity = 20;
-      adminSpinUntil = 0;
-      adminBuilderMode = false;
-      $('btoolsHud')?.classList.add('hidden');
-      document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active', 'builder-mode-active');
-      world.clearBuilderBlocks();
-      me.isDinnerbone = false;
-      if (me?.av) {
-        me.av.root.scale.set(1, 1, 1);
-        me.av.root.visible = true;
-        me.av.setDinnerbone?.(false);
-        me.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
-      }
-      peers.forEach(p => {
-        p.isDinnerbone = false;
-        if (p.av) {
-          p.av.root.scale.set(1, 1, 1);
-          p.av.root.visible = true;
-          p.av.setDinnerbone?.(false);
-          p.av.setLimbState?.({ head: true, leftArm: true, rightArm: true, legs: true });
-        }
-      });
-      toast('✨ Đã đặt lại toàn bộ hiệu ứng troll & khôi phục trạng thái hoàn toàn!');
       return true;
     }
     case 'resetchips': {
@@ -6798,10 +7054,7 @@ function executeAdminCommand(raw) {
       return true;
     }
     case 'clearmap': {
-      state.decor = [];
-      state.cards = [];
-      emitOp({ k: 'decor_place', item: null, clearAll: true });
-      toast('🧹 Đã dọn dẹp sạch sẽ đồ trang trí trên sàn!');
+      emitOp({ k: 'admin_clearmap' });
       return true;
     }
     default:
@@ -6809,4 +7062,8 @@ function executeAdminCommand(raw) {
       return false;
   }
 }
+
+// Initial UI refresh for top-right wallet and title badges
+updateCasinoChipsUI();
+updateTitleUI();
 

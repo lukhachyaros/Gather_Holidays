@@ -7,6 +7,7 @@ git<!doctype html>
 <link rel="icon" type="image/jpeg" href="assets/logo.jpg">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/casino.css">
+<link rel="stylesheet" href="css/avatar_customizer.css">
 <script type="importmap">
 { "imports": {
   "three": "./vendor/three/build/three.module.js",
@@ -48,6 +49,7 @@ git<!doctype html>
         <button id="btnOpenCustomizeFromLobby" class="btn-customize-lobby" title="Tùy chỉnh màu da, đầu, tóc, khuôn mặt, áo quần 3D & 2D trước khi vào phòng">
           🎨 Tùy Chỉnh Avatar
         </button>
+        <button id="btnOpenAvatarStudio" class="icon-chip" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c084fc;background:rgba(168,85,247,0.15);padding:8px 14px;border:1px solid rgba(168,85,247,0.4);border-radius:8px;cursor:pointer;font-weight:700;" title="Tùy chỉnh diện mạo & vóc dáng Roblox 3D">🎨 Chỉnh Avatar</button>
         <a href="admin.html" class="icon-chip" style="display:flex;align-items:center;gap:4px;text-decoration:none;font-size:12px;color:#38bdf8;padding:8px 12px;border:1px solid rgba(56,189,248,0.3);border-radius:8px;" title="Khu vực Admin Builder & Model Studio">🛠 Admin Studio</a>
         <button id="btnCloseLobby" class="hidden" title="Quay lại phòng đang chơi">✕ Đóng</button>
       </div>
@@ -139,6 +141,10 @@ git<!doctype html>
   </div>
 
   <div class="drawer-menu-list">
+    <button id="btnDrawerAvatarStudio" class="drawer-item" title="Tùy chỉnh diện mạo, vóc dáng & trang phục Roblox 3D">
+      <span class="item-icon">🎨</span>
+      <span class="item-label">Tùy Chỉnh Avatar 3D</span>
+    </button>
     <button id="btnLobby" class="drawer-item" title="Mở Sảnh chờ (Danh sách phòng & Đổi phòng)">
       <span class="item-icon">🏠</span>
       <span class="item-label">Sảnh Chờ & Danh Sách Phòng</span>
@@ -240,10 +246,19 @@ git<!doctype html>
 
 <!-- Compact Top-Right Status Bar -->
 <div id="statsCorner">
+  <button id="statWalletBtn" class="stat-pill-btn wallet-pill" title="Ví Tiền Chips Casino — Bấm để nhập Code & Nhận thêm chips">
+    <span class="pill-icon">🪙</span>
+    <span class="casino-chip-count wallet-val">$0</span>
+  </button>
+  <button id="statTitleBtn" class="stat-pill-btn title-pill" title="Danh Hiệu Nhân Vật — Bấm để xem & Chọn danh hiệu">
+    <span class="pill-icon">👑</span>
+    <span id="statTitleLabel" class="title-val">Danh Hiệu</span>
+  </button>
+  <span class="sep">·</span>
   <span id="statPlayers" title="Nhấn để xem danh sách người chơi & Quản lý phòng">👥 1</span>
   <span class="sep">·</span>
   <span id="statFps" title="Số khung hình/giây">⚡ 60 FPS</span>
-  <span class="sep">·</span>
+  <span class="sep sep-lock">·</span>
   <span id="lockLabel" title="Nhấn phím L hoặc Chuột phải để Khóa/Mở chuột">🔓 Tự do</span>
   <button id="btnHelpToggle" class="help-btn" title="Ẩn/Hiện bảng hướng dẫn phím tắt (Phím H)">❓</button>
 </div>
@@ -893,6 +908,8 @@ git<!doctype html>
           <span><code>:fire &lt;tên&gt;</code> — Gắn lửa cháy bập bùng</span>
           <span><code>:blind / :unblind &lt;tên&gt;</code> — Làm tối đen màn hình</span>
           <span><code>:blindall / :unblindall</code> — Tối đen toàn phòng</span>
+          <span><code>:truonggiang [tên]</code> — Thả Khối Slime Trường Giang 6 mặt rượt đuổi troll</span>
+          <span><code>:untruonggiang</code> — Thu hồi Khối Slime Trường Giang</span>
           <span><code>:chips &lt;số xu&gt;</code> — Tự cấp thêm xu cờ bạc</span>
         </div>
       </div>
@@ -951,6 +968,60 @@ git<!doctype html>
     <div class="row" style="justify-content:center;gap:12px">
       <button id="btnTossLoveCoin" class="primary" style="background:linear-gradient(135deg,#ec4899,#f43f5e);border:none;padding:12px 24px;font-size:14px">🪙 Tung Đồng Xu Nguyện Ước</button>
       <button data-close>Rời Bước</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG: Avatar Customization Studio (Roblox 3D Style) -->
+<div id="dlgAvatarCustomizer" class="overlay hidden" style="z-index:90;">
+  <div class="avatar-studio-panel">
+    <div class="avatar-studio-header">
+      <div class="avatar-studio-title-group">
+        <span class="avatar-studio-icon">🎨</span>
+        <div>
+          <h2 class="avatar-studio-title">STUDIO TÙY CHỈNH AVATAR</h2>
+          <p class="avatar-studio-sub">Thiết kế diện mạo, vóc dáng, khuôn mặt và trang phục 3D mang phong cách riêng của bạn</p>
+        </div>
+      </div>
+      <button id="btnCloseAvatarStudio" class="avatar-studio-close-btn" title="Đóng">✕</button>
+    </div>
+
+    <div class="avatar-studio-body">
+      <!-- Left 3D Viewport Column -->
+      <div class="avatar-studio-preview-col">
+        <div class="avatar-viewport-container">
+          <canvas id="avatarPreviewCanvas" width="340" height="420"></canvas>
+          <div class="avatar-viewport-badge">360° PREVIEW</div>
+          <div class="avatar-viewport-hint">🖱️ Kéo chuột hoặc lướt tay để xoay nhân vật</div>
+        </div>
+        <div class="avatar-preview-actions">
+          <button id="btnResetAvatarDefault" class="studio-sub-btn">↺ Mặc định</button>
+          <button id="btnRandomizeAvatar" class="studio-sub-btn">🎲 Ngẫu nhiên</button>
+        </div>
+      </div>
+
+      <!-- Right Customizer Tabs & Options Column -->
+      <div class="avatar-studio-options-col">
+        <!-- Category Tab Bar -->
+        <div class="avatar-tabs-bar">
+          <button class="avatar-tab-btn active" data-tab="body">👤 Cơ Thể & Da</button>
+          <button class="avatar-tab-btn" data-tab="face">😀 Đầu & Mặt</button>
+          <button class="avatar-tab-btn" data-tab="hair">💇 Tóc & Màu</button>
+          <button class="avatar-tab-btn" data-tab="layered">🧥 Đồ 3D (Layered)</button>
+          <button class="avatar-tab-btn" data-tab="classic">👕 Đồ 2D (Classic)</button>
+        </div>
+
+        <!-- Scrollable Tab Content Container -->
+        <div id="avatarTabContent" class="avatar-tab-content">
+          <!-- Dynamically populated -->
+        </div>
+
+        <!-- Studio Footer Action Buttons -->
+        <div class="avatar-studio-footer">
+          <button id="btnCancelAvatarStudio" class="studio-cancel-btn">✕ Hủy bỏ</button>
+          <button id="btnSaveAvatarStudio" class="studio-save-btn">💾 Lưu & Áp Dụng Ngay</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
