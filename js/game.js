@@ -266,9 +266,9 @@ const toast = msg => {
 // Movement & Physics constants
 const WALK = 2.5,
   RUN = 4.3,
-  JUMP_V = 7.2,
+  JUMP_V = 8.5,
   GRAVITY = 20,
-  RADIUS = 0.28;
+  RADIUS = 0.22;
 const ACTION_COOLDOWN = 3000; // 3 seconds anti-spam cooldown for all actions/emotes
 
 // ---------- Official Public Plazas (Always visible in Lobby so players gather together) ----------
@@ -1243,7 +1243,7 @@ const handlers = {
     if (state?.kickedIds?.includes(id)) return;
     const p = peers.get(id);
     if (!p) return;
-    p.av?.playEmote(d.clip || EMOTE_CLIP[d.e] || 'wave');
+    p.av?.playEmote(d.clip || EMOTE_CLIP[d.e] || 'wave', d.hold ?? true);
     floaters.push({ e: d.e || '✨', who: id, t: Date.now() });
 
     if (d.to === net.selfId) {
@@ -1694,12 +1694,12 @@ function refreshRecipients() {
   if ([...s.options].some(o => o.value === cur)) s.value = cur;
 }
 
-function doSocialAction(emoji, clip, toPeerId = null) {
+function doSocialAction(emoji, clip, toPeerId = null, hold = true) {
   // Emotes switch immediately with zero latency; only projectile tomato has cooldown
   if (clip === 'throwTomato' && !checkCooldown()) return;
-  me.av?.playEmote(clip);
+  me.av?.playEmote(clip, hold);
   floaters.push({ e: emoji, who: 'me', t: Date.now() });
-  net.send('emote', { e: emoji, clip, to: toPeerId });
+  net.send('emote', { e: emoji, clip, to: toPeerId, hold });
 
   if (toPeerId && peers.has(toPeerId)) {
     const p = peers.get(toPeerId);
@@ -2276,14 +2276,22 @@ $('btnTvScrollHint').onclick = () => {
 $('btnHelpToggle').onclick = () => $('hud').classList.toggle('hidden');
 $('btnHudClose').onclick = () => $('hud').classList.add('hidden');
 
-$('btnSettings').onclick = () => {
-  renderSettingsModal();
-  openDialog('dlgSettings');
-};
-$('statPlayers').onclick = () => {
-  renderSettingsModal();
-  openDialog('dlgSettings');
-};
+function toggleSettingsModal(forceState = null) {
+  const dlg = $('dlgSettings');
+  if (!dlg) return;
+  const isHidden = dlg.classList.contains('hidden');
+  const shouldOpen = forceState !== null ? forceState : isHidden;
+  if (shouldOpen) {
+    document.exitPointerLock?.();
+    renderSettingsModal();
+    openDialog('dlgSettings');
+  } else {
+    closeDialog('dlgSettings');
+  }
+}
+
+$('btnSettings').onclick = () => toggleSettingsModal();
+$('statPlayers').onclick = () => toggleSettingsModal();
 $('btnRejoinOther').onclick = () => {
   $('dlgKicked').classList.add('hidden');
   openLobbyOverlay();
@@ -2330,13 +2338,15 @@ function toggleEmoteMenu(forceState = null) {
 }
 
 function triggerEmoteByKey(clip, emoji) {
-  doSocialAction(emoji, clip);
+  doSocialAction(emoji, clip, null, true);
   const card = document.querySelector(`.emote-card[data-emote="${clip}"]`);
   if (card) {
     document.querySelectorAll('.emote-card').forEach(c => c.classList.remove('active-emote'));
     card.classList.add('active-emote');
     setTimeout(() => card.classList.remove('active-emote'), 350);
   }
+  // Auto-close emote menu so player does NOT have to press F again!
+  toggleEmoteMenu(false);
 }
 
 if ($('btnEmotes')) $('btnEmotes').onclick = () => toggleEmoteMenu();
@@ -2353,7 +2363,8 @@ document.querySelectorAll('.extra-emote-btn').forEach(btn => {
   btn.onclick = () => {
     const clip = btn.dataset.emote;
     const emoji = btn.dataset.emoji;
-    doSocialAction(emoji, clip);
+    doSocialAction(emoji, clip, null, true);
+    toggleEmoteMenu(false);
   };
 });
 
@@ -2833,6 +2844,10 @@ addEventListener('keydown', e => {
   else if (k === 'm' || code === 'KeyM') toggleMic();
   else if (k === 'p' || code === 'KeyP') toggleScreenShare();
   else if (k === 'h' || code === 'KeyH') $('hud').classList.toggle('hidden');
+  else if (k === 'o' || code === 'KeyO' || k === 'u' || code === 'KeyU') {
+    toggleSettingsModal();
+    e.preventDefault();
+  }
   else if (k === 'f' || code === 'KeyF') {
     toggleEmoteMenu();
     e.preventDefault();
@@ -2847,24 +2862,14 @@ addEventListener('keydown', e => {
     toggleEmoteMenu(false);
     e.preventDefault();
   }
-  else if (!$('dlgEmotes').classList.contains('hidden')) {
-    if (e.key === '1' || code === 'Digit1') { triggerEmoteByKey('flex', '💪'); e.preventDefault(); return; }
-    if (e.key === '2' || code === 'Digit2') { triggerEmoteByKey('cheer_jump', '🕺'); e.preventDefault(); return; }
-    if (e.key === '3' || code === 'Digit3') { triggerEmoteByKey('starfish', '⭐'); e.preventDefault(); return; }
-    if (e.key === '4' || code === 'Digit4') { triggerEmoteByKey('head_heart', '🙆'); e.preventDefault(); return; }
-    if (e.key === '5' || code === 'Digit5') { triggerEmoteByKey('despair', '🙇'); e.preventDefault(); return; }
-    if (e.key === '6' || code === 'Digit6') { triggerEmoteByKey('dab', '😎'); e.preventDefault(); return; }
-    if (e.key === '7' || code === 'Digit7') { triggerEmoteByKey('lay_chill', '🛌'); e.preventDefault(); return; }
-    if (e.key === '8' || code === 'Digit8') { triggerEmoteByKey('kneel', '🧎'); e.preventDefault(); return; }
-  }
-  else if ((e.key === '1' || code === 'Digit1') && me?.av) doSocialAction('👋', 'wave');
-  else if ((e.key === '2' || code === 'Digit2') && me?.av) doSocialAction('🤝', 'handshake');
-  else if ((e.key === '3' || code === 'Digit3') && me?.av) doSocialAction('🤗', 'hug');
-  else if ((e.key === '4' || code === 'Digit4') && me?.av) {
-    if (state?.theme === 'halloween') doSocialAction('🍬', 'trickOrTreat');
-    else if (state?.theme === 'christmas') $('btnRoast').click();
-    else doSocialAction('🧧', 'interact');
-  }
+  else if (e.key === '1' || code === 'Digit1') { triggerEmoteByKey('flex', '💪'); e.preventDefault(); return; }
+  else if (e.key === '2' || code === 'Digit2') { triggerEmoteByKey('cheer_jump', '🕺'); e.preventDefault(); return; }
+  else if (e.key === '3' || code === 'Digit3') { triggerEmoteByKey('starfish', '⭐'); e.preventDefault(); return; }
+  else if (e.key === '4' || code === 'Digit4') { triggerEmoteByKey('head_heart', '🙆'); e.preventDefault(); return; }
+  else if (e.key === '5' || code === 'Digit5') { triggerEmoteByKey('despair', '🙇'); e.preventDefault(); return; }
+  else if (e.key === '6' || code === 'Digit6') { triggerEmoteByKey('dab', '😎'); e.preventDefault(); return; }
+  else if (e.key === '7' || code === 'Digit7') { triggerEmoteByKey('lay_chill', '🛌'); e.preventDefault(); return; }
+  else if (e.key === '8' || code === 'Digit8') { triggerEmoteByKey('kneel', '🧎'); e.preventDefault(); return; }
 
   if (e.key?.startsWith('Arrow') || code.startsWith('Arrow') || e.key === ' ' || code === 'Space') e.preventDefault();
   if ((e.key === ' ' || code === 'Space') && me) {
@@ -3161,26 +3166,26 @@ function getStandHeight(x, y) {
   const tx = Math.floor(x + 0.5);
   const ty = Math.floor(y + 0.5);
 
-  // Outer perimeter boundary walls cannot be stood on (prevent glitching out of map)
-  if (tx <= 0 || ty <= 0 || tx >= state.map.w - 1 || ty >= state.map.h - 1) {
-    return Infinity;
-  }
-
   let maxH = 0;
+
+  // Outer perimeter boundary walls: 1.6m height, fully climbable and walkable!
+  if (tx <= 0 || ty <= 0 || tx >= state.map.w - 1 || ty >= state.map.h - 1) {
+    maxH = Math.max(maxH, 1.6);
+  }
 
   // Check tile type for inner decorative obstacles (trees, pots, low walls)
   const ch = tileAt(tx, ty);
   if (ch === 'T') {
     maxH = Math.max(maxH, 1.05); // Stand on top of decorative trees/pots
   } else if (ch === '#') {
-    maxH = Math.max(maxH, 1.25); // Stand on inner partition walls
+    maxH = Math.max(maxH, 1.6); // Stand on inner partition walls
   }
 
   // Check colliders (tables, tree planter base, fountain rim, TV stage)
   if (world?.features?.colliders) {
     for (const c of world.features.colliders) {
       const d = Math.hypot(x - c.x, y - c.y);
-      if (d < c.r + RADIUS * 0.55) {
+      if (d < c.r * 0.75 + RADIUS) {
         const colH = c.r > 0.6 ? 1.05 : 0.85;
         maxH = Math.max(maxH, colH);
       }
@@ -3193,11 +3198,11 @@ function getStandHeight(x, y) {
       if (s.kind === 'couple') {
         const dx = Math.abs(x - s.x);
         const dy = Math.abs(y - s.y);
-        if (dx < 0.55 && dy < 0.4) {
+        if (dx < 0.52 && dy < 0.38) {
           maxH = Math.max(maxH, 0.48);
         }
       } else {
-        if (Math.hypot(x - s.x, y - s.y) < 0.38) {
+        if (Math.hypot(x - s.x, y - s.y) < 0.36) {
           maxH = Math.max(maxH, 0.44);
         }
       }
@@ -3208,8 +3213,17 @@ function getStandHeight(x, y) {
 }
 
 const free = (x, y, currentH = 0) => {
-  // Hard map perimeter boundary clamp
-  if (x < 1.25 || x > state.map.w - 1.25 || y < 1.25 || y > state.map.h - 1.25) return false;
+  // Hard outer perimeter clamp: player can walk on top of the perimeter wall (x down to 0.15),
+  // but CAN NEVER step beyond the outer wall edge into the void!
+  if (x < 0.15 || x > state.map.w - 1.15 || y < 0.15 || y > state.map.h - 1.15) return false;
+
+  // Ground level perimeter wall collision (no invisible gap! Wall inner face is at 0.5)
+  if (currentH < 1.4) {
+    if (x < 0.5 + RADIUS || x > state.map.w - 1.5 - RADIUS ||
+        y < 0.5 + RADIUS || y > state.map.h - 1.5 - RADIUS) {
+      return false;
+    }
+  }
 
   for (const [ox, oy] of [
     [-1, -1],
@@ -3219,33 +3233,31 @@ const free = (x, y, currentH = 0) => {
   ]) {
     const tx = Math.floor(x + ox * RADIUS + 0.5);
     const ty = Math.floor(y + oy * RADIUS + 0.5);
-    if (tx <= 0 || ty <= 0 || tx >= state.map.w - 1 || ty >= state.map.h - 1) return false;
+    const isPerimeter = tx <= 0 || ty <= 0 || tx >= state.map.w - 1 || ty >= state.map.h - 1;
+    if (isPerimeter) {
+      if (currentH < 1.4) return false;
+      continue; // When jumping or standing on top of wall, allowed!
+    }
 
     const t = tileAt(tx, ty);
     if (isSolid(t)) {
-      const standH = t === 'T' ? 1.05 : 1.25;
+      const standH = t === 'T' ? 1.05 : 1.6;
       if (currentH < standH - 0.22) return false;
     }
   }
+
+  // Colliders (tables, tree base, fountain, stage)
   if (world?.features?.colliders) {
     for (const c of world.features.colliders) {
-      const minD = c.r + RADIUS;
+      const colH = c.r > 0.6 ? 1.05 : 0.85;
+      if (currentH >= colH - 0.22) continue; // Can jump/stand on top!
+
+      const minD = c.r * 0.75 + RADIUS;
       const nextD = Math.hypot(x - c.x, y - c.y);
       if (nextD < minD) {
-        // If player is already within or touching the collider boundary,
-        // ALWAYS allow any movement that increases distance (moving away from the obstacle)!
         const curD = Math.hypot(me.x - c.x, me.y - c.y);
-        if (curD < minD && nextD > curD) continue;
+        if (curD < minD && nextD > curD) continue; // Moving away is allowed
         return false;
-      }
-    }
-  }
-
-  if (world?.features?.colliders) {
-    for (const c of world.features.colliders) {
-      if (Math.hypot(x - c.x, y - c.y) < c.r + RADIUS) {
-        const colH = c.r > 0.6 ? 1.05 : 0.85;
-        if (currentH < colH - 0.22) return false;
       }
     }
   }
@@ -3338,16 +3350,18 @@ function loop(now) {
     dz = (dz / l) * sp;
     if (free(me.x + dx, me.y, me.h)) me.x += dx;
     if (free(me.x, me.y + dz, me.h)) me.y += dz;
-    // Hard coordinate clamp against any glitching
-    me.x = Math.max(1.25, Math.min(state.map.w - 1.25, me.x));
-    me.y = Math.max(1.25, Math.min(state.map.h - 1.25, me.y));
+    // Hard coordinate clamp against any glitching out of map
+    me.x = Math.max(0.15, Math.min(state.map.w - 1.15, me.x));
+    me.y = Math.max(0.15, Math.min(state.map.h - 1.15, me.y));
   }
 
   // Auto-resolve any slight penetration with colliders so player never gets stuck against item tables or obstacles
   if (!me.seatSlot && world?.features?.colliders) {
     for (const c of world.features.colliders) {
+      const colH = c.r > 0.6 ? 1.05 : 0.85;
+      if (me.h >= colH - 0.15) continue; // Standing on top of object!
       const d = Math.hypot(me.x - c.x, me.y - c.y);
-      const minD = c.r + RADIUS;
+      const minD = c.r * 0.75 + RADIUS;
       if (d < minD && d > 0.0001) {
         const overlap = minD - d;
         const pushFactor = Math.min(overlap, dt * 8);
@@ -3367,8 +3381,8 @@ function loop(now) {
   // Parkour & Vertical physics with stand-on-obstacle landing
   const floorH = getStandHeight(me.x, me.y);
   if (floorH === Infinity) {
-    me.x = Math.max(2, Math.min(state.map.w - 2, me.x));
-    me.y = Math.max(2, Math.min(state.map.h - 2, me.y));
+    me.x = Math.max(1, Math.min(state.map.w - 2, me.x));
+    me.y = Math.max(1, Math.min(state.map.h - 2, me.y));
     me.h = 0;
     me.vy = 0;
   } else if (me.h > floorH || me.vy > 0) {
@@ -3611,7 +3625,7 @@ function updateCamera(dt = 0.016) {
     let t = 1;
     for (let i = 1; i <= 16; i++) {
       _p.lerpVectors(_head, _want, i / 16);
-      if (_p.y < 2.6 && solidForCamera(_p.x, _p.z)) {
+      if (_p.y < 1.6 && solidForCamera(_p.x, _p.z)) {
         t = (i - 1) / 16;
         break;
       }
