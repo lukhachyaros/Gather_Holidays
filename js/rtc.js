@@ -2,9 +2,11 @@
 // Features:
 // 1. Full-Mesh WebRTC RTCPeerConnection with W3C Perfect Negotiation, STUN & TURN relay fallback
 // 2. High-Fidelity Voice Chat with Opus codec, Echo Cancellation, Noise Suppression & AGC
-// 3. 3D Spatial Proximity Audio: Dynamic distance attenuation (sounds louder up close, fades naturally with distance)
-// 4. Voice Activity Detection (VAD) via Web Audio API Analyser for real-time speaking indicators
-// 5. Full HD Screen Sharing (Entire Screen, App Window, Browser Tab with System/Tab Audio) onto the Giant 3D Cinema TV
+// 3. Continuous Audio Pipeline (Silent Primer Track) to guarantee immediate receiver setup and avoid stalled decoding
+// 4. 3D Spatial Proximity Audio: Dynamic distance attenuation (sounds louder up close, comfortable floor everywhere)
+// 5. Voice Activity Detection (VAD) via Web Audio API Analyser for real-time speaking indicators
+// 6. Signal deduplication to prevent state corruption across dual transports (BroadcastChannel + MQTT)
+// 7. Full HD Screen Sharing (Entire Screen, App Window, Browser Tab with System/Tab Audio) onto the Giant 3D Cinema TV
 
 const RTC_CONFIG = {
   iceServers: [
@@ -58,6 +60,7 @@ export class RtcManager {
     this.localVoiceSource = null;
     this.isLocalSpeaking = false;
     this.vadInterval = null;
+    this.cachedSilent = null;
 
     // Settings
     this.proximityEnabled = true; // 3D distance attenuation
@@ -83,15 +86,45 @@ export class RtcManager {
       if (this.audioCtx && this.audioCtx.state === 'suspended') {
         this.audioCtx.resume().catch(() => {});
       }
+      this.unlockAudioPlayback();
     };
-    window.addEventListener('pointerdown', resumeAudio, { passive: true, once: false });
-    window.addEventListener('keydown', resumeAudio, { passive: true, once: false });
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pointerdown', resumeAudio, { passive: true });
+      window.addEventListener('keydown', resumeAudio, { passive: true });
+    }
+  }
+
+  // Generates a continuous silent audio track to prime WebRTC negotiation & remote audio pipeline
+  getSilentTrack() {
+    if (this.cachedSilent && this.cachedSilent.track && this.cachedSilent.track.readyState === 'live') {
+      return this.cachedSilent;
+    }
+    this.initAudioContext();
+    if (!this.audioCtx) return null;
+    try {
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+      gain.gain.value = 0.0;
+      osc.connect(gain);
+      const dest = this.audioCtx.createMediaStreamDestination();
+      gain.connect(dest);
+      osc.start();
+      this.cachedSilent = {
+        track: dest.stream.getAudioTracks()[0],
+        stream: dest.stream,
+      };
+      return this.cachedSilent;
+    } catch (e) {
+      console.warn('[RTC] Failed to create silent audio track:', e);
+      return null;
+    }
   }
 
   // -------------------------------------------------------------
   // MICROPHONE & VOICE CHAT
   // -------------------------------------------------------------
   async toggleMic() {
+    this.unlockAudioPlayback();
     if (!this.localVoiceStream) {
       return await this.startMicrophone();
     }
@@ -128,6 +161,9 @@ export class RtcManager {
 
       // Set up Web Audio Analyser for local Voice Activity Detection (VAD)
       if (this.audioCtx) {
+        if (this.localVoiceSource) {
+          try { this.localVoiceSource.disconnect(); } catch {}
+        }
         this.localVoiceSource = this.audioCtx.createMediaStreamSource(stream);
         this.localAnalyser = this.audioCtx.createAnalyser();
         this.localAnalyser.fftSize = 256;
@@ -135,36 +171,44 @@ export class RtcManager {
         this.localVoiceSource.connect(this.localAnalyser);
       }
 
-      // Add local audio tracks to all existing peer connections
+      // Add or replace live audio track on all existing peer connections
       const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = true;
         for (const [peerId, peer] of this.peers.entries()) {
           try {
-            let replaced = false;
+            // Ensure transceiver is sendrecv
             if (peer.pc.getTransceivers) {
               const audioTransceiver = peer.pc.getTransceivers().find(
                 t =>
-                  (t.receiver.track && t.receiver.track.kind === 'audio') ||
-                  (t.sender.track && t.sender.track.kind === 'audio')
+                  (t.sender && t.sender.track && t.sender.track.kind === 'audio') ||
+                  (t.receiver && t.receiver.track && t.receiver.track.kind === 'audio')
               );
-              if (audioTransceiver && audioTransceiver.sender) {
+              if (audioTransceiver && audioTransceiver.direction !== 'sendrecv') {
                 audioTransceiver.direction = 'sendrecv';
-                await audioTransceiver.sender.replaceTrack(audioTrack);
+              }
+            }
+
+            let replaced = false;
+            // 1. Try known audioSender
+            if (peer.audioSender) {
+              await peer.audioSender.replaceTrack(audioTrack);
+              replaced = true;
+            } else {
+              // 2. Try finding sender among peer.pc.getSenders()
+              const senders = peer.pc.getSenders ? peer.pc.getSenders() : [];
+              const existing = senders.find(s => s.track && s.track.kind === 'audio');
+              if (existing) {
+                await existing.replaceTrack(audioTrack);
+                peer.audioSender = existing;
                 replaced = true;
               }
             }
             if (!replaced) {
-              const senders = peer.pc.getSenders();
-              const existing = senders.find(s => s.track && s.track.kind === 'audio');
-              if (existing) {
-                await existing.replaceTrack(audioTrack);
-              } else {
-                peer.pc.addTrack(audioTrack, stream);
-              }
+              peer.audioSender = peer.pc.addTrack(audioTrack, stream);
             }
           } catch (e) {
-            console.warn(`[RTC] Failed to add audio track to peer ${peerId}:`, e);
+            console.warn(`[RTC] Failed to attach live audio track to peer ${peerId}:`, e);
           }
         }
       }
@@ -196,9 +240,18 @@ export class RtcManager {
   }
 
   stopMicrophone() {
+    const silent = this.getSilentTrack();
     if (this.localVoiceStream) {
       this.localVoiceStream.getTracks().forEach(t => t.stop());
       this.localVoiceStream = null;
+    }
+    // Revert peer senders to silent track so audio pipeline stays active
+    if (silent?.track) {
+      for (const peer of this.peers.values()) {
+        if (peer.audioSender) {
+          peer.audioSender.replaceTrack(silent.track).catch(() => {});
+        }
+      }
     }
     this.isMicMuted = true;
     this.isLocalSpeaking = false;
@@ -347,6 +400,8 @@ export class RtcManager {
       makingOffer: false,
       ignoreOffer: false,
       candidateQueue: [],
+      seenSignals: new Set(),
+      audioSender: null,
       audioGain: null,
       audioEl: null,
       source: null,
@@ -360,37 +415,7 @@ export class RtcManager {
     // Setup Web Audio nodes for remote peer's incoming audio
     this.setupRemoteAudioGraph(peerData);
 
-    // Pre-allocate bidirectional audio transceiver immediately for instant P2P voice
-    let audioTransceiver = null;
-    try {
-      audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
-    } catch (e) {
-      console.warn('[RTC] addTransceiver warning:', e);
-    }
-
-    // Add existing local tracks to new peer
-    if (this.localVoiceStream) {
-      const audioTrack = this.localVoiceStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !this.isMicMuted;
-        if (audioTransceiver && audioTransceiver.sender) {
-          audioTransceiver.sender.replaceTrack(audioTrack).catch(() => {});
-        } else {
-          try {
-            pc.addTrack(audioTrack, this.localVoiceStream);
-          } catch {}
-        }
-      }
-    }
-
-    if (this.localScreenStream) {
-      this.localScreenStream.getTracks().forEach(track => {
-        try {
-          pc.addTrack(track, this.localScreenStream);
-        } catch {}
-      });
-    }
-
+    // 1. Attach ALL event handlers BEFORE adding any tracks
     // ICE Candidates
     pc.onicecandidate = ({ candidate }) => {
       if (candidate) {
@@ -418,7 +443,6 @@ export class RtcManager {
       const stream = event.streams[0] || new MediaStream([track]);
 
       if (track.kind === 'video') {
-        // Screen share video stream from remote peer!
         peerData.remoteScreenStream = stream;
         this.onRemoteScreenTrack?.(peerId, stream);
 
@@ -429,7 +453,6 @@ export class RtcManager {
           }
         };
       } else if (track.kind === 'audio') {
-        // Audio track: voice chat or screen audio
         this.attachRemoteAudioTrack(peerData, stream, track);
       }
     };
@@ -450,10 +473,40 @@ export class RtcManager {
       }
     };
 
+    // 2. Pre-add Voice Track: Live Mic if active, otherwise continuous silent primer track
+    const silent = this.getSilentTrack();
+    const liveTrack = (this.localVoiceStream && !this.isMicMuted)
+      ? this.localVoiceStream.getAudioTracks()[0]
+      : null;
+    const initialTrack = liveTrack || this.localVoiceStream?.getAudioTracks()[0] || silent?.track;
+    const initialStream = this.localVoiceStream || silent?.stream;
+
+    if (initialTrack && initialStream) {
+      try {
+        peerData.audioSender = pc.addTrack(initialTrack, initialStream);
+      } catch (e) {
+        console.warn(`[RTC] Failed to add initial audio track to peer ${peerId}:`, e);
+      }
+    } else {
+      try {
+        pc.addTransceiver('audio', { direction: 'sendrecv' });
+      } catch (e) {}
+    }
+
+    // 3. Add Screen Share Track if currently active
+    if (this.localScreenStream) {
+      this.localScreenStream.getTracks().forEach(track => {
+        try {
+          pc.addTrack(track, this.localScreenStream);
+        } catch {}
+      });
+    }
+
     return peerData;
   }
 
   setupRemoteAudioGraph(peerData) {
+    this.initAudioContext();
     if (!this.audioCtx) return;
     try {
       const analyser = this.audioCtx.createAnalyser();
@@ -466,6 +519,7 @@ export class RtcManager {
   }
 
   attachRemoteAudioTrack(peerData, stream, track) {
+    if (!track) return;
     track.enabled = true;
 
     // 1. Resume AudioContext if suspended
@@ -488,7 +542,7 @@ export class RtcManager {
       }
     }
 
-    // 3. Native HTMLAudioElement attached to DOM as Primary, 100% Reliable Audio Output
+    // 3. Native HTMLAudioElement attached to DOM as Primary Audio Output
     let audio = peerData.audioEl;
     if (!audio) {
       audio = document.createElement('audio');
@@ -496,7 +550,7 @@ export class RtcManager {
       audio.autoplay = true;
       audio.playsInline = true;
       audio.muted = false;
-      // Use off-screen absolute positioning rather than display: none so Chrome maintains active decoding
+      // Position off-screen instead of display: none so Chrome maintains active decoding
       audio.style.position = 'fixed';
       audio.style.left = '-9999px';
       audio.style.top = '-9999px';
@@ -508,12 +562,24 @@ export class RtcManager {
       peerData.audioEl = audio;
     }
 
-    audio.srcObject = stream;
+    if (audio.srcObject !== stream) {
+      audio.srcObject = stream;
+    }
     audio.muted = false;
     audio.volume = this.masterVoiceVolume;
+
+    // Critical for Chromium: when unmuted, force audio playback
+    track.onunmute = () => {
+      console.log(`[RTC] Remote audio track unmuted for ${peerData.peerId}`);
+      if (audio.paused) {
+        audio.play().catch(err => {
+          console.warn(`[RTC] Audio play error on unmute:`, err);
+        });
+      }
+    };
+
     audio.play().catch(err => {
       console.warn(`[RTC] Audio autoplay blocked for ${peerData.peerId}, waiting for user gesture:`, err);
-      this.toast('🔊 Nhấp chuột vào màn hình để mở tiếng Voice Chat!');
     });
 
     this.startVadLoop();
@@ -523,6 +589,25 @@ export class RtcManager {
     if (!signal) return;
     const peer = this.getOrCreatePeer(fromPeerId);
     const { pc, isPolite } = peer;
+
+    // Signal deduplication to prevent duplicate processing from dual transport (BroadcastChannel + MQTT)
+    if (!peer.seenSignals) peer.seenSignals = new Set();
+    const sigKey = signal.description
+      ? `${signal.description.type}_${signal.description.sdp?.slice(0, 100)}`
+      : signal.candidate
+        ? `cand_${signal.candidate.candidate}_${signal.candidate.sdpMid}_${signal.candidate.sdpMLineIndex}`
+        : null;
+
+    if (sigKey) {
+      if (peer.seenSignals.has(sigKey)) {
+        return; // Already processed
+      }
+      peer.seenSignals.add(sigKey);
+      if (peer.seenSignals.size > 400) {
+        const it = peer.seenSignals.values();
+        for (let i = 0; i < 150; i++) peer.seenSignals.delete(it.next().value);
+      }
+    }
 
     try {
       if (signal.description) {
@@ -537,12 +622,16 @@ export class RtcManager {
         }
 
         if (offerCollision) {
-          // Polite peer: rollback local offer to accept remote offer
-          await Promise.all([
-            pc.setLocalDescription({ type: 'rollback' }),
-            pc.setRemoteDescription(desc),
-          ]);
+          // Polite peer: sequentially rollback local offer then set remote offer
+          console.log(`[RTC] Polite peer rolling back offer for ${fromPeerId}`);
+          await pc.setLocalDescription({ type: 'rollback' });
+          await pc.setRemoteDescription(desc);
         } else {
+          // Guard against duplicate or out-of-order answers
+          if (desc.type === 'answer' && pc.signalingState !== 'have-local-offer') {
+            console.warn(`[RTC] Ignoring answer from ${fromPeerId} in state ${pc.signalingState}`);
+            return;
+          }
           await pc.setRemoteDescription(desc);
         }
 
@@ -630,16 +719,16 @@ export class RtcManager {
         if (dist <= this.minAudibleDistance) {
           volume = this.masterVoiceVolume;
         } else if (dist >= this.maxAudibleDistance) {
-          volume = this.masterVoiceVolume * 0.15; // Still 15% whisper even at map boundaries
+          volume = this.masterVoiceVolume * 0.40; // 40% audible at map boundaries
         } else {
-          // Smooth falloff down to 18% floor so nobody is completely silenced within the room
+          // Smooth falloff down to 45% floor so players can always hear each other comfortably
           const t =
             (dist - this.minAudibleDistance) / (this.maxAudibleDistance - this.minAudibleDistance);
-          volume = this.masterVoiceVolume * (0.18 + 0.82 * Math.pow(1 - t, 1.4));
+          volume = this.masterVoiceVolume * (0.45 + 0.55 * Math.pow(1 - t, 1.2));
         }
       }
 
-      const clampedVol = Math.max(0.05, Math.min(1, volume));
+      const clampedVol = Math.max(0.35, Math.min(1, volume));
       try {
         if (Math.abs(peer.audioEl.volume - clampedVol) > 0.02) {
           peer.audioEl.volume = clampedVol;
@@ -697,7 +786,7 @@ export class RtcManager {
     }
     this.stopMicrophone();
     this.stopScreenShare();
-    for (const peerId of this.peers.keys()) {
+    for (const peerId of Array.from(this.peers.keys())) {
       this.removePeer(peerId);
     }
     if (this.audioCtx) {

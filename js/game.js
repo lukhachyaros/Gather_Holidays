@@ -32,7 +32,7 @@ import {
 import { World, TILE } from './world.js';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js';
 import { emojiSprite } from './props.js';
-import { RtcManager } from './rtc.js';
+import { RtcManager } from './rtc.js?v=20261111_voice_rtc';
 import {
   initAudio,
   playBgm,
@@ -103,6 +103,7 @@ function initRtc(selfId) {
     },
     toast,
   });
+  window.__gh_rtc = rtc;
 }
 
 // Unlock remote WebRTC audio playback on user gesture
@@ -1003,6 +1004,7 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
   };
 
   net = await connect(roomName, handlers);
+  window.__gh_net = net;
   initRtc(net.selfId);
   $('roomInfo').textContent = `📍 ${roomTitle}`;
   updateLiveStats();
