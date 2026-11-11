@@ -52,7 +52,9 @@ import {
   openPlinko,
   getChips,
   addChips,
+  resetChips,
   redeemCode,
+  handleCasinoBroadcast,
   VALID_CODES,
 } from './casino.js';
 
@@ -326,6 +328,22 @@ let mouseSens = parseFloat(localStorage.getItem('gh_sens') || '1.0');
 if (Number.isNaN(mouseSens) || mouseSens < 0.2 || mouseSens > 3.0) mouseSens = 1.0;
 let lockMode = localStorage.getItem('gh_lock_mode') || 'click';
 
+// Admin state variables
+let adminSpeedMultiplier = 1.0;
+let adminJumpPower = 8.2;
+let adminFlying = false;
+let adminNoclip = false;
+let adminGodMode = false;
+window.adminGodMode = false;
+let isFrozen = false;
+let isJailed = false;
+let jailedPos = null;
+let currentGravity = 20;
+let adminSpinUntil = 0;
+let mobileMoveVector = { x: 0, y: 0 };
+const adminBanList = new Set();
+const adminMuteList = new Set();
+
 const isHost = () => !!(state && net && state.hostId === net.selfId);
 
 // FPS Counter state
@@ -345,10 +363,136 @@ try {
   world = new World(scene);
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
   initAudio();
-  initCasino(world, toast);
+  initCasino(world, toast, emitOp, () => me, () => peers);
+  initMobileControls();
 } catch (e) {
   console.error(e);
   document.addEventListener('DOMContentLoaded', () => toast('Trình duyệt không hỗ trợ WebGL'));
+}
+
+function initMobileControls() {
+  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.innerWidth <= 840;
+  const container = $('mobileControls');
+  if (!container) return;
+
+  if (isTouch) {
+    container.classList.remove('hidden');
+  }
+
+  const joystickZone = $('joystickZone');
+  const joystickBase = $('joystickBase');
+  const joystickThumb = $('joystickThumb');
+  let touchId = null;
+  let baseRect = null;
+  const maxRadius = 38;
+
+  if (joystickZone && joystickBase && joystickThumb) {
+    const handleTouchStart = (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touchId === null) {
+          touchId = touch.identifier;
+          baseRect = joystickBase.getBoundingClientRect();
+          updateJoystick(touch.clientX, touch.clientY);
+          break;
+        }
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === touchId) {
+          updateJoystick(touch.clientX, touch.clientY);
+          break;
+        }
+      }
+    };
+
+    const handleTouchEnd = (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === touchId) {
+          touchId = null;
+          mobileMoveVector.x = 0;
+          mobileMoveVector.y = 0;
+          joystickThumb.style.transform = 'translate(-50%, -50%)';
+          break;
+        }
+      }
+    };
+
+    const updateJoystick = (clientX, clientY) => {
+      if (!baseRect) baseRect = joystickBase.getBoundingClientRect();
+      const centerX = baseRect.left + baseRect.width / 2;
+      const centerY = baseRect.top + baseRect.height / 2;
+      let dx = clientX - centerX;
+      let dy = clientY - centerY;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > maxRadius) {
+        dx = (dx / dist) * maxRadius;
+        dy = (dy / dist) * maxRadius;
+      }
+
+      joystickThumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      mobileMoveVector.x = dx / maxRadius;
+      mobileMoveVector.y = -dy / maxRadius;
+    };
+
+    joystickZone.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd, { passive: false });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+  }
+
+  const btnJump = $('btnMobileJump');
+  if (btnJump) {
+    btnJump.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      doPlayerJump();
+    });
+    btnJump.addEventListener('click', (e) => {
+      e.preventDefault();
+      doPlayerJump();
+    });
+  }
+
+  const btnInteract = $('btnMobileInteract');
+  if (btnInteract) {
+    btnInteract.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      triggerInteract(activeTarget);
+    });
+    btnInteract.addEventListener('click', (e) => {
+      e.preventDefault();
+      triggerInteract(activeTarget);
+    });
+  }
+
+  const btnAction = $('btnMobileAction');
+  if (btnAction) {
+    btnAction.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      minigames?.triggerAction();
+    });
+    btnAction.addEventListener('click', (e) => {
+      e.preventDefault();
+      minigames?.triggerAction();
+    });
+  }
+
+  const btnEmote = $('btnMobileEmote');
+  if (btnEmote) {
+    btnEmote.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      toggleEmoteMenu();
+    });
+    btnEmote.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleEmoteMenu();
+    });
+  }
 }
 function resize() {
   if (!renderer) return;
@@ -905,8 +1049,12 @@ async function start() {
     state.map = buildThemeMap(offOfficial.theme);
   }
 
+  // Immediately synchronize 3D world before starting animation loop
+  world.sync(state, roomName);
+
   $('topTheme').value = state.theme;
   $('topTheme').classList.toggle('hidden', roomName === SECRET_CASINO_ROOM);
+  $('statFps').textContent = '⚡ 60 FPS';
   playBgm(state.theme);
   minigames?.setTheme(state.theme);
   net.send('hello', pubInfo());
@@ -1577,15 +1725,129 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'admin_size': {
-      const pEntry = findPeerByName(op.target);
-      if (pEntry && pEntry[1].av) {
-        pEntry[1].av.root.scale.set(op.scale, op.scale, op.scale);
+      if (op.target === me?.name || op.target === 'all') {
+        if (me?.av) me.av.root.scale.set(op.scale, op.scale, op.scale);
+      }
+      if (op.target !== me?.name) {
+        if (op.target === 'all') {
+          peers.forEach(p => {
+            if (p.av) p.av.root.scale.set(op.scale, op.scale, op.scale);
+          });
+        } else {
+          const pEntry = findPeerByName(op.target);
+          if (pEntry && pEntry[1].av) {
+            pEntry[1].av.root.scale.set(op.scale, op.scale, op.scale);
+          }
+        }
+      }
+      break;
+    }
+    case 'admin_fire': {
+      if (op.target === me?.name || op.target === 'all') {
+        playSfx('firecracker', 'tet');
+        me.av?.showTomatoSplat?.();
+        toast('🔥 Bạn đang bị Admin đốt lửa bốc khói dữ dội!');
       }
       break;
     }
     case 'admin_gravity': {
       currentGravity = op.gravity;
       toast(`🌍 Trọng lực thế giới đã thay đổi: ${currentGravity}`);
+      break;
+    }
+    case 'casino_broadcast': {
+      handleCasinoBroadcast(op);
+      break;
+    }
+    case 'admin_spin': {
+      if (op.target === me?.name || op.target === 'all') {
+        adminSpinUntil = performance.now() + 6500;
+        toast('💫 Bạn bị Admin làm xoay mòng mòng chóng mặt!');
+      }
+      break;
+    }
+    case 'admin_disco': {
+      document.body.classList.toggle('disco-active');
+      toast('🪩 Bữa tiệc Disco Admin đã được kích hoạt!');
+      break;
+    }
+    case 'admin_earthquake': {
+      document.body.classList.add('earthquake-active');
+      playSfx('explosion', 'tet');
+      toast('🌋 CẢNH BÁO ĐỘNG ĐẤT TỪ ADMIN! Màn hình rung lắc dữ dội!');
+      setTimeout(() => document.body.classList.remove('earthquake-active'), 5500);
+      break;
+    }
+    case 'admin_nuke': {
+      const flash = document.createElement('div');
+      flash.className = 'nuke-flash-overlay';
+      document.body.appendChild(flash);
+      playSfx('explosion', 'tet');
+      toast('💥 BOM HẠT NHÂN ADMIN VỪA KÍCH NỔ!');
+      setTimeout(() => flash.remove(), 2600);
+      break;
+    }
+    case 'admin_rocket': {
+      if (op.target === me?.name || op.target === 'all') {
+        me.vy = 42;
+        me.h += 3;
+        playSfx('firework_rocket', 'tet');
+        toast('🚀 VÚT! Bạn đã bị Admin phóng lên chín tầng mây!');
+      }
+      break;
+    }
+    case 'admin_slap': {
+      if (op.target === me?.name || op.target === 'all') {
+        me.vy = 6;
+        me.h += 0.8;
+        me.x += (Math.random() - 0.5) * 4;
+        me.y += (Math.random() - 0.5) * 4;
+        me.av?.showTomatoSplat?.();
+        playSfx('splat', 'halloween');
+        toast(`🍅 BỐP! Bạn vừa bị Admin ${op.by} tát lộn mèo + Cà chua dính đầy mặt!`);
+      }
+      break;
+    }
+    case 'admin_dance': {
+      if (op.target === me?.name || op.target === 'all') {
+        me.av?.playEmote?.('dance');
+        toast('💃 Nhạc lên là quẩy! Toàn server cùng nhảy múa!');
+      }
+      break;
+    }
+    case 'admin_clown': {
+      if (op.target === me?.name || op.target === 'all') {
+        me.pumpkinHat = me.pumpkinHat ? null : 'classic';
+        me.av?.setPumpkinHat?.(me.pumpkinHat);
+        syncMyAppearance();
+        toast('🤡 Bạn vừa bị Admin phong làm Chú Hề của phòng!');
+      }
+      break;
+    }
+    case 'admin_reset_all': {
+      adminSpeedMultiplier = 1.0;
+      adminJumpPower = 8.2;
+      adminFlying = false;
+      adminNoclip = false;
+      adminGodMode = false;
+      window.adminGodMode = false;
+      isFrozen = false;
+      isJailed = false;
+      jailedPos = null;
+      currentGravity = 20;
+      adminSpinUntil = 0;
+      document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active');
+      if (me?.av) {
+        me.av.root.scale.set(1, 1, 1);
+        me.av.root.visible = true;
+      }
+      peers.forEach(p => {
+        if (p.av) {
+          p.av.root.scale.set(1, 1, 1);
+          p.av.root.visible = true;
+        }
+      });
+      toast('✨ Tất cả hiệu ứng troll đã được khôi phục về trạng thái ban đầu!');
       break;
     }
     case 'mg_snowball_throw':
@@ -2984,7 +3246,7 @@ function triggerInteract(target = activeTarget) {
         break;
       case 'secret_passage':
         playSfx('wishing_fountain', 'valentine');
-        enterSecretCasino();
+        openPassageRiddleDialog(state?.theme || 'christmas');
         break;
       case 'casino_exit':
         playSfx('pop');
@@ -2999,6 +3261,19 @@ function triggerInteract(target = activeTarget) {
 }
 
 $('interactPrompt').onclick = () => triggerInteract(activeTarget);
+
+function doPlayerJump() {
+  if (!me || adminFlying || isFrozen || isJailed) return;
+  const jumpV = adminJumpPower || JUMP_V;
+  if (me.seatSlot) {
+    leaveSeat(true);
+    me.vy = jumpV;
+  } else if (me.h <= getStandHeight(me.x, me.y) + 0.15) {
+    me.vy = jumpV;
+    me.loco = 'jump';
+    playSfx('step');
+  }
+}
 
 // ---------- Input & Pointer Events ----------
 addEventListener('keydown', e => {
@@ -3053,14 +3328,7 @@ addEventListener('keydown', e => {
 
   if (e.key?.startsWith('Arrow') || code.startsWith('Arrow') || e.key === ' ' || code === 'Space') e.preventDefault();
   if ((e.key === ' ' || code === 'Space') && me && !adminFlying && !isFrozen && !isJailed) {
-    const jumpV = adminJumpPower || JUMP_V;
-    if (me.seatSlot) {
-      leaveSeat(true);
-      me.vy = jumpV;
-    } else if (me.h <= getStandHeight(me.x, me.y) + 0.15) {
-      me.vy = jumpV;
-      me.loco = 'jump';
-    }
+    doPlayerJump();
   }
   if (k) keys.add(k);
   if (code) keys.add(code);
@@ -3486,212 +3754,237 @@ function loop(now) {
     loopRunning = false;
     return;
   }
-  const dt = Math.min(0.05, (now - last) / 1000);
-  last = now;
 
-  // 1. Update FPS & Live Stats
-  frameCount++;
-  if (now - fpsLastTime >= 500) {
-    currentFps = Math.round((frameCount * 1000) / (now - fpsLastTime));
-    $('statFps').textContent = `⚡ ${currentFps} FPS`;
-    frameCount = 0;
-    fpsLastTime = now;
-  }
+  // Always schedule next frame first so animation loop never dies from temporary glitches
+  requestAnimationFrame(loop);
 
-  // 2. Update Cooldown Badge on HUD
-  const cb = $('cooldownBadge');
-  if (now < cooldownUntil) {
-    cb.textContent = `⏳ Hồi chiêu: ${((cooldownUntil - now) / 1000).toFixed(1)}s`;
-    cb.classList.remove('hidden');
-  } else {
-    cb.classList.add('hidden');
-  }
+  try {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
 
-  // 3. Player Locomotion & Sitting State
-  if (isFrozen) {
-    me.loco = 'idle';
-  } else if (isJailed && jailedPos) {
-    me.x = jailedPos.x;
-    me.y = jailedPos.y;
-    me.loco = 'idle';
-  } else {
-    const k = keys;
-    const isUp = k.has('w') || k.has('KeyW') || k.has('ư') || k.has('arrowup') || k.has('ArrowUp');
-    const isDown = k.has('s') || k.has('KeyS') || k.has('arrowdown') || k.has('ArrowDown');
-    const isLeft = k.has('a') || k.has('KeyA') || k.has('arrowleft') || k.has('ArrowLeft');
-    const isRight = k.has('d') || k.has('KeyD') || k.has('arrowright') || k.has('ArrowRight');
-    const fwd = (isUp ? 1 : 0) - (isDown ? 1 : 0);
-    const str = (isRight ? 1 : 0) - (isLeft ? 1 : 0);
-    const running = k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight');
-    let dx = -Math.sin(yaw) * fwd + Math.cos(yaw) * str,
-      dz = -Math.cos(yaw) * fwd - Math.sin(yaw) * str;
-    const moving = !!(dx || dz);
-
-    if (moving && me.seatSlot) {
-      leaveSeat();
+    // 1. Update FPS & Live Stats
+    frameCount++;
+    if (now - fpsLastTime >= 500) {
+      currentFps = Math.round((frameCount * 1000) / (now - fpsLastTime));
+      const fpsEl = $('statFps');
+      if (fpsEl) fpsEl.textContent = `⚡ ${currentFps} FPS`;
+      frameCount = 0;
+      fpsLastTime = now;
     }
 
-    if (moving && !me.seatSlot) {
-      const l = Math.hypot(dx, dz),
-        sp = (running ? RUN : WALK) * dt * (adminSpeedMultiplier || 1.0);
-      dx = (dx / l) * sp;
-      dz = (dz / l) * sp;
-      if (adminNoclip || free(me.x + dx, me.y, me.h)) me.x += dx;
-      if (adminNoclip || free(me.x, me.y + dz, me.h)) me.y += dz;
-      // Hard coordinate clamp against any glitching out of map
-      me.x = Math.max(0.15, Math.min(state.map.w - 1.15, me.x));
-      me.y = Math.max(0.15, Math.min(state.map.h - 1.15, me.y));
+    // 2. Update Cooldown Badge on HUD
+    const cb = $('cooldownBadge');
+    if (cb) {
+      if (now < cooldownUntil) {
+        cb.textContent = `⏳ Hồi chiêu: ${((cooldownUntil - now) / 1000).toFixed(1)}s`;
+        cb.classList.remove('hidden');
+      } else {
+        cb.classList.add('hidden');
+      }
     }
 
-    if (adminFlying) {
-      me.vy = 0;
-      if (k.has(' ') || k.has('Space')) me.h += 8 * dt;
-      else if (k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight')) me.h = Math.max(0, me.h - 8 * dt);
-    }
+    // 3. Player Locomotion & Sitting State
+    let moving = false;
+    let running = false;
+    let floorH = getStandHeight(me.x, me.y);
 
-    // Auto-resolve any slight penetration with colliders so player never gets stuck against item tables or obstacles
-    if (!adminNoclip && !me.seatSlot && world?.features?.colliders) {
-      for (const c of world.features.colliders) {
-        const colH = c.r > 0.6 ? 1.05 : 0.85;
-        if (me.h >= colH - 0.15) continue; // Standing on top of object!
-        const d = Math.hypot(me.x - c.x, me.y - c.y);
-        const minD = c.r * 0.75 + RADIUS;
-        if (d < minD && d > 0.0001) {
-          const overlap = minD - d;
-          const pushFactor = Math.min(overlap, dt * 8);
-          const px = ((me.x - c.x) / d) * pushFactor;
-          const py = ((me.y - c.y) / d) * pushFactor;
-          if (!isSolid(tileAt(Math.floor(me.x + px + 0.5), Math.floor(me.y + py + 0.5)))) {
-            me.x += px;
-            me.y += py;
+    if (isFrozen) {
+      me.loco = 'idle';
+    } else if (isJailed && jailedPos) {
+      me.x = jailedPos.x;
+      me.y = jailedPos.y;
+      me.loco = 'idle';
+    } else {
+      const k = keys;
+      const isUp = k.has('w') || k.has('KeyW') || k.has('ư') || k.has('arrowup') || k.has('ArrowUp');
+      const isDown = k.has('s') || k.has('KeyS') || k.has('arrowdown') || k.has('ArrowDown');
+      const isLeft = k.has('a') || k.has('KeyA') || k.has('arrowleft') || k.has('ArrowLeft');
+      const isRight = k.has('d') || k.has('KeyD') || k.has('arrowright') || k.has('ArrowRight');
+      let fwd = (isUp ? 1 : 0) - (isDown ? 1 : 0);
+      let str = (isRight ? 1 : 0) - (isLeft ? 1 : 0);
+      if (Math.abs(mobileMoveVector.y) > 0.05 || Math.abs(mobileMoveVector.x) > 0.05) {
+        fwd += mobileMoveVector.y;
+        str += mobileMoveVector.x;
+      }
+      running = k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight') || Math.hypot(mobileMoveVector.x, mobileMoveVector.y) > 0.85;
+      let dx = -Math.sin(yaw) * fwd + Math.cos(yaw) * str,
+        dz = -Math.cos(yaw) * fwd - Math.sin(yaw) * str;
+      moving = !!(dx || dz);
+
+      if (moving && me.seatSlot) {
+        leaveSeat();
+      }
+
+      if (moving && !me.seatSlot) {
+        const l = Math.hypot(dx, dz),
+          sp = (running ? RUN : WALK) * dt * (adminSpeedMultiplier || 1.0);
+        dx = (dx / l) * sp;
+        dz = (dz / l) * sp;
+        if (adminNoclip || free(me.x + dx, me.y, me.h)) me.x += dx;
+        if (adminNoclip || free(me.x, me.y + dz, me.h)) me.y += dz;
+        // Hard coordinate clamp against any glitching out of map
+        me.x = Math.max(0.15, Math.min(state.map.w - 1.15, me.x));
+        me.y = Math.max(0.15, Math.min(state.map.h - 1.15, me.y));
+      }
+
+      if (adminFlying) {
+        me.vy = 0;
+        if (k.has(' ') || k.has('Space')) me.h += 8 * dt;
+        else if (k.has('shift') || k.has('ShiftLeft') || k.has('ShiftRight')) me.h = Math.max(0, me.h - 8 * dt);
+      }
+
+      // Auto-resolve any slight penetration with colliders so player never gets stuck against item tables or obstacles
+      if (!adminNoclip && !me.seatSlot && world?.features?.colliders) {
+        for (const c of world.features.colliders) {
+          const colH = c.r > 0.6 ? 1.05 : 0.85;
+          if (me.h >= colH - 0.15) continue; // Standing on top of object!
+          const d = Math.hypot(me.x - c.x, me.y - c.y);
+          const minD = c.r * 0.75 + RADIUS;
+          if (d < minD && d > 0.0001) {
+            const overlap = minD - d;
+            const pushFactor = Math.min(overlap, dt * 8);
+            const px = ((me.x - c.x) / d) * pushFactor;
+            const py = ((me.y - c.y) / d) * pushFactor;
+            if (!isSolid(tileAt(Math.floor(me.x + px + 0.5), Math.floor(me.y + py + 0.5)))) {
+              me.x += px;
+              me.y += py;
+            }
           }
         }
       }
-    }
 
-    if (mode === 'fps') me.r = yaw + Math.PI;
-    else if (moving && !me.seatSlot) me.r = lerpAngle(me.r, Math.atan2(dx, dz), Math.min(1, dt * 14));
+      if (now < adminSpinUntil) {
+        me.r += dt * 35;
+      } else if (mode === 'fps') me.r = yaw + Math.PI;
+      else if (moving && !me.seatSlot) me.r = lerpAngle(me.r, Math.atan2(dx, dz), Math.min(1, dt * 14));
 
-    // Parkour & Vertical physics with stand-on-obstacle landing
-    if (!adminFlying) {
-      const floorH = getStandHeight(me.x, me.y);
-      if (floorH === Infinity) {
-        me.x = Math.max(1, Math.min(state.map.w - 2, me.x));
-        me.y = Math.max(1, Math.min(state.map.h - 2, me.y));
-        me.h = 0;
-        me.vy = 0;
-      } else if (me.h > floorH || me.vy > 0) {
-        me.vy -= (currentGravity || GRAVITY) * dt;
-        me.h += me.vy * dt;
-        if (me.h <= floorH) {
+      // Parkour & Vertical physics with stand-on-obstacle landing
+      if (!adminFlying) {
+        floorH = getStandHeight(me.x, me.y);
+        if (floorH === Infinity) {
+          me.x = Math.max(1, Math.min(state.map.w - 2, me.x));
+          me.y = Math.max(1, Math.min(state.map.h - 2, me.y));
+          me.h = 0;
+          me.vy = 0;
+          floorH = 0;
+        } else if (me.h > floorH || me.vy > 0) {
+          me.vy -= (currentGravity || GRAVITY) * dt;
+          me.h += me.vy * dt;
+          if (me.h <= floorH) {
+            me.h = floorH;
+            me.vy = 0;
+          }
+        } else if (me.h < floorH) {
           me.h = floorH;
           me.vy = 0;
         }
-      } else if (me.h < floorH) {
-        me.h = floorH;
-        me.vy = 0;
       }
     }
-  }
 
-  // Check Couple Sofa Pairing & Campfire Proximity
-  let myLean = 0;
-  if (me.seatSlot) {
-    const partner = findCouplePartner();
-    if (partner) {
-      myLean = me.seatSlot.lean || 0;
-      if (now - lastCoupleHeart > 2200) {
-        lastCoupleHeart = now;
-        floaters.push({ e: '💕', who: net.selfId, t: Date.now() });
+    // Check Couple Sofa Pairing & Campfire Proximity
+    let myLean = 0;
+    if (me.seatSlot) {
+      const partner = findCouplePartner();
+      if (partner) {
+        myLean = me.seatSlot.lean || 0;
+        if (now - lastCoupleHeart > 2200) {
+          lastCoupleHeart = now;
+          floaters.push({ e: '💕', who: net?.selfId || 'me', t: Date.now() });
+        }
+      }
+      me.loco = partner ? 'couple_sit' : 'sit';
+    } else {
+      const isAirborne = me.h > floorH + 0.08 || me.vy > 0.5;
+      me.loco = isAirborne ? 'jump' : moving ? (running ? 'run' : 'walk') : 'idle';
+    }
+
+    // Show/hide campfire action bar when sitting on campfire log or standing near campfire
+    const nearCampfire =
+      state.theme === 'christmas' &&
+      (me.seatSlot?.campfire ||
+        world?.features?.hotspots?.some(h => h.type === 'campfire' && Math.hypot(h.x - me.x, h.y - me.y) <= h.radius));
+    $('campfireBar')?.classList.toggle('hidden', !nearCampfire);
+
+    // Update my 3D Avatar
+    const av = me.av;
+    if (av?.root) {
+      av.root.position.set(me.x * TILE, me.h, me.y * TILE);
+      av.root.rotation.y = me.r;
+      av.setLocomotion(me.loco, { lean: myLean });
+      av.update(dt);
+    }
+
+    // 4. Contextual [E] Prompt Update
+    activeTarget = findNearestInteractable();
+    const promptEl = $('interactPrompt');
+    if (promptEl) {
+      if (activeTarget) {
+        promptEl.textContent = activeTarget.prompt;
+        promptEl.classList.remove('hidden');
+      } else {
+        promptEl.classList.add('hidden');
       }
     }
-    me.loco = partner ? 'couple_sit' : 'sit';
-  } else {
-    const isAirborne = me.h > floorH + 0.08 || me.vy > 0.5;
-    me.loco = isAirborne ? 'jump' : moving ? (running ? 'run' : 'walk') : 'idle';
-  }
 
-  // Show/hide campfire action bar when sitting on campfire log or standing near campfire
-  const nearCampfire =
-    state.theme === 'christmas' &&
-    (me.seatSlot?.campfire ||
-      world.features.hotspots.some(h => h.type === 'campfire' && Math.hypot(h.x - me.x, h.y - me.y) <= h.radius));
-  $('campfireBar').classList.toggle('hidden', !nearCampfire);
-
-  // Update my 3D Avatar
-  const av = me.av;
-  av.root.position.set(me.x * TILE, me.h, me.y * TILE);
-  av.root.rotation.y = me.r;
-  av.setLocomotion(me.loco, { lean: myLean });
-  av.update(dt);
-
-  // 4. Contextual [E] Prompt Update
-  activeTarget = findNearestInteractable();
-  const promptEl = $('interactPrompt');
-  if (activeTarget) {
-    promptEl.textContent = activeTarget.prompt;
-    promptEl.classList.remove('hidden');
-  } else {
-    promptEl.classList.add('hidden');
-  }
-
-  // 6. Network Position Sync
-  const cur = {
-    x: me.x,
-    y: me.y,
-    r: me.r,
-    a: me.loco,
-    h: me.h,
-    seatId: me.seatSlot?.id || null,
-    lean: myLean,
-  };
-  if (
-    now - lastSend > 85 &&
-    (cur.a !== sent.a ||
-      cur.seatId !== sent.seatId ||
-      cur.lean !== sent.lean ||
-      Math.abs(cur.x - sent.x) > 0.005 ||
-      Math.abs(cur.y - sent.y) > 0.005 ||
-      Math.abs(cur.r - sent.r) > 0.02 ||
-      cur.h !== sent.h)
-  ) {
-    net.send('pos', cur);
-    sent = cur;
-    lastSend = now;
-  }
-
-  // 7. Update Peers
-  peers.forEach(p => {
-    const a = Math.min(1, dt * 10);
-    p.x += (p.tx - p.x) * a;
-    p.y += (p.ty - p.y) * a;
-    p.h += ((p.th || 0) - p.h) * a;
-    p.r = lerpAngle(p.r, p.tr ?? p.r, a);
-    if (p.av) {
-      p.av.root.position.set(p.x * TILE, p.h, p.y * TILE);
-      p.av.root.rotation.y = p.r;
-      p.av.setLocomotion(p.a, { lean: p.lean || 0 });
-      p.av.update(dt);
+    // 6. Network Position Sync
+    const cur = {
+      x: me.x,
+      y: me.y,
+      r: me.r,
+      a: me.loco,
+      h: me.h,
+      seatId: me.seatSlot?.id || null,
+      lean: myLean,
+    };
+    if (
+      net &&
+      now - lastSend > 85 &&
+      (cur.a !== sent.a ||
+        cur.seatId !== sent.seatId ||
+        cur.lean !== sent.lean ||
+        Math.abs(cur.x - sent.x) > 0.005 ||
+        Math.abs(cur.y - sent.y) > 0.005 ||
+        Math.abs(cur.r - sent.r) > 0.02 ||
+        cur.h !== sent.h)
+    ) {
+      net.send('pos', cur);
+      sent = cur;
+      lastSend = now;
     }
-  });
 
-  updateFloaters();
-  if (rtc && me) {
-    rtc.updatePeerDistances(me, peers);
+    // 7. Update Peers
+    peers.forEach(p => {
+      const a = Math.min(1, dt * 10);
+      p.x += (p.tx - p.x) * a;
+      p.y += (p.ty - p.y) * a;
+      p.h += ((p.th || 0) - p.h) * a;
+      p.r = lerpAngle(p.r, p.tr ?? p.r, a);
+      if (p.av) {
+        p.av.root.position.set(p.x * TILE, p.h, p.y * TILE);
+        p.av.root.rotation.y = p.r;
+        p.av.setLocomotion(p.a, { lean: p.lean || 0 });
+        p.av.update(dt);
+      }
+    });
+
+    updateFloaters();
+    if (rtc && me) {
+      rtc.updatePeerDistances(me, peers);
+    }
+    world?.sync(state, roomName);
+    world?.update(dt, { x: me.x * TILE, z: me.y * TILE });
+    minigames?.update(dt);
+    updateCamera(dt);
+    if (world?.bgColor && renderer) renderer.setClearColor(world.bgColor, 1);
+    if (renderer && scene && camera) renderer.render(scene, camera);
+
+    // Update HTML speech bubbles on top of TV screen & 3D world
+    me.av?.updateBubble(camera);
+    peers.forEach(p => p.av?.updateBubble(camera));
+    updateSeatLabels();
+  } catch (err) {
+    console.error('Lỗi game loop:', err);
   }
-  world.sync(state, roomName);
-  world.update(dt, { x: me.x * TILE, z: me.y * TILE });
-  minigames?.update(dt);
-  updateCamera(dt);
-  if (world.bgColor) renderer.setClearColor(world.bgColor, 1);
-  renderer.render(scene, camera);
-
-  // Update HTML speech bubbles on top of TV screen & 3D world
-  me.av?.updateBubble(camera);
-  peers.forEach(p => p.av?.updateBubble(camera));
-  updateSeatLabels();
-
-  requestAnimationFrame(loop);
 }
 
 function updateFloaters() {
@@ -3876,10 +4169,139 @@ function exitSecretCasino() {
 }
 
 let activeFoundNoteCode = '';
+
+const PASSAGE_RIDDLES = {
+  christmas: {
+    icon: '🎄',
+    title: 'Phong Ấn Cổ Thụ Tuyết',
+    sub: 'Giải mật mã dãy số ma thuật để mở cánh cổng dẫn vào Mật Thất Casino',
+    question: 'Dãy số ma thuật ẩn giấu dưới gốc Thông Tuyết Noel: 3, 6, 12, 24, ? — Con số tiếp theo để mở khóa phong ấn là gì?',
+    options: ['36', '48', '30', '42'],
+    correct: 1,
+  },
+  halloween: {
+    icon: '🎃',
+    title: 'Ngọn Lửa Huyền Bí Vùng Bí Ngô',
+    sub: 'Giải câu đố bí ngô ngàn năm để bước vào Mật Thất Casino',
+    question: 'Thứ gì càng ăn càng lớn, uống nước thì chết, không có cánh nhưng nhảy múa trong đêm tối soi đường vào mật thất?',
+    options: ['Bóng Đêm', 'Ngọn Lửa', 'Cơn Gió Lạnh', 'Dung Nham Đá'],
+    correct: 1,
+  },
+  tet: {
+    icon: '🐉',
+    title: 'Phong Ấn Kim Long Tứ Linh',
+    sub: 'Giải mật thư truyền thuyết nghìn năm để mở cánh cổng Speakeasy',
+    question: 'Trong Tứ Linh (Long - Lân - Quy - Phụng), linh vật nào uốn lượn mang pháo hoa tài lộc và canh giữ kho báu hoàng gia?',
+    options: ['Huyền Vũ (Rùa)', 'Bạch Hổ (Hổ Trắng)', 'Kim Long (Rồng Vàng)', 'Chu Tước (Phượng Hoàng)'],
+    correct: 2,
+  },
+  valentine: {
+    icon: '🏹',
+    title: 'Mũi Tên Trái Tim Thần Cupid',
+    sub: 'Giải câu đố tình yêu đích thực để đánh thức mật thất ẩn',
+    question: 'Thứ gì vô hình nhưng nặng ngàn cân, có thể chữa lành mọi vết thương và mở khóa được cả những trái tim sắt đá nhất?',
+    options: ['Kim Cương Lấp Lánh', 'Tình Yêu Đích Thực', 'Kho Báu Hoàng Gia', 'Thuốc Ma Thuật'],
+    correct: 1,
+  },
+};
+
+let activePassageTheme = 'christmas';
+let selectedPassageOptionIndex = -1;
+
+function openPassageRiddleDialog(theme) {
+  activePassageTheme = theme || state?.theme || 'christmas';
+  const riddle = PASSAGE_RIDDLES[activePassageTheme] || PASSAGE_RIDDLES.christmas;
+  selectedPassageOptionIndex = -1;
+
+  $('passageIcon').textContent = riddle.icon;
+  $('passageTitle').textContent = riddle.title;
+  $('passageSub').textContent = riddle.sub;
+  $('passageRiddleQuestion').textContent = riddle.question;
+
+  const optContainer = $('passageOptions');
+  optContainer.innerHTML = '';
+  $('passageFeedback').classList.add('hidden');
+
+  riddle.options.forEach((optText, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.style.textAlign = 'left';
+    btn.style.padding = '10px 14px';
+    btn.style.background = 'rgba(255, 255, 255, 0.06)';
+    btn.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+    btn.style.borderRadius = '8px';
+    btn.style.color = '#fff';
+    btn.style.cursor = 'pointer';
+    btn.style.transition = 'all 0.2s';
+    btn.textContent = `${String.fromCharCode(65 + idx)}. ${optText}`;
+
+    btn.onclick = () => {
+      selectedPassageOptionIndex = idx;
+      Array.from(optContainer.children).forEach((child, cIdx) => {
+        if (cIdx === idx) {
+          child.style.background = 'rgba(234, 179, 8, 0.25)';
+          child.style.borderColor = '#facc15';
+          child.style.color = '#fef08a';
+          child.style.fontWeight = '700';
+        } else {
+          child.style.background = 'rgba(255, 255, 255, 0.06)';
+          child.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+          child.style.color = '#fff';
+          child.style.fontWeight = 'normal';
+        }
+      });
+    };
+    optContainer.appendChild(btn);
+  });
+
+  openDialog('dlgSecretPassage');
+}
+
+$('btnSubmitPassage').onclick = () => {
+  const riddle = PASSAGE_RIDDLES[activePassageTheme] || PASSAGE_RIDDLES.christmas;
+  const fb = $('passageFeedback');
+  if (selectedPassageOptionIndex === -1) {
+    fb.className = 'err-msg';
+    fb.textContent = '⚠️ Hãy chọn một phương án trước khi giải phong ấn!';
+    fb.classList.remove('hidden');
+    return;
+  }
+
+  if (selectedPassageOptionIndex === riddle.correct) {
+    fb.style.background = 'rgba(34, 197, 94, 0.2)';
+    fb.style.border = '1px solid #22c55e';
+    fb.style.color = '#86efac';
+    fb.textContent = '🎉 CHÍNH XÁC! Phong ấn cổ xưa đã được hóa giải thành công!';
+    fb.classList.remove('hidden');
+    playSfx('jackpot_voice');
+    setTimeout(() => {
+      closeDialog('dlgSecretPassage');
+      enterSecretCasino();
+    }, 800);
+  } else {
+    fb.className = 'err-msg';
+    fb.textContent = '❌ Câu trả lời chưa chính xác! Cánh cổng phong ấn vẫn khóa chặt.';
+    fb.classList.remove('hidden');
+    playSfx('splat', 'halloween');
+  }
+};
+
+const NOTE_RIDDLES = {
+  'BoKho': 'Món ăn đặc sản bổ dưỡng cay nồng đậm vị quê hương (5 chữ cái: B_K_O)',
+  'Chu0n6': 'Biệt danh mật mã số học của Developer sáng lập (6 ký tự: C_u_n_)',
+  'Raumania': 'Vương quốc rau má xanh rì huyền thoại (8 chữ cái: R_u_a_i_)',
+  'Trung Legit': 'Biểu tượng của sự chân chính và uy tín tuyệt đối (11 ký tự: T_u_g L_g_t)',
+  'toilagay': 'Lời tuyên ngôn thẳng thắn và dũng cảm nhất (8 chữ cái: t_i_a_a_)',
+};
+
 function openSecretNote(code) {
   activeFoundNoteCode = code || 'BoKho';
   const el = $('noteContentCode');
   if (el) el.textContent = activeFoundNoteCode;
+  const clueEl = $('noteClueText');
+  if (clueEl) {
+    clueEl.textContent = `Gợi ý giải đố: ${NOTE_RIDDLES[activeFoundNoteCode] || 'Mã code bí mật dán trên tường'}`;
+  }
   openDialog('dlgNote');
 }
 
@@ -3887,7 +4309,7 @@ $('btnRedeemFoundCode').onclick = () => {
   if (!activeFoundNoteCode) return;
   const res = redeemCode(activeFoundNoteCode);
   closeDialog('dlgNote');
-  if (res.ok) {
+  if (res.ok || res.success) {
     playSfx('jackpot_voice');
     toast(`🎉 ${res.msg}`);
     updateCasinoChipsUI();
@@ -3921,6 +4343,7 @@ function updateCasinoChipsUI() {
 
 $('btnEnterCode').onclick = openCodeDialog;
 $('btnCasinoWallet').onclick = openCodeDialog;
+window.addEventListener('gh_open_code_dialog', openCodeDialog);
 
 $('btnSubmitCode').onclick = () => {
   const code = $('inSecretCode').value.trim();
@@ -3931,7 +4354,7 @@ $('btnSubmitCode').onclick = () => {
     return;
   }
   const res = redeemCode(code);
-  if (res.ok) {
+  if (res.ok || res.success) {
     $('codeErr').classList.add('hidden');
     $('codeSuccess').textContent = res.msg;
     $('codeSuccess').classList.remove('hidden');
@@ -4139,19 +4562,6 @@ function handleAdminTrigger() {
   }
 }
 
-let adminSpeedMultiplier = 1.0;
-let adminJumpPower = 8.2;
-let adminFlying = false;
-let adminNoclip = false;
-let adminGodMode = false;
-window.adminGodMode = false;
-let isFrozen = false;
-let isJailed = false;
-let jailedPos = null;
-let currentGravity = 20;
-const adminBanList = new Set();
-const adminMuteList = new Set();
-
 let bannerTimeout = null;
 function showAdminServerBanner(text) {
   const banner = $('adminServerBanner');
@@ -4311,6 +4721,16 @@ function executeAdminCommand(raw) {
       toast(`🔓 Đã thả tự do: ${targetName || me.name}!`);
       return true;
     }
+    case 'jailall': {
+      emitOp({ k: 'admin_jail', target: 'all', jailed: true, by: me.name });
+      toast('⛓️ Đã nhốt lồng giam toàn bộ người chơi trong phòng!');
+      return true;
+    }
+    case 'unjailall': {
+      emitOp({ k: 'admin_jail', target: 'all', jailed: false, by: me.name });
+      toast('🔓 Đã thả tự do cho toàn bộ người chơi!');
+      return true;
+    }
     case 'freeze': {
       const targetName = args[0];
       emitOp({ k: 'admin_freeze', target: targetName || me.name, frozen: true, by: me.name });
@@ -4322,6 +4742,17 @@ function executeAdminCommand(raw) {
       const targetName = args[0];
       emitOp({ k: 'admin_freeze', target: targetName || me.name, frozen: false, by: me.name });
       toast(`🔥 Đã rã đông: ${targetName || me.name}!`);
+      return true;
+    }
+    case 'freezeall': {
+      emitOp({ k: 'admin_freeze', target: 'all', frozen: true, by: me.name });
+      toast('🧊 Đã đóng băng toàn bộ người chơi trong phòng!');
+      return true;
+    }
+    case 'thawall':
+    case 'unfreezeall': {
+      emitOp({ k: 'admin_freeze', target: 'all', frozen: false, by: me.name });
+      toast('🔥 Đã rã đông toàn bộ người chơi!');
       return true;
     }
     case 'god': {
@@ -4353,6 +4784,11 @@ function executeAdminCommand(raw) {
       if (!targetName) { toast('⚠️ Cú pháp: :bring <tên_người_chơi>'); return true; }
       emitOp({ k: 'admin_teleport', target: targetName, toX: me.x, toY: me.y, by: me.name });
       toast(`🌀 Đang kéo ${targetName} đến chỗ bạn!`);
+      return true;
+    }
+    case 'bringall': {
+      emitOp({ k: 'admin_teleport', target: 'all', toX: me.x, toY: me.y, by: me.name });
+      toast('🌀 Đang kéo tất cả người chơi về trước mặt bạn!');
       return true;
     }
     case 'to':
@@ -4422,6 +4858,26 @@ function executeAdminCommand(raw) {
       toast(`📏 Đã chỉnh kích thước nhân vật: ${finalScale}x`);
       return true;
     }
+    case 'giant': {
+      const targetName = args[0] || me.name;
+      const s = 3.5;
+      if (targetName === me.name || targetName === 'all') {
+        if (me?.av) me.av.root.scale.set(s, s, s);
+      }
+      emitOp({ k: 'admin_size', target: targetName, scale: s });
+      toast(`🦕 Đã biến ${targetName} thành người khổng lồ 3.5x!`);
+      return true;
+    }
+    case 'tiny': {
+      const targetName = args[0] || me.name;
+      const s = 0.35;
+      if (targetName === me.name || targetName === 'all') {
+        if (me?.av) me.av.root.scale.set(s, s, s);
+      }
+      emitOp({ k: 'admin_size', target: targetName, scale: s });
+      toast(`🐜 Đã biến ${targetName} thành người tí hon 0.35x!`);
+      return true;
+    }
 
     // === 3. WORLD & ENVIRONMENT ===
     case 'sm':
@@ -4475,6 +4931,126 @@ function executeAdminCommand(raw) {
       const targetName = args[0] || me.name;
       emitOp({ k: 'admin_blind', target: targetName, blind: false });
       toast(`👀 Đã xóa mù người chơi ${targetName}!`);
+      return true;
+    }
+    case 'spin':
+    case 'spinall': {
+      const targetName = (cmd === 'spinall' || args[0] === 'all') ? 'all' : (args[0] || me.name);
+      emitOp({ k: 'admin_spin', target: targetName, by: me.name });
+      if (targetName === me.name || targetName === 'all') adminSpinUntil = performance.now() + 6500;
+      toast(`💫 Đã kích hoạt xoay mòng mòng cho ${targetName}!`);
+      return true;
+    }
+    case 'disco': {
+      emitOp({ k: 'admin_disco', by: me.name });
+      document.body.classList.toggle('disco-active');
+      toast('🪩 Đã bật/tắt sàn nhảy Disco lung linh toàn phòng!');
+      return true;
+    }
+    case 'earthquake': {
+      emitOp({ k: 'admin_earthquake', by: me.name });
+      document.body.classList.add('earthquake-active');
+      playSfx('explosion', 'tet');
+      toast('🌋 ĐÃ KÍCH HOẠT ĐỘNG ĐẤT RUNG CHUYỂN SERVER!');
+      setTimeout(() => document.body.classList.remove('earthquake-active'), 5500);
+      return true;
+    }
+    case 'nuke': {
+      emitOp({ k: 'admin_nuke', by: me.name });
+      const flash = document.createElement('div');
+      flash.className = 'nuke-flash-overlay';
+      document.body.appendChild(flash);
+      playSfx('explosion', 'tet');
+      toast('💥 BOM HẠT NHÂN ADMIN VỪA KÍCH NỔ!');
+      setTimeout(() => flash.remove(), 2600);
+      return true;
+    }
+    case 'rocket': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_rocket', target: targetName, by: me.name });
+      if (targetName === me.name || targetName === 'all') {
+        me.vy = 42;
+        me.h += 3;
+        playSfx('firework_rocket', 'tet');
+      }
+      toast(`🚀 Phóng ${targetName} lên mây xanh như tên lửa!`);
+      return true;
+    }
+    case 'slap': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_slap', target: targetName, by: me.name });
+      if (targetName === me.name || targetName === 'all') {
+        me.vy = 6;
+        me.h += 0.8;
+        me.av?.showTomatoSplat?.();
+        playSfx('splat', 'halloween');
+      }
+      toast(`🍅 BỐP! Đã tát ${targetName} lộn mèo và ném cà chua bét nhè!`);
+      return true;
+    }
+    case 'danceall': {
+      emitOp({ k: 'admin_dance', target: 'all', by: me.name });
+      me.av?.playEmote?.('dance');
+      toast('💃 Toàn bộ server cùng nhau nhảy múa!');
+      return true;
+    }
+    case 'clown': {
+      const targetName = args[0] || me.name;
+      emitOp({ k: 'admin_clown', target: targetName, by: me.name });
+      if (targetName === me.name || targetName === 'all') {
+        me.pumpkinHat = me.pumpkinHat ? null : 'classic';
+        me.av?.setPumpkinHat?.(me.pumpkinHat);
+        syncMyAppearance();
+      }
+      toast(`🤡 Đã phong chú hề cho ${targetName}!`);
+      return true;
+    }
+
+    // === 5. RESET COMMANDS ===
+    case 'resetall':
+    case 'clean': {
+      emitOp({ k: 'admin_reset_all', by: me.name });
+      adminSpeedMultiplier = 1.0;
+      adminJumpPower = 8.2;
+      adminFlying = false;
+      adminNoclip = false;
+      adminGodMode = false;
+      window.adminGodMode = false;
+      isFrozen = false;
+      isJailed = false;
+      jailedPos = null;
+      currentGravity = 20;
+      adminSpinUntil = 0;
+      document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active');
+      if (me?.av) {
+        me.av.root.scale.set(1, 1, 1);
+        me.av.root.visible = true;
+      }
+      peers.forEach(p => {
+        if (p.av) {
+          p.av.root.scale.set(1, 1, 1);
+          p.av.root.visible = true;
+        }
+      });
+      toast('✨ Đã đặt lại toàn bộ hiệu ứng troll về mặc định!');
+      return true;
+    }
+    case 'resetchips': {
+      resetChips();
+      updateCasinoChipsUI();
+      toast('🪙 Đã đặt lại số xu Casino của bạn về 0!');
+      return true;
+    }
+    case 'clearhistory': {
+      localStorage.removeItem('gh_code_history');
+      toast('⏳ Đã xóa lịch sử hồi chiêu 10 phút của tất cả mã code!');
+      return true;
+    }
+    case 'clearmap': {
+      state.decor = [];
+      state.cards = [];
+      emitOp({ k: 'decor_place', item: null, clearAll: true });
+      toast('🧹 Đã dọn dẹp sạch sẽ đồ trang trí trên sàn!');
       return true;
     }
     default:

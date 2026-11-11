@@ -11,8 +11,11 @@ import { playSfx } from './audio.js';
 
 let worldRef = null;
 let toastRef = null;
+let emitOpRef = null;
+let getMeRef = null;
+let getPeersRef = null;
 
-// ---------- Chip Wallet Management ----------
+// ---------- Chip Wallet Management (Starts strictly at 0) ----------
 let chips = parseInt(localStorage.getItem('gh_casino_chips') || '0', 10);
 if (isNaN(chips) || chips < 0) chips = 0;
 
@@ -27,11 +30,11 @@ export const VALID_CODES = {
 const CODE_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
 export function redeemCode(rawCode) {
-  if (!rawCode) return { success: false, msg: 'Vui lòng nhập mã code!' };
+  if (!rawCode) return { ok: false, success: false, msg: 'Vui lòng nhập mã code!' };
   const clean = String(rawCode).trim().toLowerCase();
   const cfg = VALID_CODES[clean];
   if (!cfg) {
-    return { success: false, msg: 'Mã code không chính xác! Hãy tìm các tờ note bí mật dán quanh map.' };
+    return { ok: false, success: false, msg: 'Mã code không chính xác! Hãy tìm các tờ note bí mật dán quanh map.' };
   }
 
   const history = JSON.parse(localStorage.getItem('gh_code_history') || '{}');
@@ -44,8 +47,9 @@ export function redeemCode(rawCode) {
     const m = Math.floor(remainSec / 60);
     const s = remainSec % 60;
     return {
+      ok: false,
       success: false,
-      msg: `Code [${cfg.label}] đang cooldown! Vui lòng thử lại sau ${m} phút ${s} giây.`,
+      msg: `Code [${cfg.label}] đang hồi chiêu! Vui lòng thử lại sau ${m} phút ${s} giây.`,
     };
   }
 
@@ -56,13 +60,14 @@ export function redeemCode(rawCode) {
   playSfx('jackpot_voice', 'casino');
 
   return {
+    ok: true,
     success: true,
     msg: `🎉 Đổi mã thành công! Bạn nhận được +${cfg.reward} xu cờ bạc từ [${cfg.label}]!`,
     reward: cfg.reward,
   };
 }
 
-export function recordJackpotWin(gameType) {
+export function recordJackpotWin(gameType, amount = 5000) {
   try {
     const won = new Set(JSON.parse(localStorage.getItem('gh_jackpots_won') || '[]'));
     won.add(gameType);
@@ -70,13 +75,24 @@ export function recordJackpotWin(gameType) {
 
     playSfx('jackpot_voice', 'casino');
 
+    const me = getMeRef?.();
+    if (emitOpRef && me) {
+      emitOpRef({
+        k: 'casino_broadcast',
+        game: gameType,
+        player: me.name,
+        detail: amount,
+        isJackpot: true,
+      });
+    }
+
     const allGames = ['roulette', 'duck_derby', 'blackjack', 'slot_machine', 'plinko'];
     const remaining = allGames.filter(g => !won.has(g));
 
     if (remaining.length === 0) {
       localStorage.setItem('gh_unlocked_vuadoden', '1');
       toastRef?.('👑 HUYỀN THOẠI! Bạn đã thắng Jackpot ở cả 5 trò và mở khóa danh hiệu độc quyền: [👑 Vua Đỏ Đen]!');
-      worldRef?.spawnFireworksShow(14.5, 11.5);
+      worldRef?.spawnFireworksShow?.(14.5, 11.5);
     } else {
       toastRef?.(`💥 JACKPOT! Bạn đã thắng lớn ở trò ${gameType}! (Còn ${remaining.length} trò nữa để đạt danh hiệu [👑 Vua Đỏ Đen])`);
     }
@@ -103,15 +119,65 @@ export function spendChips(amount) {
   return true;
 }
 
+export function resetChips() {
+  chips = 0;
+  localStorage.setItem('gh_casino_chips', '0');
+  updateAllWalletBadges();
+}
+
 function updateAllWalletBadges() {
   document.querySelectorAll('.casino-chip-count').forEach(el => {
     el.textContent = `$${chips.toLocaleString()}`;
   });
 }
 
-export function initCasino(world, toast) {
+export function initCasino(world, toast, emitOp = null, getMe = null, getPeers = null) {
   worldRef = world;
   toastRef = toast;
+  emitOpRef = emitOp;
+  getMeRef = getMe;
+  getPeersRef = getPeers;
+}
+
+export function broadcastCasinoPlay(gameName, detail = '') {
+  if (emitOpRef) {
+    const me = getMeRef?.();
+    emitOpRef({
+      k: 'casino_broadcast',
+      game: gameName,
+      player: me?.name || 'Người chơi',
+      detail,
+      isJackpot: false,
+    });
+  }
+}
+
+export function handleCasinoBroadcast(op) {
+  if (!op) return;
+  const { game, player, detail, isJackpot } = op;
+  if (isJackpot) {
+    toastRef?.(`💥 JACKPOT! ${player} vừa trúng độc đắc $${Number(detail).toLocaleString()} ở trò ${game.toUpperCase()}! 🎉`);
+    playSfx('jackpot_voice', 'casino');
+    worldRef?.spawnFireworksShow?.(14.5, 11.5);
+  } else {
+    if (game === 'roulette') {
+      const rt = worldRef?.casinoObjs?.find(o => o.userData?.type === 'roulette');
+      rt?.userData?.spinWheel?.();
+      toastRef?.(`🎡 ${player} đang đặt cược và quay Vòng Quay Roulette!`);
+    } else if (game === 'duck_derby') {
+      const dd = worldRef?.casinoObjs?.find(o => o.userData?.type === 'duck_derby');
+      dd?.userData?.startRace?.();
+      toastRef?.(`🦆 ${player} vừa bấm chuông bắt đầu cuộc đua vịt Duck Derby!`);
+    } else if (game === 'slot_machine') {
+      const sm = worldRef?.casinoObjs?.find(o => o.userData?.type === 'slot_machine');
+      sm?.userData?.pullLever?.();
+      toastRef?.(`🎰 ${player} vừa giật cần quay Slot Machine 777!`);
+    } else if (game === 'plinko') {
+      const pk = worldRef?.casinoObjs?.find(o => o.userData?.type === 'plinko');
+      pk?.userData?.dropBall?.();
+      toastRef?.(`⚡ ${player} vừa thả bóng chông Plinko!`);
+    }
+  }
 }
 
 // Helper to create and show a casino modal frame
@@ -130,10 +196,9 @@ function createCasinoModal(title, contentHtml) {
           <span class="casino-title">${title}</span>
         </div>
         <div style="display:flex;align-items:center;gap:12px">
-          <div class="casino-wallet-badge">
+          <div class="casino-wallet-badge" id="btnCasinoModalWallet" title="Ví Chips - Thu thập code bí mật quanh 4 map để nhận thêm xu!">
             <span>🪙 VÍ CHIPS:</span>
             <b class="casino-chip-count">$${chips.toLocaleString()}</b>
-            <button id="btnClaimFreeChips" title="Nhận $1,000 chip miễn phí">+1000</button>
           </div>
           <button class="casino-close-btn" id="btnCloseCasinoModal" title="Đóng [ESC]">✕</button>
         </div>
@@ -147,7 +212,12 @@ function createCasinoModal(title, contentHtml) {
   document.body.appendChild(overlay);
 
   overlay.querySelector('#btnCloseCasinoModal').onclick = () => overlay.remove();
-  overlay.querySelector('#btnClaimFreeChips').onclick = claimFreeChips;
+  const walletBadge = overlay.querySelector('#btnCasinoModalWallet');
+  if (walletBadge) {
+    walletBadge.onclick = () => {
+      window.dispatchEvent(new CustomEvent('gh_open_code_dialog'));
+    };
+  }
 
   const escHandler = e => {
     if (e.key === 'Escape') {
@@ -381,10 +451,11 @@ export function openRoulette() {
     modal.querySelector('#rouletteResult').innerHTML = '🎡 Bánh xe và bóng đang quay tít...';
 
     playSfx('roulette_spin', 'casino');
+    broadcastCasinoPlay('roulette', 'spin');
 
     // Trigger 3D world table spin
     const rt = worldRef?.casinoObjs?.find(o => o.userData?.type === 'roulette');
-    rt?.userData?.spin();
+    rt?.userData?.spinWheel ? rt.userData.spinWheel() : rt?.userData?.spin?.();
 
     // Random Winning Number (0-36)
     const winningNum = Math.floor(Math.random() * 37);
@@ -643,10 +714,11 @@ export function openDuckDerby() {
     modal.querySelector('#duckRaceToast').innerHTML = '🏁 CÁC CHÚ VỊT ĐANG BƠI RƯỢT ĐUỔI KỊCH TÍNH...';
 
     playSfx('duck_quack', 'casino');
+    broadcastCasinoPlay('duck_derby', ducks[chosenDuckIdx]?.name || 'Vịt');
 
     // Trigger 3D world duck track
     const dd = worldRef?.casinoObjs?.find(o => o.userData?.type === 'duck_derby');
-    dd?.userData?.startRace();
+    dd?.userData?.startRace?.();
 
     ducks.forEach(d => {
       d.x = 40;
@@ -1007,11 +1079,12 @@ export function openSlotMachine() {
     const lever = modal.querySelector('#slotLever');
     lever.classList.add('pulled');
     playSfx('slot_lever', 'casino');
+    broadcastCasinoPlay('slot_machine', 'spin');
     setTimeout(() => lever.classList.remove('pulled'), 350);
 
     // Trigger 3D world slot machine lever
     const sm = worldRef?.casinoObjs?.find(o => o.userData?.type === 'slot_machine');
-    sm?.userData?.pullLever();
+    sm?.userData?.pullLever?.();
 
     // Reels roll animation
     const reels = [modal.querySelector('#reel0'), modal.querySelector('#reel1'), modal.querySelector('#reel2')];
@@ -1272,8 +1345,9 @@ export function openPlinko() {
     });
 
     // Trigger 3D world plinko ball
+    broadcastCasinoPlay('plinko', 'drop');
     const pk = worldRef?.casinoObjs?.find(o => o.userData?.type === 'plinko');
-    pk?.userData?.dropBall();
+    pk?.userData?.dropBall?.();
 
     playSfx('plinko_peg', 'casino');
   };
