@@ -53,6 +53,7 @@ import {
   getChips,
   addChips,
   resetChips,
+  resetCoins,
   redeemCode,
   handleCasinoBroadcast,
   VALID_CODES,
@@ -1081,6 +1082,9 @@ async function start() {
     return;
   }
 
+  // Reset coin wallet to 0 upon entering/joining room (only codes nạp xu)
+  resetCoins();
+
   me.started = true;
   await loadCharacter();
   const sp = state.map.spawn || [14.5, 18.5];
@@ -1968,6 +1972,14 @@ function applyOp(op, senderId = null) {
     }
     case 'admin_guillotine': {
       spawnGuillotineStrike(op.target);
+      break;
+    }
+    case 'admin_truonggiang': {
+      if (op.active) {
+        spawnTruongGiangSlime(op.target, op.by);
+      } else {
+        removeTruongGiangSlime();
+      }
       break;
     }
     case 'admin_golden': {
@@ -3565,7 +3577,8 @@ function triggerInteract(target = activeTarget) {
         break;
       case 'secret_passage':
         playSfx('wishing_fountain', 'valentine');
-        openPassageRiddleDialog(state?.theme || 'christmas');
+        toast('✨ Mật đạo mở ra! Bạn được đưa thẳng tới Mật Thất Casino!');
+        enterSecretCasino();
         break;
       case 'casino_exit':
         playSfx('pop');
@@ -5638,6 +5651,224 @@ function spawnGuillotineStrike(targetName) {
 }
 
 // ============================================================================
+// TRƯỜNG GIANG SLIME CUBE TROLL ENTITY (:truonggiang)
+// Minecraft style slime bouncing cube with 6-sided comedian Trường Giang face,
+// hopping around and chasing a random non-admin player with funny quotes
+// ============================================================================
+let activeTruongGiangSlime = null;
+let truongGiangAnimFrame = null;
+let truongGiangSpeechTimer = null;
+
+export function removeTruongGiangSlime() {
+  if (activeTruongGiangSlime) {
+    if (activeTruongGiangSlime.speechEl) activeTruongGiangSlime.speechEl.remove();
+    scene.remove(activeTruongGiangSlime.group);
+    activeTruongGiangSlime = null;
+  }
+  if (truongGiangAnimFrame) {
+    cancelAnimationFrame(truongGiangAnimFrame);
+    truongGiangAnimFrame = null;
+  }
+  if (truongGiangSpeechTimer) {
+    clearTimeout(truongGiangSpeechTimer);
+    truongGiangSpeechTimer = null;
+  }
+}
+
+export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin') {
+  removeTruongGiangSlime();
+
+  // If no target specified or if target is admin, automatically find a non-admin player in room
+  let target = targetName;
+  if (!target) {
+    const nonAdminPeers = [];
+    peers.forEach(p => {
+      if (p.name && !isAdminUser(p.name) && !p.isAdmin) {
+        nonAdminPeers.push(p.name);
+      }
+    });
+    if (nonAdminPeers.length > 0) {
+      target = nonAdminPeers[Math.floor(Math.random() * nonAdminPeers.length)];
+    } else {
+      const allPeers = [];
+      peers.forEach(p => { if (p.name) allPeers.push(p.name); });
+      target = allPeers.length > 0 ? allPeers[0] : me.name;
+    }
+  }
+
+  toast(`🤪 ${byAdmin} đã triệu hồi Khối Slime TRƯỜNG GIANG săn đuổi [${target}]!`);
+  playSfx('duck_quack', 'casino');
+
+  const slimeGroup = new THREE.Group();
+  const texLoader = new THREE.TextureLoader();
+  const tgTex = texLoader.load('assets/truonggiang.webp');
+  tgTex.colorSpace = THREE.SRGBColorSpace;
+
+  const cubeGeo = new THREE.BoxGeometry(1.25, 1.25, 1.25);
+  // Apply Trường Giang face to all 6 faces of the cube
+  const cubeMat = new THREE.MeshStandardMaterial({
+    map: tgTex,
+    roughness: 0.35,
+    metalness: 0.1,
+  });
+  const slimeMesh = new THREE.Mesh(cubeGeo, cubeMat);
+  slimeMesh.castShadow = true;
+  slimeMesh.position.y = 0.625;
+  slimeGroup.add(slimeMesh);
+
+  // Position slime near admin or target
+  slimeGroup.position.set(me.x * TILE + 2, 0, me.y * TILE + 2);
+  scene.add(slimeGroup);
+
+  // Speech bubble DOM element attached to 3D world position
+  const speechEl = document.createElement('div');
+  speechEl.className = 'speech-bubble-3d';
+  speechEl.style.display = 'none';
+  document.body.appendChild(speechEl);
+
+  const funnyQuotes = [
+    'Ủa alo?! Gì dị ba?! 😱',
+    'Ai đó cứu tui dới chèn ơi! 😭',
+    'Em xui quá anh em ơi! 🤦‍♂️',
+    'Mười Khó tới kiếm chuyện nè! 💥',
+    'Chạy đâu cho thoát hả cưng! 🏃💨',
+    'Nhìn cái mặt tui quạu ghê hôn?! 😡',
+    'Trời ơi là trời! Đau ruột thừa ghê! 🤣',
+    'Bữa nay xui tận mạng rồi! 💀',
+    'Ủa em làm cái gì sai hả đại ca?! 🥺',
+    'Đứng lại đó nói chiện đàng hoàng coi! 🥊',
+    'Né ra coi, mỡ nó dồn lên não rồi! 😂',
+  ];
+
+  function showSpeech(text, durationMs = 2800) {
+    speechEl.textContent = text;
+    speechEl.style.display = 'block';
+    if (truongGiangSpeechTimer) clearTimeout(truongGiangSpeechTimer);
+    truongGiangSpeechTimer = setTimeout(() => {
+      speechEl.style.display = 'none';
+    }, durationMs);
+  }
+
+  showSpeech('Mười Khó xuất chiêu! Chạy đâu con sâu! 🏃💨', 3200);
+
+  let vy = 0;
+  let onGround = true;
+  let hopTimer = 0.4;
+  let pesterCooldown = 0;
+  let lastTime = performance.now();
+
+  activeTruongGiangSlime = {
+    group: slimeGroup,
+    mesh: slimeMesh,
+    speechEl,
+    target,
+  };
+
+  function updateSlime() {
+    if (!activeTruongGiangSlime) return;
+
+    const now = performance.now();
+    const dt = Math.min((now - lastTime) / 1000, 0.1);
+    lastTime = now;
+
+    // Determine target world position
+    let tx = me.x * TILE;
+    let tz = me.y * TILE;
+    if (target !== me.name) {
+      const pEntry = findPeerByName(target);
+      if (pEntry) {
+        tx = pEntry[1].x * TILE;
+        tz = pEntry[1].y * TILE;
+      }
+    }
+
+    const dx = tx - slimeGroup.position.x;
+    const dz = tz - slimeGroup.position.z;
+    const dist = Math.hypot(dx, dz);
+
+    if (onGround) {
+      hopTimer -= dt;
+      // Slime squashing effect on ground
+      slimeMesh.scale.set(1.4, 0.6, 1.4);
+
+      if (hopTimer <= 0) {
+        // Slime jump launch!
+        onGround = false;
+        vy = 7.0 + Math.random() * 2.5; // Jump vertical velocity
+        slimeMesh.scale.set(0.75, 1.4, 0.75); // Stretch
+        hopTimer = 0.6 + Math.random() * 0.4;
+        playSfx('plinko_peg', 'casino');
+      }
+    } else {
+      // In air physics
+      vy -= 22.0 * dt; // gravity
+      slimeGroup.position.y += vy * dt;
+
+      // Move horizontally toward target while in air
+      if (dist > 0.3) {
+        const speed = 4.8;
+        slimeGroup.position.x += (dx / dist) * speed * dt;
+        slimeGroup.position.z += (dz / dist) * speed * dt;
+        slimeGroup.rotation.y = Math.atan2(dx, dz);
+      }
+
+      // Air rotation spin
+      slimeMesh.rotation.x += dt * 3.5;
+
+      // Check ground landing
+      if (slimeGroup.position.y <= 0) {
+        slimeGroup.position.y = 0;
+        vy = 0;
+        onGround = true;
+        slimeMesh.rotation.x = 0;
+        slimeMesh.scale.set(1.4, 0.6, 1.4); // Land squash
+        playSfx('plinko_peg', 'casino');
+
+        // Check if close enough to pester target
+        pesterCooldown -= 0.6;
+        if (dist < 2.0 && pesterCooldown <= 0) {
+          pesterCooldown = 3.0;
+          const randomQuote = funnyQuotes[Math.floor(Math.random() * funnyQuotes.length)];
+          showSpeech(randomQuote, 2500);
+          playSfx('slap', 'casino');
+
+          if (target === me.name) {
+            toast(`🤪 Trường Giang Slime vừa ủi mông trêu chọc bạn: "${randomQuote}"`);
+            me.vx = (Math.random() - 0.5) * 6;
+            me.vy = 4;
+            me.av?.showTomatoSplat?.();
+          } else {
+            const pEntry = findPeerByName(target);
+            if (pEntry) {
+              pEntry[1].av?.showTomatoSplat?.();
+            }
+          }
+        }
+      }
+    }
+
+    // Update floating speech bubble screen projection
+    if (speechEl.style.display !== 'none' && camera) {
+      const slimePos = slimeGroup.position.clone();
+      slimePos.y += 1.8;
+      slimePos.project(camera);
+      if (slimePos.z < 1) {
+        const sx = (slimePos.x * 0.5 + 0.5) * window.innerWidth;
+        const sy = (-(slimePos.y * 0.5) + 0.5) * window.innerHeight;
+        speechEl.style.left = `${sx}px`;
+        speechEl.style.top = `${sy}px`;
+      } else {
+        speechEl.style.display = 'none';
+      }
+    }
+
+    truonggiangAnimFrame = requestAnimationFrame(updateSlime);
+  }
+
+  truonggiangAnimFrame = requestAnimationFrame(updateSlime);
+}
+
+// ============================================================================
 // ADMIN VISUAL FX: LASER, BLACK HOLE, CONFETTI, TORNADO
 // ============================================================================
 function spawnLaserStrike(x, y, targetName, byAdmin = 'Admin') {
@@ -5945,7 +6176,8 @@ export const ADMIN_COMMAND_CATALOG = [
   { cmd: ':blind', usage: ':blind <tên>', desc: 'Làm tối đen màn hình mục tiêu' },
   { cmd: ':unblind', usage: ':unblind <tên>', desc: 'Gỡ tối đen màn hình mục tiêu' },
   { cmd: ':blindall', usage: ':blindall', desc: 'Làm tối đen màn hình toàn server' },
-  { cmd: ':unblindall', usage: ':unblindall', desc: 'Gỡ tối đen màn hình toàn server' },
+  { cmd: ':truonggiang', usage: ':truonggiang [tên]', desc: 'Thả Khối Slime Trường Giang 6 mặt nhảy tâng tâng rượt đuổi troll' },
+  { cmd: ':untruonggiang', usage: ':untruonggiang', desc: 'Thu hồi Khối Slime Trường Giang' },
   { cmd: ':chips', usage: ':chips <số>', desc: 'Tự cấp thêm xu cờ bạc vào ví' },
 
   // 5. Khôi phục & Reset
@@ -6104,12 +6336,11 @@ function setupAdminCommandAutocomplete() {
         applySuggestion(currentSuggestions[targetIdx]);
       }
     } else if (e.key === 'Enter') {
+      e.preventDefault();
       if (selectedSuggestIndex >= 0 && currentSuggestions[selectedSuggestIndex]) {
-        e.preventDefault();
         applySuggestion(currentSuggestions[selectedSuggestIndex]);
-      } else {
-        runAndCloseAdminCmd();
       }
+      runAndCloseAdminCmd();
     } else if (e.key === 'Escape') {
       hideAdminSuggestions();
     }
@@ -6120,6 +6351,19 @@ function setupAdminCommandAutocomplete() {
       hideAdminSuggestions();
     }
   });
+
+  // Make cheatsheet command codes clickable to execute and close immediately
+  setTimeout(() => {
+    document.querySelectorAll('#dlgAdmin code').forEach(codeEl => {
+      codeEl.style.cursor = 'pointer';
+      codeEl.title = 'Bấm để thực thi ngay lệnh này';
+      codeEl.onclick = (e) => {
+        e.stopPropagation();
+        const text = codeEl.textContent.trim().split('—')[0].trim().split(' ')[0];
+        if (text) executeAdminCommand(text);
+      };
+    });
+  }, 100);
 }
 
 function runAndCloseAdminCmd() {
@@ -6127,17 +6371,20 @@ function runAndCloseAdminCmd() {
   if (!input) return;
   const cmd = input.value.trim();
   if (cmd) {
-    executeAdminCommand(cmd);
     input.value = '';
     hideAdminSuggestions();
-    // Tự động đóng modal ngay lập tức để người chơi quan sát kết quả trên màn hình
     closeDialog('dlgAdmin');
+    executeAdminCommand(cmd);
   }
 }
 
 $('btnRunAdminCmd').onclick = runAndCloseAdminCmd;
 
 function executeAdminCommand(raw) {
+  // Tự động đóng modal ngay lập tức để người chơi quan sát kết quả trên màn hình
+  closeDialog('dlgAdmin');
+  hideAdminSuggestions();
+
   let cmdStr = (raw || '').trim();
   if (cmdStr.startsWith(':') || cmdStr.startsWith(';') || cmdStr.startsWith('/')) {
     cmdStr = cmdStr.slice(1).trim();
@@ -6423,6 +6670,20 @@ function executeAdminCommand(raw) {
       playSfx('plinko_win');
       updateCasinoChipsUI();
       toast(`🪙 Admin: Đã cấp thêm ${num.toLocaleString()} xu vào ví!`);
+      return true;
+    }
+    case 'truonggiang':
+    case 'tg': {
+      const targetName = args[0] || null;
+      emitOp({ k: 'admin_truonggiang', target: targetName, active: true, by: me.name });
+      spawnTruongGiangSlime(targetName, me.name);
+      return true;
+    }
+    case 'untruonggiang':
+    case 'untg': {
+      emitOp({ k: 'admin_truonggiang', active: false, by: me.name });
+      removeTruongGiangSlime();
+      toast('💨 Đã thu hồi Khối Slime Trường Giang!');
       return true;
     }
     case 'fire': {
@@ -6782,6 +7043,7 @@ function executeAdminCommand(raw) {
       $('btoolsHud')?.classList.add('hidden');
       document.body.classList.remove('blinded-screen', 'earthquake-active', 'disco-active', 'builder-mode-active');
       world.clearBuilderBlocks();
+      removeTruongGiangSlime();
       me.isDinnerbone = false;
       if (me?.av) {
         me.av.root.scale.set(1, 1, 1);

@@ -291,7 +291,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       x: 2.2,
       y: 2.6,
       radius: 2.0,
-      prompt: '❄️ Mật Đạo Băng Giá · [E] Giải mật mã Bách Khoa vào Mật Thất Casino',
+      prompt: '❄️ Mật Đạo Băng Giá · [E] Vào Mật Thất Casino',
     });
 
     // Secret Paper Notes (Code: Chu0n6, Raumania)
@@ -392,7 +392,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       x: 27.5,
       y: 2.5,
       radius: 2.0,
-      prompt: '⚰️ Quan Tài Hầm Ngầm Cổ · [E] Giải mật mã Bách Khoa mở Mật Thất Casino',
+      prompt: '⚰️ Quan Tài Hầm Ngầm Cổ · [E] Vào Mật Thất Casino',
     });
 
     // Secret Paper Notes (Code: toilagay, BoKho)
@@ -487,7 +487,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       x: 2.2,
       y: 18.5,
       radius: 2.0,
-      prompt: '🏮 Bức Bình Phong Kim Long · [E] Giải mật mã Bách Khoa mở Mật Thất Casino',
+      prompt: '🏮 Bức Bình Phong Kim Long · [E] Vào Mật Thất Casino',
     });
 
     // Secret Paper Notes (Code: Trung Legit, Chu0n6)
@@ -577,7 +577,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       x: 27.5,
       y: 18.5,
       radius: 2.0,
-      prompt: '🌹 Thác Hoa Hồng Bí Ẩn · [E] Giải mật mã Bách Khoa vào Mật Thất Casino',
+      prompt: '🌹 Thác Hoa Hồng Bí Ẩn · [E] Vào Mật Thất Casino',
     });
 
     // Secret Paper Notes (Code: BoKho, Raumania)
@@ -602,16 +602,16 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       }
     );
   } else if (themeKey === 'casino') {
-    // 0. VIP Pub & Boutique Fashion Counter (North Plaza, x=14.5, y=7.2)
+    // 0. VIP Pub & Boutique Fashion Counter (Northwest Corner, Left of TV Screen, x=6.5, y=4.2)
     hotspots.push({
       id: 'casino_pub_shop',
       type: 'casino_pub',
-      x: 14.5,
-      y: 7.2,
+      x: 6.5,
+      y: 4.2,
       radius: 2.8,
       prompt: '🍸 Quầy Pub & Boutique VIP · [E] Mua Sắm Phụ Kiện, Hào Quang & Nametag',
     });
-    colliders.push({ x: 14.5, y: 7.2, r: 1.3 });
+    colliders.push({ x: 6.5, y: 4.2, r: 1.4 });
 
     // 1. Roulette Table (West Plaza, x=7.0, y=11.5)
     hotspots.push({
