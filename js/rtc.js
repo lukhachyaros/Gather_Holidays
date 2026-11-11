@@ -1,6 +1,6 @@
 // WebRTC P2P Voice Chat & Real-Time Screen Sharing Engine
 // Features:
-// 1. Full-Mesh WebRTC RTCPeerConnection with W3C Perfect Negotiation & STUN servers
+// 1. Full-Mesh WebRTC RTCPeerConnection with W3C Perfect Negotiation, STUN & TURN relay fallback
 // 2. High-Fidelity Voice Chat with Opus codec, Echo Cancellation, Noise Suppression & AGC
 // 3. 3D Spatial Proximity Audio: Dynamic distance attenuation (sounds louder up close, fades naturally with distance)
 // 4. Voice Activity Detection (VAD) via Web Audio API Analyser for real-time speaking indicators
@@ -9,7 +9,18 @@
 const RTC_CONFIG = {
   iceServers: [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-    { urls: ['stun:stun2.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+    { urls: ['stun:stun2.l.google.com:19302', 'stun:stun3.l.google.com:19302'] },
+    { urls: ['stun:stun4.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+    { urls: ['stun:openrelay.metered.ca:80'] },
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
   iceCandidatePoolSize: 2,
 };
@@ -51,10 +62,10 @@ export class RtcManager {
     // Settings
     this.proximityEnabled = true; // 3D distance attenuation
     this.masterVoiceVolume = 1.0; // 0.0 - 1.0
-    this.maxAudibleDistance = 18; // In map tiles (distance > 18 = volume 0)
-    this.minAudibleDistance = 2.5; // Full volume within 2.5 tiles
+    this.maxAudibleDistance = 55.0; // In map tiles (generous range across the entire holiday map)
+    this.minAudibleDistance = 4.0; // Full volume within 4 tiles
 
-    // Peer connections Map: peerId -> { pc, isPolite, makingOffer, ignoreOffer, audioGain, audioEl, analyser, remoteScreenStream, isSpeaking }
+    // Peer connections Map: peerId -> peerData
     this.peers = new Map();
 
     this.initAudioContext();
@@ -130,12 +141,27 @@ export class RtcManager {
         audioTrack.enabled = true;
         for (const [peerId, peer] of this.peers.entries()) {
           try {
-            const senders = peer.pc.getSenders();
-            const existing = senders.find(s => s.track && s.track.kind === 'audio');
-            if (existing) {
-              existing.replaceTrack(audioTrack);
-            } else {
-              peer.pc.addTrack(audioTrack, stream);
+            let replaced = false;
+            if (peer.pc.getTransceivers) {
+              const audioTransceiver = peer.pc.getTransceivers().find(
+                t =>
+                  (t.receiver.track && t.receiver.track.kind === 'audio') ||
+                  (t.sender.track && t.sender.track.kind === 'audio')
+              );
+              if (audioTransceiver && audioTransceiver.sender) {
+                audioTransceiver.direction = 'sendrecv';
+                await audioTransceiver.sender.replaceTrack(audioTrack);
+                replaced = true;
+              }
+            }
+            if (!replaced) {
+              const senders = peer.pc.getSenders();
+              const existing = senders.find(s => s.track && s.track.kind === 'audio');
+              if (existing) {
+                await existing.replaceTrack(audioTrack);
+              } else {
+                peer.pc.addTrack(audioTrack, stream);
+              }
             }
           } catch (e) {
             console.warn(`[RTC] Failed to add audio track to peer ${peerId}:`, e);
@@ -320,8 +346,10 @@ export class RtcManager {
       isPolite,
       makingOffer: false,
       ignoreOffer: false,
+      candidateQueue: [],
       audioGain: null,
       audioEl: null,
+      source: null,
       analyser: null,
       remoteScreenStream: null,
       isSpeaking: false,
@@ -332,13 +360,26 @@ export class RtcManager {
     // Setup Web Audio nodes for remote peer's incoming audio
     this.setupRemoteAudioGraph(peerData);
 
+    // Pre-allocate bidirectional audio transceiver immediately for instant P2P voice
+    let audioTransceiver = null;
+    try {
+      audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+    } catch (e) {
+      console.warn('[RTC] addTransceiver warning:', e);
+    }
+
     // Add existing local tracks to new peer
     if (this.localVoiceStream) {
       const audioTrack = this.localVoiceStream.getAudioTracks()[0];
       if (audioTrack) {
-        try {
-          pc.addTrack(audioTrack, this.localVoiceStream);
-        } catch {}
+        audioTrack.enabled = !this.isMicMuted;
+        if (audioTransceiver && audioTransceiver.sender) {
+          audioTransceiver.sender.replaceTrack(audioTrack).catch(() => {});
+        } else {
+          try {
+            pc.addTrack(audioTrack, this.localVoiceStream);
+          } catch {}
+        }
       }
     }
 
@@ -372,6 +413,7 @@ export class RtcManager {
 
     // Incoming Remote Tracks (Voice audio & Screen share video/audio)
     pc.ontrack = event => {
+      console.log(`[RTC] Incoming remote track from ${peerId}: kind=${event.track.kind}, id=${event.track.id}`);
       const track = event.track;
       const stream = event.streams[0] || new MediaStream([track]);
 
@@ -393,10 +435,18 @@ export class RtcManager {
     };
 
     pc.oniceconnectionstatechange = () => {
+      console.log(`[RTC] ICE connection state with ${peerId}: ${pc.iceConnectionState}`);
       if (pc.iceConnectionState === 'failed') {
         try {
           pc.restartIce();
         } catch {}
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log(`[RTC] PeerConnection state with ${peerId}: ${pc.connectionState}`);
+      if (pc.connectionState === 'connected') {
+        this.unlockAudioPlayback();
       }
     };
 
@@ -416,6 +466,8 @@ export class RtcManager {
   }
 
   attachRemoteAudioTrack(peerData, stream, track) {
+    track.enabled = true;
+
     // 1. Resume AudioContext if suspended
     if (this.audioCtx && this.audioCtx.state === 'suspended') {
       this.audioCtx.resume().catch(() => {});
@@ -424,8 +476,13 @@ export class RtcManager {
     // 2. Connect to Web Audio Analyser for VAD (Voice Activity Detection)
     if (this.audioCtx && peerData.analyser) {
       try {
-        const source = this.audioCtx.createMediaStreamSource(stream);
-        source.connect(peerData.analyser);
+        if (peerData.source) {
+          try {
+            peerData.source.disconnect();
+          } catch {}
+        }
+        peerData.source = this.audioCtx.createMediaStreamSource(stream);
+        peerData.source.connect(peerData.analyser);
       } catch (e) {
         console.warn('[RTC] MediaStreamSource connection warning:', e);
       }
@@ -438,15 +495,25 @@ export class RtcManager {
       audio.id = `gh-voice-${peerData.peerId}`;
       audio.autoplay = true;
       audio.playsInline = true;
-      audio.style.display = 'none';
+      audio.muted = false;
+      // Use off-screen absolute positioning rather than display: none so Chrome maintains active decoding
+      audio.style.position = 'fixed';
+      audio.style.left = '-9999px';
+      audio.style.top = '-9999px';
+      audio.style.width = '1px';
+      audio.style.height = '1px';
+      audio.style.opacity = '0.001';
+      audio.style.pointerEvents = 'none';
       document.body.appendChild(audio);
       peerData.audioEl = audio;
     }
 
     audio.srcObject = stream;
+    audio.muted = false;
     audio.volume = this.masterVoiceVolume;
     audio.play().catch(err => {
-      console.warn('[RTC] Audio autoplay waiting for user interaction:', err);
+      console.warn(`[RTC] Audio autoplay blocked for ${peerData.peerId}, waiting for user gesture:`, err);
+      this.toast('🔊 Nhấp chuột vào màn hình để mở tiếng Voice Chat!');
     });
 
     this.startVadLoop();
@@ -460,24 +527,52 @@ export class RtcManager {
     try {
       if (signal.description) {
         const desc = signal.description;
-        const offerCollision = desc.type === 'offer' && (peer.makingOffer || pc.signalingState !== 'stable');
+        const offerCollision =
+          desc.type === 'offer' && (peer.makingOffer || pc.signalingState !== 'stable');
         peer.ignoreOffer = !isPolite && offerCollision;
 
         if (peer.ignoreOffer) {
+          console.log(`[RTC] Impolite peer ignoring offer collision from ${fromPeerId}`);
           return;
         }
 
-        await pc.setRemoteDescription(desc);
+        if (offerCollision) {
+          // Polite peer: rollback local offer to accept remote offer
+          await Promise.all([
+            pc.setLocalDescription({ type: 'rollback' }),
+            pc.setRemoteDescription(desc),
+          ]);
+        } else {
+          await pc.setRemoteDescription(desc);
+        }
+
+        // Drain any ICE candidates received before remote description was ready
+        if (peer.candidateQueue && peer.candidateQueue.length > 0) {
+          const queue = peer.candidateQueue;
+          peer.candidateQueue = [];
+          for (const cand of queue) {
+            try {
+              await pc.addIceCandidate(cand);
+            } catch (err) {
+              console.warn('[RTC] Error adding queued candidate:', err);
+            }
+          }
+        }
+
         if (desc.type === 'offer') {
           await pc.setLocalDescription();
           this.sendSignal(fromPeerId, { description: pc.localDescription });
         }
       } else if (signal.candidate) {
         try {
-          await pc.addIceCandidate(signal.candidate);
+          if (!pc.remoteDescription) {
+            peer.candidateQueue.push(signal.candidate);
+          } else {
+            await pc.addIceCandidate(signal.candidate);
+          }
         } catch (err) {
           if (!peer.ignoreOffer) {
-            console.warn('[RTC] ICE candidate error:', err);
+            peer.candidateQueue.push(signal.candidate);
           }
         }
       }
@@ -490,6 +585,11 @@ export class RtcManager {
     const peer = this.peers.get(peerId);
     if (!peer) return;
 
+    if (peer.source) {
+      try {
+        peer.source.disconnect();
+      } catch {}
+    }
     if (peer.analyser) {
       try {
         peer.analyser.disconnect();
@@ -523,20 +623,23 @@ export class RtcManager {
 
       if (this.proximityEnabled && myPos && peerPositionsMap?.has(peerId)) {
         const pPos = peerPositionsMap.get(peerId);
-        const dist = Math.hypot(pPos.x - myPos.x, pPos.y - myPos.y);
+        const px = pPos.x ?? pPos.tx ?? myPos.x;
+        const py = pPos.y ?? pPos.ty ?? myPos.y;
+        const dist = Math.hypot(px - myPos.x, py - myPos.y);
 
         if (dist <= this.minAudibleDistance) {
           volume = this.masterVoiceVolume;
         } else if (dist >= this.maxAudibleDistance) {
-          volume = 0;
+          volume = this.masterVoiceVolume * 0.15; // Still 15% whisper even at map boundaries
         } else {
-          // Smooth non-linear inverse falloff
-          const t = (dist - this.minAudibleDistance) / (this.maxAudibleDistance - this.minAudibleDistance);
-          volume = this.masterVoiceVolume * Math.pow(1 - t, 1.8);
+          // Smooth falloff down to 18% floor so nobody is completely silenced within the room
+          const t =
+            (dist - this.minAudibleDistance) / (this.maxAudibleDistance - this.minAudibleDistance);
+          volume = this.masterVoiceVolume * (0.18 + 0.82 * Math.pow(1 - t, 1.4));
         }
       }
 
-      const clampedVol = Math.max(0, Math.min(1, volume));
+      const clampedVol = Math.max(0.05, Math.min(1, volume));
       try {
         if (Math.abs(peer.audioEl.volume - clampedVol) > 0.02) {
           peer.audioEl.volume = clampedVol;
@@ -550,8 +653,11 @@ export class RtcManager {
       this.audioCtx.resume().catch(() => {});
     }
     for (const peer of this.peers.values()) {
-      if (peer.audioEl && peer.audioEl.paused && peer.audioEl.srcObject) {
-        peer.audioEl.play().catch(() => {});
+      if (peer.audioEl && peer.audioEl.srcObject) {
+        peer.audioEl.muted = false;
+        if (peer.audioEl.paused) {
+          peer.audioEl.play().catch(() => {});
+        }
       }
     }
   }

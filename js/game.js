@@ -107,6 +107,8 @@ function initRtc(selfId) {
 // Unlock remote WebRTC audio playback on user gesture
 window.addEventListener('pointerdown', () => rtc?.unlockAudioPlayback(), { passive: true });
 window.addEventListener('keydown', () => rtc?.unlockAudioPlayback(), { passive: true });
+window.addEventListener('click', () => rtc?.unlockAudioPlayback(), { passive: true });
+window.addEventListener('touchstart', () => rtc?.unlockAudioPlayback(), { passive: true });
 
 function updateMicUI(isEnabled) {
   const btn = $('btnMic');
@@ -134,6 +136,7 @@ function updateMicUI(isEnabled) {
 
 async function toggleMic() {
   if (!rtc) return;
+  rtc.unlockAudioPlayback();
   await rtc.toggleMic();
 }
 
