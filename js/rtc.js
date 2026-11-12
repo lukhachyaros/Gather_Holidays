@@ -102,52 +102,45 @@ export class RtcManager {
         ],
       };
       const cleanRoomId = 'gh_v_' + encodeURIComponent(this.roomId);
-      console.log(`[Trystero] Joining voice room: ${cleanRoomId} with selfId=${this.selfId}`);
+      console.log(`[RTC] Joining voice room: ${cleanRoomId} with selfId=${this.selfId}`);
       this.room = joinRoom(config, cleanRoomId);
 
-      const handleJoin = info => {
-        const userId = typeof info === 'string' ? info : info?.userId;
-        if (!userId) return;
-        console.log(`[Trystero] User joined room: ${userId}`);
-        if (this.localVoiceStream) this.publishStream(this.localVoiceStream, userId, 'voice');
-        if (this.localScreenStream) this.publishStream(this.localScreenStream, userId, 'screen');
+      const handleJoin = peerId => {
+        if (!peerId) return;
+        console.log(`[RTC] Peer connection established: ${peerId}`);
+        if (this.localVoiceStream) this.publishStream(this.localVoiceStream, peerId, 'voice');
+        if (this.localScreenStream) this.publishStream(this.localScreenStream, peerId, 'screen');
       };
 
-      const handleLeave = info => {
-        const userId = typeof info === 'string' ? info : info?.userId;
-        const peerId = typeof info === 'object' ? info?.peerId : null;
-        const gameId = this.trysteroToGameId.get(userId) ||
-          this.trysteroToGameId.get(peerId) || userId || peerId;
+      const handleLeave = peerId => {
+        const gameId = this.trysteroToGameId.get(peerId) || peerId;
+        console.log(`[RTC] Peer disconnected: ${peerId}${gameId !== peerId ? ` (player ${gameId})` : ''}`);
         if (gameId) this.removePeer(gameId);
-        if (userId) this.trysteroToGameId.delete(userId);
-        if (peerId) this.trysteroToGameId.delete(peerId);
+        for (const [trysteroId, mappedGameId] of this.trysteroToGameId) {
+          if (trysteroId === peerId || mappedGameId === gameId) this.trysteroToGameId.delete(trysteroId);
+        }
       };
 
-      if (typeof this.room.onUserJoin === 'function') {
-        this.room.onUserJoin(handleJoin);
-      } else if (typeof this.room.onPeerJoin === 'function') {
-        this.room.onPeerJoin(handleJoin);
-      }
-
-      if (typeof this.room.onUserLeave === 'function') {
-        this.room.onUserLeave(handleLeave);
-      } else if (typeof this.room.onPeerLeave === 'function') {
-        this.room.onPeerLeave(handleLeave);
-      }
+      // Trystero event hooks are callback properties, not registration methods.
+      this.room.onPeerJoin = handleJoin;
+      this.room.onPeerLeave = handleLeave;
 
       // Handle incoming streams (Microphone Voice or Screen Share)
       const handleStream = (stream, peerInfo, legacyMetadata) => {
-        const userId = typeof peerInfo === 'string' ? peerInfo : peerInfo?.userId;
-        const peerId = typeof peerInfo === 'object' ? peerInfo?.peerId : userId;
-        const metadata = typeof peerInfo === 'object' ? peerInfo?.metadata : legacyMetadata;
+        // Current Trystero passes {userId, peerId, metadata}; older releases passed
+        // peerId as a string and metadata as the third argument.
+        const peerId = typeof peerInfo === 'string' ? peerInfo : peerInfo?.peerId;
+        const userId = typeof peerInfo === 'object' ? peerInfo?.userId : peerId;
+        const metadata = typeof peerInfo === 'object' ? (peerInfo?.metadata || legacyMetadata) : legacyMetadata;
         const gameId = metadata?.selfId || this.trysteroToGameId.get(userId) ||
           this.trysteroToGameId.get(peerId) || userId || peerId;
         if (!gameId) return;
         if (userId) this.trysteroToGameId.set(userId, gameId);
         if (peerId) this.trysteroToGameId.set(peerId, gameId);
-        console.log(`[Trystero] Incoming stream from ${gameId} (${userId || peerId}):`, metadata, stream.getTracks().map(t => `${t.kind}:${t.id}`));
+        const tracks = stream?.getTracks?.() || [];
+        console.log(`[RTC] Incoming stream from player ${gameId} (peer ${peerId || userId}):`, metadata, tracks.map(t => `${t.kind}:${t.id}`));
 
-        const hasVideo = stream.getVideoTracks().length > 0;
+        const hasVideo = stream?.getVideoTracks?.().length > 0;
         const isScreen = metadata?.kind === 'screen' || hasVideo;
 
         if (isScreen) {
@@ -170,13 +163,16 @@ export class RtcManager {
           }
         } else {
           // Voice Audio Track
+          if (!stream?.getAudioTracks?.().length) {
+            console.warn(`[RTC] Ignoring non-audio stream from player ${gameId}.`);
+            return;
+          }
+          console.log(`[RTC] Incoming microphone audio from player ${gameId}.`);
           this.attachRemoteAudio(gameId, userId || peerId, stream);
         }
       };
 
-      if (typeof this.room.onPeerStream === 'function') {
-        this.room.onPeerStream(handleStream);
-      }
+      this.room.onPeerStream = handleStream;
     } catch (err) {
       console.error('[Trystero] Initialization error:', err);
     }
@@ -427,6 +423,7 @@ export class RtcManager {
       audio.style.height = '1px';
       audio.style.opacity = '0.001';
       audio.style.pointerEvents = 'none';
+      audio.onplaying = () => console.log(`[RTC] Audio playback started for player ${peerId}.`);
       document.body.appendChild(audio);
       p.audioEl = audio;
     }
@@ -455,6 +452,7 @@ export class RtcManager {
           peer.source = this.audioCtx.createMediaStreamSource(peer.stream);
           peer.sourceStream = peer.stream;
           peer.source.connect(peer.gainNode);
+          console.log(`[RTC] Audio routed through Web Audio for player ${peer.peerId}.`);
         }
         audio.muted = true;
         audio.pause();
@@ -473,7 +471,7 @@ export class RtcManager {
     audio.volume = peer.voiceVolume ?? this.masterVoiceVolume;
     if (audio.paused) {
       audio.play().catch(error => {
-        console.warn(`[Trystero] Audio playback is waiting for a user gesture (${peer.peerId}):`, error);
+        console.warn(`[RTC] Audio playback failed for player ${peer.peerId}; waiting for a user gesture:`, error);
       });
     }
   }
