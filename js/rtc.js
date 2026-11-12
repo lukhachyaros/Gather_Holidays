@@ -1,13 +1,13 @@
 // WebRTC Voice Chat & Real-Time Screen Sharing Engine powered by Trystero P2P SDK
 // Features:
-// 1. Trystero Serverless WebRTC Mesh: robust, battle-tested P2P streaming over public MQTT brokers
+// 1. Trystero Serverless WebRTC Mesh: P2P streaming over Trystero's default signaling relays
 // 2. High-Fidelity Voice Chat with Opus codec, Echo Cancellation, Noise Suppression & AGC
-// 3. Web Audio API Direct Speaker Playback: routes incoming remote stream directly to AudioContext.destination
+// 3. Direct remote audio playback through one HTMLAudioElement per peer
 // 4. 3D Spatial Proximity Audio: Dynamic distance attenuation (sounds louder up close, comfortable floor everywhere)
 // 5. Voice Activity Detection (VAD) via Web Audio API Analyser for real-time speaking indicators
 // 6. Full HD Screen Sharing (Entire Screen, App Window, Browser Tab with Audio) onto the Giant 3D Cinema TV
 
-import { joinRoom } from 'https://cdn.jsdelivr.net/npm/@trystero-p2p/mqtt/+esm';
+import { joinRoom } from 'https://cdn.jsdelivr.net/npm/trystero/+esm';
 
 export class RtcManager {
   constructor({
@@ -53,7 +53,7 @@ export class RtcManager {
     this.maxAudibleDistance = 55.0;
     this.minAudibleDistance = 4.0;
 
-    // Peers map: gameId -> { peerId, tPeerId, audioEl, gainNode, source, screenStream }
+    // Peers map: gameId -> { peerId, tPeerId, audioEl, stream, screenStream }
     this.remotePeers = new Map();
     this.trysteroToGameId = new Map();
 
@@ -94,16 +94,14 @@ export class RtcManager {
 
   initTrystero() {
     try {
-      const config = {
-        appId: 'gather-holidays-voice-v3',
-        relayUrls: [
-          'wss://broker.emqx.io:8084/mqtt',
-          'wss://broker.hivemq.com:8884/mqtt',
-        ],
-      };
+      const config = { appId: 'gather-holidays-voice-v3' };
       const cleanRoomId = 'gh_v_' + encodeURIComponent(this.roomId);
-      console.log(`[RTC] Joining voice room: ${cleanRoomId} with selfId=${this.selfId}`);
-      this.room = joinRoom(config, cleanRoomId);
+      console.log(`[RTC] Joining voice room via Trystero's default signaling: ${cleanRoomId} with selfId=${this.selfId}`);
+      this.room = joinRoom(config, cleanRoomId, {
+        onJoinError: ({ peerId, error }) => {
+          console.error(`[RTC] WebRTC connection failed for peer ${peerId}:`, error);
+        },
+      });
 
       const handleJoin = peerId => {
         if (!peerId) return;
@@ -147,7 +145,7 @@ export class RtcManager {
           // Screen Share Video Track
           let p = this.remotePeers.get(gameId);
           if (!p) {
-            p = { peerId: gameId, tPeerId: userId || peerId, audioEl: null, gainNode: null, source: null, screenStream: null };
+            p = { peerId: gameId, tPeerId: userId || peerId, audioEl: null, stream: null, screenStream: null };
             this.remotePeers.set(gameId, p);
           }
           p.screenStream = stream;
@@ -405,7 +403,7 @@ export class RtcManager {
 
     let p = this.remotePeers.get(peerId);
     if (!p) {
-      p = { peerId, tPeerId, audioEl: null, gainNode: null, source: null, sourceStream: null, stream: null, screenStream: null };
+      p = { peerId, tPeerId, audioEl: null, stream: null, screenStream: null };
       this.remotePeers.set(peerId, p);
     }
     p.tPeerId = tPeerId;
@@ -437,36 +435,6 @@ export class RtcManager {
   updateRemoteAudioRouting(peer) {
     if (!peer?.stream || !peer.audioEl) return;
     const audio = peer.audioEl;
-
-    if (this.audioCtx?.state === 'running') {
-      try {
-        if (!peer.gainNode) {
-          peer.gainNode = this.audioCtx.createGain();
-          peer.gainNode.connect(this.audioCtx.destination);
-        }
-        peer.gainNode.gain.value = peer.voiceVolume ?? this.masterVoiceVolume;
-        if (!peer.source || peer.sourceStream !== peer.stream) {
-          if (peer.source) {
-            try { peer.source.disconnect(); } catch {}
-          }
-          peer.source = this.audioCtx.createMediaStreamSource(peer.stream);
-          peer.sourceStream = peer.stream;
-          peer.source.connect(peer.gainNode);
-          console.log(`[RTC] Audio routed through Web Audio for player ${peer.peerId}.`);
-        }
-        audio.muted = true;
-        audio.pause();
-        return;
-      } catch (error) {
-        console.warn('[Trystero] Web Audio routing failed; falling back to audio element:', error);
-      }
-    }
-
-    if (peer.source) {
-      try { peer.source.disconnect(); } catch {}
-      peer.source = null;
-      peer.sourceStream = null;
-    }
     audio.muted = false;
     audio.volume = peer.voiceVolume ?? this.masterVoiceVolume;
     if (audio.paused) {
@@ -503,7 +471,6 @@ export class RtcManager {
   applyPeerVolume(peer) {
     const volume = Math.max(0, Math.min(1, peer.voiceVolume ?? this.masterVoiceVolume));
     try {
-      if (peer.gainNode) peer.gainNode.gain.value = volume;
       if (peer.audioEl && Math.abs(peer.audioEl.volume - volume) > 0.02) {
         peer.audioEl.volume = volume;
       }
@@ -514,9 +481,7 @@ export class RtcManager {
 
   unlockAudioPlayback() {
     if (this.audioCtx && this.audioCtx.state !== 'running') {
-      this.audioCtx.resume().then(() => {
-        for (const peer of this.remotePeers.values()) this.updateRemoteAudioRouting(peer);
-      }).catch(error => {
+      this.audioCtx.resume().catch(error => {
         console.warn('[Trystero] AudioContext could not be resumed:', error);
       });
     }
@@ -560,12 +525,6 @@ export class RtcManager {
     if (!peer) return;
 
     if (peer.screenStream) this.onRemoteScreenTrack?.(peerId, null);
-    if (peer.source) {
-      try { peer.source.disconnect(); } catch {}
-    }
-    if (peer.gainNode) {
-      try { peer.gainNode.disconnect(); } catch {}
-    }
     if (peer.audioEl) {
       try {
         peer.audioEl.pause();
