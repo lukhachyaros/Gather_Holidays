@@ -403,7 +403,7 @@ try {
   world = new World(scene);
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
   initAudio();
-  initCasino(world, toast, emitOp, () => me, () => peers);
+  initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId);
   initMobileControls();
   setupBuilderToolsInteraction();
   setupAdminCommandAutocomplete();
@@ -1986,7 +1986,7 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'casino_broadcast': {
-      handleCasinoBroadcast(op);
+      handleCasinoBroadcast(op, senderId);
       break;
     }
     case 'admin_spin': {

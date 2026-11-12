@@ -14,6 +14,20 @@ let toastRef = null;
 let emitOpRef = null;
 let getMeRef = null;
 let getPeersRef = null;
+let getSelfIdRef = null;
+let activeCasinoTable = null;
+let casinoTableHeartbeat = null;
+let casinoTableUi = null;
+const casinoTables = new Map();
+const seenCasinoEvents = new Set();
+const CASINO_TABLE_TTL_MS = 20000;
+const CASINO_TABLE_GAMES = new Set(['roulette', 'duck_derby', 'blackjack', 'plinko']);
+const CASINO_GAME_LABELS = {
+  roulette: 'Roulette',
+  duck_derby: 'Duck Derby',
+  blackjack: 'Blackjack',
+  plinko: 'Plinko',
+};
 
 // ---------- Coin Wallet Management (Starts strictly at 0) ----------
 let coins = parseInt(localStorage.getItem('gh_player_coins') ?? localStorage.getItem('gh_casino_chips') ?? '0', 10);
@@ -83,6 +97,7 @@ export function recordJackpotWin(gameType, amount = 5000) {
         player: me.name,
         detail: amount,
         isJackpot: true,
+        casinoEventId: `${getSelfIdRef?.() || me.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       });
     }
 
@@ -150,17 +165,333 @@ function updateAllWalletBadges() {
   }
 }
 
-export function initCasino(world, toast, emitOp = null, getMe = null, getPeers = null) {
+export function initCasino(world, toast, emitOp = null, getMe = null, getPeers = null, getSelfId = null) {
   worldRef = world;
   toastRef = toast;
   emitOpRef = emitOp;
   getMeRef = getMe;
   getPeersRef = getPeers;
+  getSelfIdRef = getSelfId;
 }
 
 export let activePlinkoInstance = null;
 export let activeRouletteInstance = null;
 export let activeDuckDerbyInstance = null;
+export let activeBlackjackInstance = null;
+
+function getCasinoPlayer() {
+  const me = getMeRef?.();
+  return {
+    id: getSelfIdRef?.() || `local-${String(me?.name || 'player').toLowerCase()}`,
+    name: String(me?.name || 'Người chơi').slice(0, 32),
+  };
+}
+
+function rememberCasinoEvent(id) {
+  if (!id) return false;
+  if (seenCasinoEvents.has(id)) return true;
+  seenCasinoEvents.add(id);
+  if (seenCasinoEvents.size > 2000) {
+    seenCasinoEvents.delete(seenCasinoEvents.values().next().value);
+  }
+  return false;
+}
+
+function serializeCasinoTable(table) {
+  return {
+    id: table.id,
+    game: table.game,
+    name: table.name,
+    hostId: table.hostId,
+    players: [...table.players.values()].map(player => ({
+      id: player.id,
+      name: player.name,
+      lastSeen: player.lastSeen,
+    })),
+    blackjackState: table.blackjackState || null,
+  };
+}
+
+function getOrCreateCasinoTable(data) {
+  if (!data?.id || !CASINO_TABLE_GAMES.has(data.game)) return null;
+  let table = casinoTables.get(data.id);
+  if (!table) {
+    table = {
+      id: data.id,
+      game: data.game,
+      name: String(data.name || CASINO_GAME_LABELS[data.game]).slice(0, 32),
+      hostId: data.hostId || '',
+      players: new Map(),
+      blackjackState: null,
+      updatedAt: Date.now(),
+    };
+    casinoTables.set(table.id, table);
+  }
+  table.name = String(data.name || table.name).slice(0, 32);
+  table.hostId = data.hostId || table.hostId;
+  if (data.blackjackState) table.blackjackState = data.blackjackState;
+  for (const player of data.players || []) {
+    if (!player?.id) continue;
+    table.players.set(player.id, {
+      id: player.id,
+      name: String(player.name || 'Người chơi').slice(0, 32),
+      lastSeen: Date.now(),
+    });
+  }
+  table.updatedAt = Date.now();
+  return table;
+}
+
+function pruneCasinoTables() {
+  const now = Date.now();
+  for (const [id, table] of casinoTables) {
+    for (const [playerId, player] of table.players) {
+      if (now - player.lastSeen > CASINO_TABLE_TTL_MS) table.players.delete(playerId);
+    }
+    if (!table.players.size) {
+      casinoTables.delete(id);
+      continue;
+    }
+    if (!table.players.has(table.hostId)) table.hostId = [...table.players.keys()].sort()[0];
+  }
+}
+
+function notifyCasinoTableUi() {
+  pruneCasinoTables();
+  casinoTableUi?.render?.();
+}
+
+function sendCasinoTableMessage(tableAction, data = {}) {
+  const player = getCasinoPlayer();
+  emitOpRef?.({
+    k: 'casino_broadcast',
+    game: data.game || activeCasinoTable?.game,
+    tableAction,
+    tableId: data.tableId || activeCasinoTable?.id,
+    playerId: player.id,
+    player: player.name,
+    casinoEventId: `${player.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ...data,
+  });
+}
+
+function leaveActiveCasinoTable() {
+  clearInterval(casinoTableHeartbeat);
+  casinoTableHeartbeat = null;
+  if (activeCasinoTable) {
+    if (activeCasinoTable.game === 'blackjack') activeBlackjackInstance?.onRoomLeft?.();
+    sendCasinoTableMessage('leave');
+    activeCasinoTable = null;
+  }
+  notifyCasinoTableUi();
+}
+
+function joinCasinoTable(table) {
+  if (!table) return;
+  if (activeCasinoTable?.id === table.id) return;
+  leaveActiveCasinoTable();
+  activeCasinoTable = table;
+  const player = getCasinoPlayer();
+  table.players.set(player.id, { ...player, lastSeen: Date.now() });
+  if (table.game === 'blackjack') activeBlackjackInstance?.onRoomJoined?.(table.blackjackState);
+  sendCasinoTableMessage('join', {
+    tableId: table.id,
+    game: table.game,
+    table: serializeCasinoTable(table),
+  });
+  casinoTableHeartbeat = setInterval(() => {
+    if (!activeCasinoTable) return;
+    sendCasinoTableMessage('heartbeat', {
+      tableId: activeCasinoTable.id,
+      game: activeCasinoTable.game,
+    });
+  }, 5000);
+  notifyCasinoTableUi();
+}
+
+function createCasinoTable(game, name) {
+  const player = getCasinoPlayer();
+  const table = {
+    id: `${game}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    game,
+    name: String(name || '').trim().slice(0, 32),
+    hostId: player.id,
+    players: new Map([[player.id, { ...player, lastSeen: Date.now() }]]),
+    blackjackState: null,
+    updatedAt: Date.now(),
+  };
+  if (!table.name) {
+    toastRef?.('Nhập tên bàn trước khi tạo phòng.');
+    return;
+  }
+  leaveActiveCasinoTable();
+  activeCasinoTable = table;
+  casinoTables.set(table.id, table);
+  if (table.game === 'blackjack') activeBlackjackInstance?.onRoomJoined?.(table.blackjackState);
+  sendCasinoTableMessage('create', {
+    tableId: table.id,
+    game,
+    table: serializeCasinoTable(table),
+  });
+  casinoTableHeartbeat = setInterval(() => {
+    if (!activeCasinoTable) return;
+    sendCasinoTableMessage('heartbeat', {
+      tableId: activeCasinoTable.id,
+      game: activeCasinoTable.game,
+    });
+  }, 5000);
+  notifyCasinoTableUi();
+}
+
+function addCasinoTableUi(modal, game) {
+  const player = getCasinoPlayer();
+  const panel = document.createElement('section');
+  panel.className = 'casino-online-table';
+  panel.innerHTML = `
+    <div class="casino-online-table-heading">
+      <div>
+        <strong>🌐 PHÒNG ONLINE · ${CASINO_GAME_LABELS[game]}</strong>
+        <span class="casino-online-player-name"></span>
+      </div>
+      <button type="button" class="casino-action-btn secondary casino-leave-table" hidden>Rời bàn</button>
+    </div>
+    <div class="casino-online-controls">
+      <input class="casino-room-name" maxlength="32" aria-label="Tên phòng casino" placeholder="Tên bàn mới (tối đa 32 ký tự)">
+      <button type="button" class="casino-action-btn casino-create-table">＋ Tạo phòng</button>
+    </div>
+    <div class="casino-online-status" aria-live="polite">Chọn một bàn đang mở hoặc tạo bàn mới để cùng chơi.</div>
+    <div class="casino-online-rooms"></div>
+    <div class="casino-online-players" hidden></div>
+  `;
+  modal.querySelector('.casino-body').prepend(panel);
+  panel.querySelector('.casino-online-player-name').textContent = `Bạn: ${player.name}`;
+  const status = panel.querySelector('.casino-online-status');
+  const rooms = panel.querySelector('.casino-online-rooms');
+  const players = panel.querySelector('.casino-online-players');
+  const leaveButton = panel.querySelector('.casino-leave-table');
+  const roomNameInput = panel.querySelector('.casino-room-name');
+
+  const render = () => {
+    if (!panel.isConnected) return;
+    const active = activeCasinoTable?.game === game ? activeCasinoTable : null;
+    const available = [...casinoTables.values()]
+      .filter(table => table.game === game && table.id !== active?.id && table.players.size)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    rooms.replaceChildren();
+    available.forEach(table => {
+      const card = document.createElement('div');
+      card.className = 'casino-online-room';
+      const detail = document.createElement('span');
+      detail.textContent = `${table.name} · ${table.players.size} người`;
+      const joinButton = document.createElement('button');
+      joinButton.type = 'button';
+      joinButton.className = 'casino-action-btn secondary';
+      joinButton.textContent = 'Tham gia';
+      joinButton.onclick = () => joinCasinoTable(table);
+      card.append(detail, joinButton);
+      rooms.appendChild(card);
+    });
+
+    leaveButton.hidden = !active;
+    panel.querySelector('.casino-create-table').disabled = !!active;
+    roomNameInput.disabled = !!active;
+    if (active) {
+      status.textContent = `Đang ở bàn “${active.name}”${active.hostId === player.id ? ' · Bạn là chủ bàn' : ''}.`;
+      players.hidden = false;
+      players.replaceChildren();
+      const heading = document.createElement('strong');
+      heading.textContent = `Người chơi (${active.players.size})`;
+      players.appendChild(heading);
+      for (const participant of active.players.values()) {
+        const chip = document.createElement('span');
+        chip.className = 'casino-online-player';
+        chip.textContent = `${participant.id === active.hostId ? '👑 ' : ''}${participant.name}${participant.id === player.id ? ' (Bạn)' : ''}`;
+        players.appendChild(chip);
+      }
+    } else {
+      players.hidden = true;
+      status.textContent = available.length
+        ? 'Chọn một bàn đang mở hoặc tạo bàn mới để cùng chơi.'
+        : 'Chưa có bàn mở. Tạo phòng để mời mọi người trong Gather hiện tại.';
+    }
+  };
+
+  panel.querySelector('.casino-create-table').onclick = () => createCasinoTable(game, roomNameInput.value);
+  leaveButton.onclick = leaveActiveCasinoTable;
+  casinoTableUi = { game, render };
+  render();
+  sendCasinoTableMessage('discover', { game, targetId: '' });
+}
+
+function handleCasinoTableMessage(op, senderId) {
+  if (op.targetId && op.targetId !== getSelfIdRef?.()) return;
+  if (rememberCasinoEvent(op.casinoEventId)) return;
+
+  if (op.tableAction === 'discover') {
+    const table = activeCasinoTable;
+    if (table?.game === op.game) {
+      sendCasinoTableMessage('announce', {
+        tableId: table.id,
+        game: table.game,
+        targetId: senderId,
+        table: serializeCasinoTable(table),
+      });
+    }
+    return;
+  }
+
+  if (op.tableAction === 'create' || op.tableAction === 'announce') {
+    const table = getOrCreateCasinoTable(op.table);
+    if (table?.game === 'blackjack' && table.blackjackState && table.hostId === senderId) {
+      activeBlackjackInstance?.onTableState?.(table.blackjackState);
+    }
+    notifyCasinoTableUi();
+    return;
+  }
+
+  const table = casinoTables.get(op.tableId);
+  if (!table) return;
+  const playerId = op.playerId || senderId;
+  const playerName = String(op.player || 'Người chơi').slice(0, 32);
+
+  if (op.tableAction === 'join' || op.tableAction === 'heartbeat') {
+    if (playerId) table.players.set(playerId, { id: playerId, name: playerName, lastSeen: Date.now() });
+    table.updatedAt = Date.now();
+    if (op.tableAction === 'join' && table.hostId === getSelfIdRef?.()) {
+      sendCasinoTableMessage('announce', {
+        tableId: table.id,
+        game: table.game,
+        targetId: playerId,
+        table: serializeCasinoTable(table),
+      });
+    }
+  } else if (op.tableAction === 'leave') {
+    table.players.delete(playerId);
+    table.updatedAt = Date.now();
+    if (!table.players.size) {
+      casinoTables.delete(table.id);
+    } else if (!table.players.has(table.hostId)) {
+      table.hostId = [...table.players.keys()].sort()[0];
+    }
+  } else if (op.tableAction === 'blackjack_state' && table.game === 'blackjack') {
+    if (senderId !== table.hostId) return;
+    table.blackjackState = op.state;
+    activeBlackjackInstance?.onTableState?.(op.state);
+  } else if (op.tableAction === 'blackjack_join' && table.game === 'blackjack') {
+    if (table.hostId === getSelfIdRef?.()) {
+      activeBlackjackInstance?.onPeerJoin?.(senderId, playerName, op.bet, senderId);
+    }
+  } else if (op.tableAction === 'blackjack_action' && table.game === 'blackjack') {
+    if (table.hostId === getSelfIdRef?.()) {
+      activeBlackjackInstance?.onPeerAction?.(senderId, op.action, senderId);
+    }
+  } else if (op.tableAction === 'blackjack_join_result' && table.game === 'blackjack') {
+    if (senderId !== table.hostId) return;
+    activeBlackjackInstance?.onJoinResult?.(!!op.accepted);
+  }
+  notifyCasinoTableUi();
+}
 
 export function updateCasinoTicker(msg) {
   const tickerEl = document.getElementById('casinoTickerText');
@@ -173,28 +504,41 @@ export function updateCasinoTicker(msg) {
 }
 
 export function broadcastCasinoPlay(gameName, detail = '', extra = {}) {
-  if (emitOpRef) {
-    const me = getMeRef?.();
-    emitOpRef({
-      k: 'casino_broadcast',
-      game: gameName,
-      player: me?.name || 'Người chơi',
-      detail,
-      isJackpot: false,
-      ...extra,
-    });
-  }
+  if (!emitOpRef) return;
+  const player = getCasinoPlayer();
+  const isSlot = gameName === 'slot_machine';
+  const table = !isSlot && activeCasinoTable?.game === gameName ? activeCasinoTable : null;
+  if (!isSlot && !table) return;
+  emitOpRef({
+    k: 'casino_broadcast',
+    game: gameName,
+    tableId: table?.id,
+    player: player.name,
+    playerId: player.id,
+    detail,
+    isJackpot: false,
+    casinoEventId: `${player.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ...extra,
+  });
 }
 
-export function handleCasinoBroadcast(op) {
+export function handleCasinoBroadcast(op, senderId = null) {
   if (!op) return;
+  if (op.tableAction) {
+    handleCasinoTableMessage(op, senderId);
+    return;
+  }
+  if (op.casinoEventId && rememberCasinoEvent(op.casinoEventId)) return;
   const { game, player, detail, isJackpot, subAction } = op;
+  if (senderId === getSelfIdRef?.() && !isJackpot) return;
   if (isJackpot) {
     toastRef?.(`💥 JACKPOT! ${player} vừa trúng độc đắc ${Number(detail).toLocaleString()} Xu ở trò ${game.toUpperCase()}! 🎉`);
     updateCasinoTicker(`💥 JACKPOT! ${player} vừa trúng độc đắc ${Number(detail).toLocaleString()} Xu ở ${game.toUpperCase()}! 🎉`);
     playSfx('jackpot_voice', 'casino');
     worldRef?.spawnFireworksShow?.(14.5, 11.5);
   } else {
+    if (game !== 'slot_machine' &&
+        (!activeCasinoTable || activeCasinoTable.game !== game || activeCasinoTable.id !== op.tableId)) return;
     if (game === 'roulette') {
       const rt = worldRef?.casinoObjs?.find(o => o.userData?.type === 'roulette');
       rt?.userData?.spinWheel?.();
@@ -202,6 +546,7 @@ export function handleCasinoBroadcast(op) {
         updateCasinoTicker(`🎡 ${player} vừa đặt cược ${op.amount || 10} Xu vào ô [${op.betKey}]!`);
         activeRouletteInstance?.onPeerBet?.(player, op.betKey, op.amount || 10);
       } else if (subAction === 'spin') {
+        if (activeCasinoTable.hostId !== senderId) return;
         updateCasinoTicker(`🎡 ${player} đang quay bánh xe Roulette!`);
         toastRef?.(`🎡 ${player} đang quay bánh xe Roulette!`);
         activeRouletteInstance?.onPeerSpin?.(player, op.winningNum);
@@ -212,9 +557,10 @@ export function handleCasinoBroadcast(op) {
       const dd = worldRef?.casinoObjs?.find(o => o.userData?.type === 'duck_derby');
       dd?.userData?.startRace?.();
       if (subAction === 'start_race') {
+        if (activeCasinoTable.hostId !== senderId) return;
         updateCasinoTicker(`🦆 ${player} đã bấm còi bắt đầu cuộc đua vịt Duck Derby!`);
         toastRef?.(`🦆 ${player} vừa bấm chuông bắt đầu cuộc đua vịt Duck Derby!`);
-        activeDuckDerbyInstance?.onPeerStartRace?.(player, op.chosenDuck, op.speeds);
+        activeDuckDerbyInstance?.onPeerStartRace?.(player, op.winningDuck);
       } else {
         toastRef?.(`🦆 ${player} vừa bấm chuông bắt đầu cuộc đua vịt Duck Derby!`);
       }
@@ -241,6 +587,12 @@ export function handleCasinoBroadcast(op) {
 function createCasinoModal(title, contentHtml) {
   // Remove any existing casino overlay
   document.querySelectorAll('.casino-modal-overlay').forEach(el => el.remove());
+  if (activeCasinoTable) leaveActiveCasinoTable();
+  casinoTableUi = null;
+  activePlinkoInstance = null;
+  activeRouletteInstance = null;
+  activeDuckDerbyInstance = null;
+  activeBlackjackInstance = null;
 
   const overlay = document.createElement('div');
   overlay.className = 'casino-modal-overlay';
@@ -273,10 +625,14 @@ function createCasinoModal(title, contentHtml) {
   document.body.appendChild(overlay);
 
   const cleanupAndClose = () => {
+    leaveActiveCasinoTable();
+    casinoTableUi = null;
     activePlinkoInstance = null;
     activeRouletteInstance = null;
     activeDuckDerbyInstance = null;
+    activeBlackjackInstance = null;
     overlay.remove();
+    window.removeEventListener('keydown', escHandler);
   };
 
   overlay.querySelector('#btnCloseCasinoModal').onclick = cleanupAndClose;
@@ -289,8 +645,7 @@ function createCasinoModal(title, contentHtml) {
 
   const escHandler = e => {
     if (e.key === 'Escape') {
-      overlay.remove();
-      window.removeEventListener('keydown', escHandler);
+      cleanupAndClose();
     }
   };
   window.addEventListener('keydown', escHandler);
@@ -332,6 +687,7 @@ export function openRoulette() {
   `;
 
   const modal = createCasinoModal('VÒNG QUAY ROULETTE CHÂU ÂU (37 SỐ)', content);
+  addCasinoTableUi(modal, 'roulette');
   const canvas = modal.querySelector('#rouletteCanvas');
   const ctx = canvas.getContext('2d');
 
@@ -417,6 +773,7 @@ export function openRoulette() {
     // Attach click listeners to cells
     gridContainer.querySelectorAll('.roulette-cell').forEach(cell => {
       cell.onclick = () => {
+        if (isSpinning) return;
         const betKey = cell.dataset.bet;
         if (!spendCoins(selectedChipVal)) {
           toastRef?.('⚠️ Bạn không đủ Xu để đặt cược!');
@@ -587,6 +944,11 @@ export function openRoulette() {
   // Spin Logic
   modal.querySelector('#btnSpinRoulette').onclick = () => {
     if (isSpinning) return;
+    if (activeCasinoTable?.game === 'roulette' &&
+        activeCasinoTable.hostId !== getCasinoPlayer().id) {
+      toastRef?.('Chủ bàn sẽ bắt đầu vòng quay Roulette chung.');
+      return;
+    }
     if (bets.size === 0) {
       toastRef?.('⚠️ Vui lòng đặt cược ít nhất vào 1 ô trên bàn!');
       return;
@@ -704,6 +1066,7 @@ export function openDuckDerby() {
   `;
 
   const modal = createCasinoModal('TRƯỜNG ĐUA VỊT CAO SU DUCK DERBY', content);
+  addCasinoTableUi(modal, 'duck_derby');
   const canvas = modal.querySelector('#duckRaceCanvas');
   const ctx = canvas.getContext('2d');
 
@@ -812,7 +1175,7 @@ export function openDuckDerby() {
   }
   drawTrack();
 
-  function startRace(speeds, isLocal = true, racerName = 'Bạn') {
+  function startRace(winningDuck, hasBet = true, racerName = 'Bạn') {
     isRacing = true;
     modal.querySelector('#btnStartDuckRace').disabled = true;
     modal.querySelector('#duckRaceToast').innerHTML = `🏁 Cuộc đua của ${racerName} đang diễn ra kịch tính...`;
@@ -823,32 +1186,21 @@ export function openDuckDerby() {
     const dd = worldRef?.casinoObjs?.find(o => o.userData?.type === 'duck_derby');
     dd?.userData?.startRace?.();
 
-    ducks.forEach((d, i) => {
-      d.x = 40;
-      d.speed = speeds && speeds[i] ? speeds[i] : 2.2 + Math.random() * 2.5;
-    });
-
-    let winnerIdx = -1;
-    function raceLoop() {
-      let reached = false;
+    const winnerIdx = Math.max(0, Math.min(ducks.length - 1, Number(winningDuck) || 0));
+    const startTime = performance.now();
+    const duration = 5000;
+    const loserPaces = [0.76, 0.82, 0.88, 0.94];
+    function raceLoop(now) {
+      const progress = Math.min(1, (now - startTime) / duration);
       ducks.forEach((d, i) => {
-        // Dynamic speed variations (surge & slow down)
-        d.speed += (Math.random() - 0.5) * 0.45;
-        d.speed = Math.max(1.5, Math.min(6.2, d.speed));
-        d.x += d.speed;
-
-        if (d.x >= 700 && winnerIdx === -1) {
-          winnerIdx = i;
-          reached = true;
-        }
+        const pace = i === winnerIdx ? 1 : loserPaces[(i + winnerIdx) % loserPaces.length];
+        d.x = 40 + 660 * progress * pace;
       });
-
       drawTrack();
-
-      if (!reached) {
+      if (progress < 1) {
         requestAnimationFrame(raceLoop);
       } else {
-        finishRace(winnerIdx, isLocal, racerName);
+        finishRace(winnerIdx, hasBet, racerName);
       }
     }
     requestAnimationFrame(raceLoop);
@@ -856,38 +1208,44 @@ export function openDuckDerby() {
 
   // Multiplayer Hook for Duck Derby
   activeDuckDerbyInstance = {
-    onPeerStartRace: (player, chosenDuck, speeds) => {
+    onPeerStartRace: (player, winningDuck) => {
       if (!isRacing) {
-        startRace(speeds, false, player);
+        const hasBet = spendCoins(betAmount);
+        startRace(winningDuck, hasBet, player);
       }
     },
   };
 
   modal.querySelector('#btnStartDuckRace').onclick = () => {
     if (isRacing) return;
+    if (activeCasinoTable?.game === 'duck_derby' &&
+        activeCasinoTable.hostId !== getCasinoPlayer().id) {
+      toastRef?.('Chủ bàn sẽ bắt đầu cuộc đua Duck Derby chung.');
+      return;
+    }
     if (!spendCoins(betAmount)) {
       toastRef?.('⚠️ Bạn không đủ Xu để đặt cược!');
       return;
     }
 
-    const speeds = ducks.map(() => 2.2 + Math.random() * 2.5);
+    const winningDuck = Math.floor(Math.random() * ducks.length);
 
     // Broadcast race start to all peers in the room
     broadcastCasinoPlay('duck_derby', ducks[chosenDuckIdx]?.name || 'Vịt', {
       subAction: 'start_race',
       chosenDuck: chosenDuckIdx,
-      speeds,
+      winningDuck,
     });
 
-    startRace(speeds, true, 'Bạn');
+    startRace(winningDuck, true, 'Bạn');
   };
 
-  function finishRace(winIdx, isLocal = true, racerName = 'Bạn') {
+  function finishRace(winIdx, hasBet = true, racerName = 'Bạn') {
     isRacing = false;
     modal.querySelector('#btnStartDuckRace').disabled = false;
 
     const winner = ducks[winIdx];
-    if (isLocal && winIdx === chosenDuckIdx) {
+    if (hasBet && winIdx === chosenDuckIdx) {
       const payout = Math.floor(betAmount * winner.odds);
       addCoins(payout);
       recordJackpotWin('duck_derby');
@@ -898,7 +1256,7 @@ export function openDuckDerby() {
       updateCasinoTicker(`🏆 ${racerName} vừa thắng cược ${payout.toLocaleString()} Xu với Vịt #${winIdx + 1}!`);
     } else {
       modal.querySelector('#duckRaceToast').innerHTML = `
-        🏆 Vô địch là: <b>#${winIdx + 1} ${winner.name}</b>.${isLocal ? ' Chúc bạn may mắn ở vòng đua sau!' : ` (Đua bởi ${racerName})`}
+        🏆 Vô địch là: <b>#${winIdx + 1} ${winner.name}</b>.${racerName === 'Bạn' ? ' Chúc bạn may mắn ở vòng đua sau!' : ` (Đua bởi ${racerName})`}
       `;
       updateCasinoTicker(`🦆 Cuộc đua Duck Derby kết thúc: Vịt #${winIdx + 1} (${winner.name}) về nhất!`);
     }
@@ -924,13 +1282,14 @@ export function openBlackjack() {
         🃏 Hãy chọn mức cược và nhấn CHIA BÀI (DEAL) để bắt đầu ván bài 21 điểm!
       </div>
       <!-- Player Area -->
-      <div class="bj-hand-box">
+      <div class="bj-hand-box" id="bjSoloPlayerBox">
         <div class="bj-hand-header">
           <span>🧑 BẠN (PLAYER)</span>
           <span id="playerScore">Điểm: 0</span>
         </div>
         <div class="bj-cards-row" id="playerCards"></div>
       </div>
+      <div class="bj-hand-box bj-shared-players" id="bjSharedPlayers" hidden></div>
       <!-- Controls -->
       <div class="bj-controls-row">
         <div class="casino-chips-row" style="background:transparent;padding:0">
@@ -949,16 +1308,28 @@ export function openBlackjack() {
   `;
 
   const modal = createCasinoModal('BÀN XÌ DÁCH CASINO VIP (BLACKJACK)', content);
+  addCasinoTableUi(modal, 'blackjack');
 
   let betAmount = 50;
   let deck = [];
   let playerCards = [];
   let dealerCards = [];
   let isGameOver = true;
+  let sharedMode = false;
+  let sharedState = null;
+  let pendingSharedBet = null;
+  const playerId = getCasinoPlayer().id;
+  const settledRoundIds = new Set();
+  try {
+    const storedRoundIds = JSON.parse(localStorage.getItem('gh_blackjack_settled_rounds') || '[]');
+    if (Array.isArray(storedRoundIds)) storedRoundIds.forEach(id => settledRoundIds.add(id));
+  } catch (error) {
+    console.warn('Could not restore settled Blackjack rounds:', error);
+  }
 
   modal.querySelectorAll('.casino-chip-btn').forEach(btn => {
     btn.onclick = () => {
-      if (!isGameOver) return;
+      if (!isGameOver || (sharedMode && sharedState?.hands?.[playerId]?.status === 'playing')) return;
       modal.querySelectorAll('.casino-chip-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       betAmount = parseInt(btn.dataset.val, 10);
@@ -1031,8 +1402,257 @@ export function openBlackjack() {
     }
   }
 
+  function renderSharedState(state) {
+    if (!sharedMode) return;
+    const soloPlayerBox = modal.querySelector('#bjSoloPlayerBox');
+    const sharedPlayersBox = modal.querySelector('#bjSharedPlayers');
+    soloPlayerBox.hidden = true;
+    sharedPlayersBox.hidden = false;
+    sharedPlayersBox.replaceChildren();
+
+    const dealerHand = state?.dealerCards || [];
+    modal.querySelector('#dealerCards').innerHTML = dealerHand
+      .map((card, index) => renderCard(card, state?.status === 'playing' && index === 1))
+      .join('');
+    modal.querySelector('#dealerScore').textContent = state?.status === 'playing'
+      ? `Điểm: ${dealerHand.length ? dealerHand[0].num : '?'}`
+      : `Điểm: ${dealerHand.length ? calcHandScore(dealerHand) : '?'}`;
+
+    const heading = document.createElement('div');
+    heading.className = 'bj-hand-header';
+    heading.textContent = `👥 NGƯỜI CHƠI · ${Object.keys(state?.hands || {}).length}`;
+    sharedPlayersBox.appendChild(heading);
+
+    for (const hand of Object.values(state?.hands || {})) {
+      const playerBox = document.createElement('div');
+      playerBox.className = 'bj-shared-hand';
+      const header = document.createElement('div');
+      header.className = 'bj-hand-header';
+      header.textContent = `${hand.name}${hand.id === playerId ? ' (Bạn)' : ''} · Cược ${hand.bet} Xu · ${hand.status === 'playing' ? 'Đang chơi' : hand.status === 'bust' ? 'Quắc' : 'Đã dằn'}`;
+      const cards = document.createElement('div');
+      cards.className = 'bj-cards-row';
+      cards.innerHTML = hand.cards.map(card => renderCard(card)).join('');
+      const score = document.createElement('div');
+      score.className = 'bj-player-score';
+      score.textContent = `Điểm: ${calcHandScore(hand.cards)}`;
+      playerBox.append(header, cards, score);
+      sharedPlayersBox.appendChild(playerBox);
+    }
+
+    const hand = state?.hands?.[playerId];
+    const canAct = state?.status === 'playing' && hand?.status === 'playing';
+    const canJoin = !state || state.status === 'playing' || state.status === 'settled';
+    modal.querySelector('#btnDealBj').disabled = !canJoin || (!!hand && state?.status === 'playing');
+    modal.querySelector('#btnDealBj').textContent = hand && state?.status === 'playing'
+      ? '🎴 ĐANG Ở TRONG VÁN'
+      : '🎴 VÀO VÁN CHUNG';
+    modal.querySelector('#btnHitBj').disabled = !canAct;
+    modal.querySelector('#btnStandBj').disabled = !canAct;
+    modal.querySelector('#btnDoubleBj').disabled = !canAct || coins < (hand?.bet || betAmount);
+
+    if (!state) {
+      modal.querySelector('#bjResultToast').textContent = '👥 Bàn đã mở. Chọn mức cược rồi nhấn VÀO VÁN CHUNG để nhận bài.';
+    } else if (state.status === 'playing') {
+      modal.querySelector('#bjResultToast').textContent = hand
+        ? '🃏 Ván chung đang diễn ra. Hãy rút, dằn hoặc gấp đôi lượt của bạn.'
+        : '🃏 Ván chung đang mở. Chọn mức cược rồi nhấn VÀO VÁN CHUNG để tham gia.';
+    } else if (state.status === 'dealer') {
+      modal.querySelector('#bjResultToast').textContent = '🤵 Nhà cái đang rút bài...';
+    } else {
+      modal.querySelector('#bjResultToast').textContent = '✅ Ván bài đã kết thúc. Bạn có thể vào ván tiếp theo.';
+    }
+  }
+
+  function publishSharedState() {
+    const table = activeCasinoTable;
+    if (!table || table.game !== 'blackjack' || table.hostId !== playerId) return;
+    table.blackjackState = sharedState;
+    activeBlackjackInstance?.onTableState?.(sharedState);
+    sendCasinoTableMessage('blackjack_state', {
+      tableId: table.id,
+      game: 'blackjack',
+      state: sharedState,
+    });
+  }
+
+  function settleSharedHand(state) {
+    if (state?.status !== 'settled') return;
+    const hand = state.hands?.[playerId];
+    if (!hand || settledRoundIds.has(state.roundId)) return;
+    settledRoundIds.add(state.roundId);
+    if (settledRoundIds.size > 100) settledRoundIds.delete(settledRoundIds.values().next().value);
+
+    const playerScore = calcHandScore(hand.cards);
+    const dealerScore = calcHandScore(state.dealerCards);
+    const natural = playerScore === 21 && hand.cards.length === 2;
+    let payout = 0;
+    let result = 'Nhà cái thắng. Hãy thử lại ván sau!';
+    if (playerScore <= 21 && natural && (dealerScore !== 21 || state.dealerCards.length > 2)) {
+      payout = Math.floor(hand.bet * 2.5);
+      result = `⭐ BLACKJACK 21 ĐIỂM! Bạn nhận +${payout.toLocaleString()} Xu!`;
+    } else if (playerScore > 21) {
+      result = '💥 Bạn bị quắc (>21). Nhà cái thắng.';
+    } else if (dealerScore > 21 || playerScore > dealerScore) {
+      payout = hand.bet * 2;
+      result = `🎉 Bạn thắng (${playerScore} vs ${dealerScore})! Nhận +${payout.toLocaleString()} Xu!`;
+    } else if (playerScore === dealerScore) {
+      payout = hand.bet;
+      result = `🤝 Hòa (${playerScore} điểm)! Hoàn lại tiền cược.`;
+    }
+    if (payout) addCoins(payout);
+    if (natural && payout) recordJackpotWin('blackjack');
+    try {
+      localStorage.setItem('gh_blackjack_settled_rounds', JSON.stringify([...settledRoundIds]));
+    } catch (error) {
+      console.warn('Could not persist settled Blackjack rounds:', error);
+    }
+    modal.querySelector('#bjResultToast').textContent = result;
+  }
+
+  function resolveSharedDealer() {
+    if (!sharedState || sharedState.status !== 'playing') return;
+    if (Object.values(sharedState.hands).some(hand => hand.status === 'playing')) return;
+    sharedState.status = 'dealer';
+    publishSharedState();
+    const roundId = sharedState.roundId;
+    const dealerStep = () => {
+      if (!sharedState || sharedState.roundId !== roundId || sharedState.status !== 'dealer') return;
+      const hasLiveHand = Object.values(sharedState.hands).some(hand => hand.status !== 'bust');
+      if (hasLiveHand && calcHandScore(sharedState.dealerCards) < 17 && sharedState.deck.length) {
+        sharedState.dealerCards.push(sharedState.deck.pop());
+        publishSharedState();
+        setTimeout(dealerStep, 500);
+      } else {
+        sharedState.status = 'settled';
+        publishSharedState();
+      }
+    };
+    setTimeout(dealerStep, 450);
+  }
+
+  function addSharedPlayer(playerIdToAdd, playerName, bet, senderId) {
+    const table = activeCasinoTable;
+    if (!table || table.game !== 'blackjack' || table.hostId !== playerId || playerIdToAdd !== senderId) return false;
+    if (!playerIdToAdd || ![25, 50, 100, 500].includes(Number(bet))) return false;
+    if (!sharedState || sharedState.status === 'settled') {
+      sharedState = {
+        roundId: `${table.id}-${Date.now().toString(36)}`,
+        status: 'playing',
+        deck: createDeck(),
+        dealerCards: [],
+        hands: {},
+      };
+      sharedState.dealerCards = [sharedState.deck.pop(), sharedState.deck.pop()];
+    }
+    if (sharedState.status !== 'playing' || sharedState.hands[playerIdToAdd] ||
+        Object.keys(sharedState.hands).length >= 7) return false;
+
+    sharedState.hands[playerIdToAdd] = {
+      id: playerIdToAdd,
+      name: String(playerName || 'Người chơi').slice(0, 32),
+      bet: Number(bet),
+      cards: [sharedState.deck.pop(), sharedState.deck.pop()],
+      status: 'playing',
+    };
+    publishSharedState();
+    return true;
+  }
+
+  function applySharedAction(playerIdToAct, action, senderId) {
+    if (!sharedState || sharedState.status !== 'playing' || senderId !== playerIdToAct) return;
+    const hand = sharedState.hands[playerIdToAct];
+    if (!hand || hand.status !== 'playing') return;
+
+    if (action === 'hit') {
+      hand.cards.push(sharedState.deck.pop());
+      if (calcHandScore(hand.cards) > 21) hand.status = 'bust';
+    } else if (action === 'stand') {
+      hand.status = 'stood';
+    } else if (action === 'double') {
+      hand.bet *= 2;
+      hand.cards.push(sharedState.deck.pop());
+      hand.status = calcHandScore(hand.cards) > 21 ? 'bust' : 'stood';
+    } else {
+      return;
+    }
+    publishSharedState();
+    resolveSharedDealer();
+  }
+
+  activeBlackjackInstance = {
+    onRoomJoined: state => {
+      sharedMode = true;
+      isGameOver = true;
+      sharedState = state || null;
+      renderSharedState(sharedState);
+    },
+    onRoomLeft: () => {
+      sharedMode = false;
+      sharedState = null;
+      modal.querySelector('#bjSoloPlayerBox').hidden = false;
+      modal.querySelector('#bjSharedPlayers').hidden = true;
+      modal.querySelector('#btnDealBj').textContent = '🎴 CHIA BÀI (DEAL)';
+      updateTableUI(true);
+    },
+    onTableState: state => {
+      if (!sharedMode) return;
+      sharedState = state;
+      if (sharedState?.hands?.[playerId]) pendingSharedBet = null;
+      renderSharedState(sharedState);
+      settleSharedHand(sharedState);
+    },
+    onPeerJoin: (peerId, peerName, peerBet, senderId) => {
+      const accepted = addSharedPlayer(peerId, peerName, peerBet, senderId);
+      sendCasinoTableMessage('blackjack_join_result', {
+        tableId: activeCasinoTable.id,
+        game: 'blackjack',
+        targetId: senderId,
+        accepted,
+      });
+    },
+    onPeerAction: (peerId, action, senderId) => applySharedAction(peerId, action, senderId),
+    onJoinResult: accepted => {
+      if (accepted) {
+        pendingSharedBet = null;
+      } else if (pendingSharedBet !== null) {
+        addCoins(pendingSharedBet);
+        pendingSharedBet = null;
+        renderSharedState(sharedState);
+        modal.querySelector('#bjResultToast').textContent = 'Bàn đã chuyển sang nhà cái hoặc đủ người; tiền cược đã được hoàn lại.';
+      }
+    },
+  };
+
+  function lockSharedActions() {
+    modal.querySelector('#btnHitBj').disabled = true;
+    modal.querySelector('#btnStandBj').disabled = true;
+    modal.querySelector('#btnDoubleBj').disabled = true;
+  }
+
   // DEAL
   modal.querySelector('#btnDealBj').onclick = () => {
+    if (sharedMode && activeCasinoTable?.game === 'blackjack') {
+      if (!spendCoins(betAmount)) {
+        toastRef?.('⚠️ Bạn không đủ Xu để vào ván Blackjack!');
+        return;
+      }
+      modal.querySelector('#btnDealBj').disabled = true;
+      if (activeCasinoTable.hostId === playerId) {
+        if (!addSharedPlayer(playerId, getCasinoPlayer().name, betAmount, playerId)) {
+          addCoins(betAmount);
+          renderSharedState(sharedState);
+        }
+      } else {
+        pendingSharedBet = betAmount;
+        sendCasinoTableMessage('blackjack_join', {
+          tableId: activeCasinoTable.id,
+          game: 'blackjack',
+          bet: betAmount,
+        });
+        modal.querySelector('#bjResultToast').textContent = '⏳ Đang chờ chủ bàn chia bài chung...';
+      }
+      return;
+    }
     if (!spendCoins(betAmount)) {
       toastRef?.('⚠️ Bạn không đủ Xu để đặt cược!');
       return;
@@ -1061,6 +1681,19 @@ export function openBlackjack() {
 
   // HIT
   modal.querySelector('#btnHitBj').onclick = () => {
+    if (sharedMode && activeCasinoTable?.game === 'blackjack') {
+      lockSharedActions();
+      if (activeCasinoTable.hostId === playerId) {
+        applySharedAction(playerId, 'hit', playerId);
+      } else {
+        sendCasinoTableMessage('blackjack_action', {
+          tableId: activeCasinoTable.id,
+          game: 'blackjack',
+          action: 'hit',
+        });
+      }
+      return;
+    }
     playerCards.push(deck.pop());
     playSfx('blackjack_deal', 'casino');
     modal.querySelector('#btnDoubleBj').disabled = true;
@@ -1074,6 +1707,27 @@ export function openBlackjack() {
 
   // DOUBLE DOWN
   modal.querySelector('#btnDoubleBj').onclick = () => {
+    if (sharedMode && activeCasinoTable?.game === 'blackjack') {
+      if (!sharedState?.hands?.[playerId] || coins < sharedState.hands[playerId].bet) {
+        toastRef?.('⚠️ Bạn không đủ Xu để gấp đôi cược!');
+        return;
+      }
+      if (!spendCoins(sharedState.hands[playerId].bet)) {
+        toastRef?.('⚠️ Bạn không đủ Xu để gấp đôi cược!');
+        return;
+      }
+      lockSharedActions();
+      if (activeCasinoTable.hostId === playerId) {
+        applySharedAction(playerId, 'double', playerId);
+      } else {
+        sendCasinoTableMessage('blackjack_action', {
+          tableId: activeCasinoTable.id,
+          game: 'blackjack',
+          action: 'double',
+        });
+      }
+      return;
+    }
     spendCoins(betAmount);
     betAmount *= 2;
     playerCards.push(deck.pop());
@@ -1084,6 +1738,19 @@ export function openBlackjack() {
 
   // STAND
   modal.querySelector('#btnStandBj').onclick = () => {
+    if (sharedMode && activeCasinoTable?.game === 'blackjack') {
+      lockSharedActions();
+      if (activeCasinoTable.hostId === playerId) {
+        applySharedAction(playerId, 'stand', playerId);
+      } else {
+        sendCasinoTableMessage('blackjack_action', {
+          tableId: activeCasinoTable.id,
+          game: 'blackjack',
+          action: 'stand',
+        });
+      }
+      return;
+    }
     finishGame();
   };
 
@@ -1324,6 +1991,7 @@ export function openPlinko() {
   `;
 
   const modal = createCasinoModal('THÁP THẢ BÓNG PLINKO (MEGA MULTIPLIERS)', content);
+  addCasinoTableUi(modal, 'plinko');
   const canvas = modal.querySelector('#plinkoCanvas');
   const ctx = canvas.getContext('2d');
 
