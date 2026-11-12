@@ -4,7 +4,7 @@
 // - Duck Derby: Bettable live 4-lane duck canal race with dynamic overtaking
 // - Blackjack: Full Las Vegas VIP table with Hit, Stand, Double Down, Dealer AI
 // - Slot Machine: Authentic pull lever, blur reels spinning, 777 Mega Jackpot
-// - Plinko: Physics peg collisions, audio pings, 11 reward bins (up to 100x)
+// - Plinko: Physics peg collisions, audio pings, 11 reward bins (up to 5x)
 // ============================================================================
 
 import { playSfx } from './audio.js';
@@ -1977,6 +1977,9 @@ export function openPlinko() {
       <div id="plinkoResultToast" class="casino-result-toast" style="min-width:320px">
         ⚡ Chọn tiền cược cho mỗi quả bóng và nhấn THẢ BÓNG!
       </div>
+      <div style="font-size:12px;color:#cbd5e1;text-align:center;width:100%;max-width:460px">
+        Hệ số thưởng công khai: tối đa 5x tiền cược.
+      </div>
       <div style="display:flex;justify-content:space-between;width:100%;max-width:460px;align-items:center;flex-wrap:wrap;gap:8px">
         <div class="casino-chips-row" style="background:transparent;padding:0">
           <span style="font-size:12px;font-weight:700;color:#fef08a">CƯỢC / BÓNG:</span>
@@ -1990,7 +1993,7 @@ export function openPlinko() {
     </div>
   `;
 
-  const modal = createCasinoModal('THÁP THẢ BÓNG PLINKO (MEGA MULTIPLIERS)', content);
+  const modal = createCasinoModal('THÁP THẢ BÓNG PLINKO', content);
   addCasinoTableUi(modal, 'plinko');
   const canvas = modal.querySelector('#plinkoCanvas');
   const ctx = canvas.getContext('2d');
@@ -2027,17 +2030,17 @@ export function openPlinko() {
 
   // 11 Reward Bins at bottom
   const bins = [
-    { mult: 100, color: '#dc2626' },
-    { mult: 25, color: '#ea580c' },
-    { mult: 5, color: '#eab308' },
-    { mult: 2, color: '#22c55e' },
+    { mult: 5, color: '#dc2626' },
+    { mult: 3, color: '#ea580c' },
+    { mult: 2, color: '#eab308' },
+    { mult: 1.2, color: '#22c55e' },
     { mult: 0.5, color: '#06b6d4' },
     { mult: 0.2, color: '#3b82f6' },
     { mult: 0.5, color: '#06b6d4' },
-    { mult: 2, color: '#22c55e' },
-    { mult: 5, color: '#eab308' },
-    { mult: 25, color: '#ea580c' },
-    { mult: 100, color: '#dc2626' },
+    { mult: 1.2, color: '#22c55e' },
+    { mult: 2, color: '#eab308' },
+    { mult: 3, color: '#ea580c' },
+    { mult: 5, color: '#dc2626' },
   ];
   const binWidth = 400 / bins.length;
   const binStartX = 30;
@@ -2120,7 +2123,7 @@ export function openPlinko() {
 
         if (!ball.isPeer) {
           addCoins(payout);
-          if (wonBin.mult >= 25) {
+          if (wonBin.mult >= 5) {
             recordJackpotWin('plinko');
           } else {
             playSfx(wonBin.mult >= 2 ? 'slot_win' : 'plinko_win', 'casino');

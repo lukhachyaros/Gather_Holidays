@@ -1759,8 +1759,8 @@ export function buildPlinkoBoard() {
     }
   }
 
-  // Bottom Reward Bins with Multipliers: [100x, 29x, 5x, 2x, 0.5x, 0.2x, 0.5x, 2x, 5x, 29x, 100x]
-  const multipliers = ['100x', '29x', '5x', '2x', '0.5x', '0.2x', '0.5x', '2x', '5x', '29x', '100x'];
+  // Bottom reward bins match the Plinko game payouts.
+  const multipliers = ['5x', '3x', '2x', '1.2x', '0.5x', '0.2x', '0.5x', '1.2x', '2x', '3x', '5x'];
   const binColors = ['#dc2626', '#ea580c', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#06b6d4', '#22c55e', '#eab308', '#ea580c', '#dc2626'];
   const binW = 2.1 / multipliers.length;
   multipliers.forEach((mult, bi) => {

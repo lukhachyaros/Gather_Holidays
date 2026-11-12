@@ -2300,7 +2300,7 @@ function applyOp(op, senderId = null) {
           ![op.x, op.y, op.z, op.rotationY, op.meshRotationX, op.spawnX, op.spawnZ].every(Number.isFinite) ||
           !Array.isArray(op.meshScale) || !op.meshScale.every(Number.isFinite) ||
           !Number.isInteger(op.stateSequence)) return;
-      if (!activeTruongGiangSlime) {
+      if (!activeTruongGiangSlimes.has(op.entityId)) {
         spawnTruongGiangSlime(op.target, op.by, {
           entityId: op.entityId,
           ownerId: op.ownerId,
@@ -2309,8 +2309,8 @@ function applyOp(op, senderId = null) {
           spawnZ: op.spawnZ,
         });
       }
-      const slime = activeTruongGiangSlime;
-      if (!slime || slime.isAuthority || slime.entityId !== op.entityId || slime.ownerId !== senderId ||
+      const slime = activeTruongGiangSlimes.get(op.entityId);
+      if (!slime || slime.isAuthority || slime.ownerId !== senderId ||
           op.stateSequence <= slime.lastStateSequence) return;
       slime.lastStateSequence = op.stateSequence;
       slime.lastStateAt = performance.now();
@@ -6359,30 +6359,32 @@ function spawnGuillotineStrike(targetName) {
 // Minecraft style slime bouncing cube with 6-sided comedian Trường Giang face,
 // hopping around and chasing a random non-admin player with funny quotes
 // ============================================================================
-let activeTruongGiangSlime = null;
-let truongGiangAnimFrame = null;
-let truongGiangSpeechTimer = null;
+const activeTruongGiangSlimes = new Map();
+const MAX_TRUONGGIANG_SLIMES = 12;
+let truongGiangTexture = null;
+let truongGiangTextureUsers = 0;
 
-export function removeTruongGiangSlime() {
-  if (activeTruongGiangSlime) {
-    if (activeTruongGiangSlime.speechEl) activeTruongGiangSlime.speechEl.remove();
-    scene.remove(activeTruongGiangSlime.group);
-    activeTruongGiangSlime.group.traverse(object => {
+export function removeTruongGiangSlime(entityId = null) {
+  const slimes = entityId
+    ? [activeTruongGiangSlimes.get(entityId)].filter(Boolean)
+    : Array.from(activeTruongGiangSlimes.values());
+  for (const slime of slimes) {
+    if (slime.animFrame) cancelAnimationFrame(slime.animFrame);
+    if (slime.speechTimer) clearTimeout(slime.speechTimer);
+    if (slime.speechEl) slime.speechEl.remove();
+    scene.remove(slime.group);
+    slime.group.traverse(object => {
       if (!object.isMesh) return;
       object.geometry.dispose();
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       materials.forEach(material => material.dispose());
     });
-    activeTruongGiangSlime.texture.dispose();
-    activeTruongGiangSlime = null;
+    activeTruongGiangSlimes.delete(slime.entityId);
+    truongGiangTextureUsers--;
   }
-  if (truongGiangAnimFrame) {
-    cancelAnimationFrame(truongGiangAnimFrame);
-    truongGiangAnimFrame = null;
-  }
-  if (truongGiangSpeechTimer) {
-    clearTimeout(truongGiangSpeechTimer);
-    truongGiangSpeechTimer = null;
+  if (truongGiangTextureUsers === 0 && truongGiangTexture) {
+    truongGiangTexture.dispose();
+    truongGiangTexture = null;
   }
 }
 
@@ -6401,10 +6403,13 @@ function showTruongGiangImpact(targetId) {
 }
 
 export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin', options = {}) {
-  removeTruongGiangSlime();
-
   const target = targetName || me.name;
-  const entityId = options.entityId || `${net?.selfId || 'local'}:${Date.now()}`;
+  const entityId = options.entityId || `${net?.selfId || 'local'}:${Date.now()}:${Math.random()}`;
+  removeTruongGiangSlime(entityId);
+  if (activeTruongGiangSlimes.size >= MAX_TRUONGGIANG_SLIMES) {
+    if (!options.entityId) toast(`⚠️ Đã đạt giới hạn ${MAX_TRUONGGIANG_SLIMES} slime Trường Giang cùng lúc.`);
+    return;
+  }
   const ownerId = options.ownerId || net?.selfId;
   const targetId = options.targetId || net?.selfId;
   const isAuthority = ownerId === net?.selfId;
@@ -6413,9 +6418,12 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin', opti
   playSfx('duck_quack', 'casino');
 
   const slimeGroup = new THREE.Group();
-  const texLoader = new THREE.TextureLoader();
-  const tgTex = texLoader.load('assets/truonggiang.webp');
-  tgTex.colorSpace = THREE.SRGBColorSpace;
+  if (!truongGiangTexture) {
+    truongGiangTexture = new THREE.TextureLoader().load('assets/truonggiang.webp');
+    truongGiangTexture.colorSpace = THREE.SRGBColorSpace;
+  }
+  const tgTex = truongGiangTexture;
+  truongGiangTextureUsers++;
 
   const cubeGeo = new THREE.BoxGeometry(1.25, 1.25, 1.25);
   // Apply Trường Giang face to all 6 faces of the cube
@@ -6459,13 +6467,12 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin', opti
   function showSpeech(text, durationMs = 2800) {
     speechEl.textContent = text;
     speechEl.style.display = 'block';
-    if (truongGiangSpeechTimer) clearTimeout(truongGiangSpeechTimer);
-    truongGiangSpeechTimer = setTimeout(() => {
+    if (slime.speechTimer) clearTimeout(slime.speechTimer);
+    slime.speechTimer = setTimeout(() => {
       speechEl.style.display = 'none';
+      slime.speechTimer = null;
     }, durationMs);
   }
-
-  showSpeech('Mười Khó xuất chiêu! Chạy đâu con sâu! 🏃💨', 3200);
 
   let vy = 0;
   let onGround = true;
@@ -6476,16 +6483,16 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin', opti
   let stateSequence = 0;
   let impactId = 0;
 
-  activeTruongGiangSlime = {
+  const slime = {
     group: slimeGroup,
     mesh: slimeMesh,
     speechEl,
+    speechTimer: null,
     target,
     targetId,
     ownerId,
     entityId,
     isAuthority,
-    texture: tgTex,
     impactId,
     lastStateSequence: 0,
     lastStateAt: performance.now(),
@@ -6493,11 +6500,14 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin', opti
     remoteRotationY: 0,
     remoteMeshRotationX: 0,
     remoteMeshScale: slimeMesh.scale.clone(),
+    animFrame: null,
   };
+  activeTruongGiangSlimes.set(entityId, slime);
+  showSpeech('Mười Khó xuất chiêu! Chạy đâu con sâu! 🏃💨', 3200);
 
   function updateSlime() {
-    const active = activeTruongGiangSlime;
-    if (!active || active.entityId !== entityId) return;
+    const active = activeTruongGiangSlimes.get(entityId);
+    if (!active) return;
 
     const now = performance.now();
     const dt = Math.min((now - lastTime) / 1000, 0.1);
@@ -6505,7 +6515,7 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin', opti
 
     if (!isAuthority) {
       if (now - active.lastStateAt > 1500) {
-        removeTruongGiangSlime();
+        removeTruongGiangSlime(entityId);
         return;
       }
       slimeGroup.position.lerp(active.remotePosition, Math.min(1, dt * 12));
@@ -6611,10 +6621,10 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin', opti
       }
     }
 
-    truonggiangAnimFrame = requestAnimationFrame(updateSlime);
+    active.animFrame = requestAnimationFrame(updateSlime);
   }
 
-  truonggiangAnimFrame = requestAnimationFrame(updateSlime);
+  slime.animFrame = requestAnimationFrame(updateSlime);
 }
 
 // ============================================================================
@@ -7449,8 +7459,8 @@ function executeAdminCommand(raw) {
         targetId,
         entityId: `${net.selfId}:${Date.now()}:${Math.random()}`,
         ownerId: net.selfId,
-        spawnX: me.x * TILE + 2,
-        spawnZ: me.y * TILE + 2,
+        spawnX: me.x * TILE + 2 + (Math.random() - 0.5) * 4,
+        spawnZ: me.y * TILE + 2 + (Math.random() - 0.5) * 4,
         active: true,
         by: me.name,
       });

@@ -707,7 +707,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       x: 22.0,
       y: 17.5,
       radius: 2.2,
-      prompt: '⚡ Tháp Đinh Plinko · [E] Thả bóng chông nảy 100x',
+      prompt: '⚡ Tháp Đinh Plinko · [E] Thả bóng chông nảy, thưởng tối đa 5x',
     });
     colliders.push({ x: 22.0, y: 17.5, r: 0.8 });
 

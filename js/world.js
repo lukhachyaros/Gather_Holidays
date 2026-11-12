@@ -1123,7 +1123,7 @@ export class World {
             // Reached reward bin! Calculate bin index
             const binW = 2.1 / 11;
             const binIdx = Math.max(0, Math.min(10, Math.floor((b.x + 1.05) / binW)));
-            const mults = ['100x', '29x', '5x', '2x', '0.5x', '0.2x', '0.5x', '2x', '5x', '29x', '100x'];
+            const mults = ['5x', '3x', '2x', '1.2x', '0.5x', '0.2x', '0.5x', '1.2x', '2x', '3x', '5x'];
             b.onLand?.(mults[binIdx] || '1x');
             setTimeout(() => {
               co.remove(b.mesh);
