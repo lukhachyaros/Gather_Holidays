@@ -36,7 +36,7 @@
       "id": "design-model-dragon-altar",
       "name": "dragon_altar",
       "format": "module",
-      "moduleUrl": "../design_model/dragon_altar.js"
+      "moduleUrl": "../design_model/dragon_altar.js?v=2026111204"
     },
     {
       "id": "design-model-shrine",

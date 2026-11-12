@@ -1,8 +1,8 @@
 // Builds the 3D scene, themed centerpieces, seats, Vampire NPC, fireworks, and tomato projectiles.
 import * as THREE from 'three';
 import { THEMES } from './themes.js';
-import { getThemeFeatures } from './maps.js?v=2026111201';
-import { instantiateReplacement } from './model-library.js?v=2026111201';
+import { getThemeFeatures } from './maps.js?v=2026111204';
+import { instantiateReplacement } from './model-library.js?v=2026111204';
 import {
   buildProp,
   buildTree,
@@ -93,10 +93,12 @@ export class World {
     this.mediaBannerKey = '';
     this.particles = [];
     this.particleBatches = [];
+    this.particleScale = 1;
     this.particleDummy = new THREE.Object3D();
     this.fireworks = []; // active rockets & bursts
     this.tomatoes = []; // flying tomato projectiles
     this.campfires = [];
+    this.animatedModels = [];
     this.maiEnvelopes = [];
     this.valentineObjs = [];
     this.treeSlots = [];
@@ -225,6 +227,14 @@ export class World {
     }
   }
 
+  setGraphicsQuality(profile) {
+    this.particleScale = profile.particleScale;
+    this.sun.castShadow = profile.shadows;
+    this.sun.shadow.mapSize.set(profile.shadowMapSize, profile.shadowMapSize);
+    this.sun.shadow.needsUpdate = true;
+    if (this.pcfg) this.initParticles(this.pcfg);
+  }
+
   setDayNightTime(time) {
     const mode = String(time || '').toLowerCase();
     if (mode !== 'day' && mode !== 'night') return false;
@@ -244,6 +254,7 @@ export class World {
     this.replacementTemplates = new Map();
 
     this.campfires = [];
+    this.animatedModels = [];
     this.maiEnvelopes = [];
     this.valentineObjs = [];
     this.casinoObjs = [];
@@ -425,6 +436,9 @@ export class World {
         const da = buildDragonAltar();
         da.position.set(h.x * TILE, 0, h.y * TILE);
         addMapModel(h.type, da);
+        if (typeof da.userData.update === 'function') {
+          this.animatedModels.push({ model: da, update: da.userData.update });
+        }
       } else if (h.type === 'firework_launcher') {
         const fl = buildFireworkLauncher();
         fl.position.set(h.x * TILE, 0, h.y * TILE);
@@ -531,8 +545,16 @@ export class World {
         this.replacementTemplates.set(key, instantiateReplacement(map, target));
       }
       const template = await this.replacementTemplates.get(key);
-      const replacement = template?.clone(true);
+      if (!template || !this.group.getObjectById(group.id)) return;
+      const hasAnimation = typeof template.userData.update === 'function';
+      const replacement = hasAnimation ? template : template.clone(true);
       if (!replacement || !this.group.getObjectById(group.id)) return;
+      if (hasAnimation) {
+        this.animatedModels = this.animatedModels.filter(({ model: animatedModel }) => animatedModel !== group);
+        if (!this.animatedModels.some(({ model }) => model === replacement)) {
+          this.animatedModels.push({ model: replacement, update: template.userData.update });
+        }
+      }
 
       group.updateWorldMatrix(true, true);
       const originalBounds = new THREE.Box3().setFromObject(group);
@@ -763,8 +785,9 @@ export class World {
     this.particles = [];
     this.particleBatches = [];
     this.pcfg = cfg;
+    const particleCount = Math.ceil(cfg.count * this.particleScale);
     const batchByEmoji = new Map(cfg.emoji.map(emoji => {
-      const count = Math.ceil(cfg.count / cfg.emoji.length);
+      const count = Math.ceil(particleCount / cfg.emoji.length);
       const mesh = new THREE.InstancedMesh(
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshBasicMaterial({
@@ -783,7 +806,7 @@ export class World {
       this.particleBatches.push(batch);
       return [emoji, batch];
     }));
-    for (let i = 0; i < cfg.count; i++) {
+    for (let i = 0; i < particleCount; i++) {
       const e = cfg.emoji[i % cfg.emoji.length];
       const batch = batchByEmoji.get(e);
       const index = batch.count++;
@@ -815,6 +838,7 @@ export class World {
 
   update(dt, center, camera) {
     this.t += dt;
+    for (const animation of this.animatedModels) animation.update(this.t, dt);
     const now = performance.now();
 
     // 1. Ambient theme particles

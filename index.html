@@ -70,6 +70,17 @@ git<!doctype html>
       </div>
     </div>
 
+    <div class="lobby-graphics">
+      <label for="graphicsQuality">🖥️ Chất lượng đồ họa
+        <select id="graphicsQuality" aria-describedby="graphicsQualityHint">
+          <option value="low">Thấp — ưu tiên FPS</option>
+          <option value="medium">Trung bình — cân bằng</option>
+          <option value="high">Cao — hình ảnh đẹp hơn</option>
+        </select>
+      </label>
+      <span id="graphicsQualityHint" class="hint">Chỉ giảm hiệu ứng hình ảnh; không ảnh hưởng lối chơi. Lựa chọn được lưu trên thiết bị này.</span>
+    </div>
+
     <!-- Direct Invite Link Banner (Shown when opening a shared #room=... URL) -->
     <div id="inviteBanner" class="invite-banner hidden">
       <div class="invite-info">
@@ -1257,6 +1268,6 @@ git<!doctype html>
 </div>
 
 <div id="toast"></div>
-<script type="module" src="js/game.js?v=2026111201"></script>
+<script type="module" src="js/game.js?v=2026111204"></script>
 </body>
 </html>

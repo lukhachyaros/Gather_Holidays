@@ -142,7 +142,7 @@ let staticLibraryPromise;
 
 export async function loadModelLibrary() {
   if (!staticLibraryPromise) {
-    staticLibraryPromise = fetch('./design_model/model-library.json?v=2026111201', { cache: 'no-cache' })
+    staticLibraryPromise = fetch('./design_model/model-library.json?v=2026111204', { cache: 'no-cache' })
       .then(response => {
         if (!response.ok) throw new Error(`Không tải được thư viện model (${response.status}).`);
         return response.json();

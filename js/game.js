@@ -7,7 +7,7 @@ import {
   CARD_STYLES,
   rollLixiReward,
 } from './themes.js';
-import { isSolid, buildThemeMap, validMap } from './maps.js?v=2026111201';
+import { isSolid, buildThemeMap, validMap } from './maps.js?v=2026111204';
 import { connect, connectLobby, hashPass } from './net.js';
 import {
   initPlayer,
@@ -29,8 +29,8 @@ import {
   seekPlayer,
   syncPlayback,
 } from './media.js';
-import { World, TILE } from './world.js?v=2026111201';
-import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=2026111201';
+import { World, TILE } from './world.js?v=2026111204';
+import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=2026111204';
 import { emojiSprite, part, G, mat } from './props.js';
 import { RtcManager } from './rtc.js?v=20261111_trystero';
 import {
@@ -356,6 +356,14 @@ let currentGravity = 20;
 let adminSpinUntil = 0;
 let mobileMoveVector = { x: 0, y: 0 };
 const adminFireEffects = new WeakMap();
+const GRAPHICS_QUALITY_KEY = 'gh_graphics_quality';
+const GRAPHICS_PROFILES = {
+  low: { pixelRatio: 0.65, shadows: false, shadowMapSize: 512, particleScale: 0.3 },
+  medium: { pixelRatio: 1, shadows: true, shadowMapSize: 512, particleScale: 0.65 },
+  high: { pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5), shadows: true, shadowMapSize: 1024, particleScale: 1 },
+};
+const savedGraphicsQuality = localStorage.getItem(GRAPHICS_QUALITY_KEY);
+let graphicsQuality = Object.hasOwn(GRAPHICS_PROFILES, savedGraphicsQuality) ? savedGraphicsQuality : 'medium';
 
 const isHost = () => !!(state && net && state.hostId === net.selfId);
 const requireRoomHost = () => {
@@ -395,12 +403,13 @@ try {
     powerPreference: 'high-performance',
     stencil: false,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1));
-  renderer.shadowMap.enabled = true;
+  renderer.setPixelRatio(GRAPHICS_PROFILES[graphicsQuality].pixelRatio);
+  renderer.shadowMap.enabled = GRAPHICS_PROFILES[graphicsQuality].shadows;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, 1, 0.1, 300);
   world = new World(scene);
+  world.setGraphicsQuality(GRAPHICS_PROFILES[graphicsQuality]);
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
   initAudio();
   initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId);
@@ -666,6 +675,18 @@ function slugifyRoom(str = '') {
 }
 
 $('inName').value = localStorage.getItem('gh_name') || '';
+$('graphicsQuality').value = graphicsQuality;
+$('graphicsQuality').addEventListener('change', event => {
+  const selectedQuality = event.target.value;
+  if (!Object.hasOwn(GRAPHICS_PROFILES, selectedQuality)) return;
+  graphicsQuality = selectedQuality;
+  localStorage.setItem(GRAPHICS_QUALITY_KEY, graphicsQuality);
+  const profile = GRAPHICS_PROFILES[graphicsQuality];
+  renderer.setPixelRatio(profile.pixelRatio);
+  renderer.shadowMap.enabled = profile.shadows;
+  world.setGraphicsQuality(profile);
+  resize();
+});
 $('inName').addEventListener('change', () => {
   const n = $('inName').value.trim();
   if (n) {

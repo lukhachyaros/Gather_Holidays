@@ -87,7 +87,7 @@ export function createDragonAltar(THREE) {
   const N = 260, pos = new Float32Array(N * 3), seed = [];
   for (let i = 0; i < N; i++) seed.push([Math.random() * 6.28, Math.random() * 3.6, Math.random()]);
   const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.add(new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xffc050, size: .09, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
+  g.add(new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xffc050, size: .04, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
 
   g.userData.update = (t) => {
     disc.rotation.z = t * .15; disc2.rotation.z = -t * .1; orb.rotation.y = t * .6; orb.rotation.x = t * .2;
