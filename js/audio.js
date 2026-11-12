@@ -16,6 +16,7 @@ let audioCtx = null;
 let currentTheme = null;
 let bgmAudio = null;
 let jackpotAudio = null;
+let truongGiangCatchAudio = null;
 let bgmMuted = localStorage.getItem('gh_bgm_muted') === '1';
 let bgmVolume = parseFloat(localStorage.getItem('gh_bgm_vol') || '0.35');
 let audioUnlocked = false;
@@ -549,6 +550,17 @@ export function playSfx(name, theme = currentTheme) {
         audio.play().catch(err => {
           if (jackpotAudio === audio) jackpotAudio = null;
           console.warn('[SFX] Jackpot audio playback failed:', err);
+        });
+        break;
+      }
+      case 'truonggiang_catch': {
+        if (!truongGiangCatchAudio) {
+          truongGiangCatchAudio = new Audio('assets/freaky-giang.mp3');
+        }
+        truongGiangCatchAudio.volume = Math.max(0.04, Math.min(0.3, bgmVolume * 0.5));
+        truongGiangCatchAudio.currentTime = 0;
+        truongGiangCatchAudio.play().catch(err => {
+          console.warn('[SFX] Trường Giang catch audio playback failed:', err);
         });
         break;
       }

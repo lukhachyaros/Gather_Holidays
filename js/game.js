@@ -6555,6 +6555,7 @@ function showTruongGiangImpact(targetId) {
   me.vx = (Math.random() - 0.5) * 6;
   me.vy = 4;
   me.av?.showTomatoSplat?.();
+  playSfx('truonggiang_catch', 'casino');
   toast('Bạn đã bị DÊ !');
 
   const flash = document.createElement('div');
@@ -6736,7 +6737,6 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin', opti
             pesterCooldown = 3.0;
             const randomQuote = funnyQuotes[Math.floor(Math.random() * funnyQuotes.length)];
             showSpeech(randomQuote, 2500);
-            playSfx('slap', 'casino');
             impactId += 1;
             active.impactId = impactId;
             showTruongGiangImpact(targetId);
