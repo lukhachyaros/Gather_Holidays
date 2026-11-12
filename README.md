@@ -229,6 +229,10 @@ python3 -m http.server 8080
 ```
 Sau đó truy cập trên trình duyệt: [http://localhost:8080](http://localhost:8080)
 
+### Cập nhật model
+
+Model Library trong trình duyệt hiện tạm đóng. Game chỉ dùng các model đã commit trong repository; hãy sửa tệp trong `design_model/`, cập nhật `design_model/model-library.json` khi cần, rồi push lên `main`. Cấu hình model cũ trong Local Storage sẽ không còn được áp dụng. Sau khi GitHub Pages deploy xong, tải lại trang bằng `Ctrl+Shift+R`.
+
 ### Cách 2: Sử dụng Node.js (`npx serve`)
 ```bash
 npx serve .

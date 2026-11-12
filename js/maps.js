@@ -75,8 +75,9 @@ export function buildThemeMap(themeKey = 'christmas') {
     rect(3, 4, 5, 5, '~');
     rect(24, 4, 26, 5, '~');
   } else if (themeKey === 'casino') {
-    // Luxurious velvet carpets for the 5 arcade stations
-    rect(11, 10, 18, 14, 'R'); // Central Duck Derby water canal
+    // Luxurious velvet carpets for the arcade and event plazas
+    rect(19, 4, 25, 9, 'R');   // Northeast Duck Derby raceway
+    rect(11, 10, 18, 14, 'R'); // Central clover fountain plaza
     rect(4, 10, 10, 13, 'R');  // West Roulette Plaza
     rect(19, 10, 25, 13, 'R'); // East Blackjack Plaza
     rect(4, 15, 10, 19, 'R');  // Southwest Slots row
@@ -181,8 +182,8 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       y: cs.y,
       rot: Math.PI,
       slots: [
-        { id: `${cs.id}_L`, sofaId: cs.id, x: cs.x - 0.24, y: cs.y + 0.08, rot: Math.PI, lean: -1 },
-        { id: `${cs.id}_R`, sofaId: cs.id, x: cs.x + 0.24, y: cs.y + 0.08, rot: Math.PI, lean: 1 },
+        { id: `${cs.id}_L`, sofaId: cs.id, x: cs.x - 0.24, y: cs.y + 0.08, rot: Math.PI, lean: -1, pose: themeKey === 'valentine' ? 'recline' : null },
+        { id: `${cs.id}_R`, sofaId: cs.id, x: cs.x + 0.24, y: cs.y + 0.08, rot: Math.PI, lean: 1, pose: themeKey === 'valentine' ? 'recline' : null },
       ],
     });
   });
@@ -448,8 +449,18 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       radius: 2.8,
       prompt: '🏮 Điện Thờ Tam Đa Phúc - Lộc - Thọ · [E] Thắp Hương · Lạy Cầu May · Ngồi Đọc Kinh',
     });
-    colliders.push({ x: 6.5, y: 14.5, r: 0.85 });
-
+    const shrineBackY = 13.78;
+    [-1.2, -0.8, -0.4, 0, 0.4, 0.8, 1.2].forEach(dx => {
+      colliders.push({ x: 6.5 + dx, y: shrineBackY, r: 0.42 });
+    });
+    [-1.25, 1.25].forEach(dx => {
+      [14.0, 14.4, 14.8, 15.2].forEach(y => {
+        colliders.push({ x: 6.5 + dx, y, r: 0.42 });
+      });
+    });
+    [-1.25, -0.84, -0.43, 0.43, 0.84, 1.25].forEach(dx => {
+      colliders.push({ x: 6.5 + dx, y: 15.18, r: 0.22 });
+    });
     // Right Fireworks Launcher Machine & surrounding Small Firecracker Tables
     hotspots.push({
       id: 'fw_launcher_right',
@@ -478,7 +489,6 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
 
     // 2 Festive Couple Sofas beside the firework plazas
     [
-      { id: 'tet_sofa_left', x: 6.5, y: 17.5 },
       { id: 'tet_sofa_right', x: 22.5, y: 17.5 },
     ].forEach(cs => {
       seats.push({
@@ -565,7 +575,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       colliders.push({ x: ax - 0.78, y: 9.6, r: 0.12 }, { x: ax + 0.78, y: 9.6, r: 0.12 });
     });
 
-    // Couple sofas let visitors sit together beside each fountain.
+    // Couple sofas let visitors recline together beside each fountain.
     [
       { id: 'valentine_sofa_left', x: 8.6, y: 16.9 },
       { id: 'valentine_sofa_right', x: 20.4, y: 16.9 },
@@ -577,8 +587,8 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         y: cs.y,
         rot: Math.PI,
         slots: [
-          { id: cs.id + '_L', sofaId: cs.id, x: cs.x - 0.24, y: cs.y, rot: Math.PI, lean: -1 },
-          { id: cs.id + '_R', sofaId: cs.id, x: cs.x + 0.24, y: cs.y, rot: Math.PI, lean: 1 },
+          { id: cs.id + '_L', sofaId: cs.id, x: cs.x - 0.24, y: cs.y, rot: Math.PI, lean: -1, pose: 'recline' },
+          { id: cs.id + '_R', sofaId: cs.id, x: cs.x + 0.24, y: cs.y, rot: Math.PI, lean: 1, pose: 'recline' },
         ],
       });
     });
@@ -641,16 +651,27 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
     });
     colliders.push({ x: 7.0, y: 11.5, r: 0.95 });
 
-    // 2. Duck Derby Raceway (Central Plaza, x=14.5, y=12.0)
+    // Clover fountain replaces Duck Derby in the central plaza.
+    hotspots.push({
+      id: 'casino_clover_fountain',
+      type: 'clover_fountain',
+      x: 14.5,
+      y: 12.0,
+      radius: 2.9,
+      prompt: '🍀 Đài phun cỏ bốn lá · [E] Đoán mặt xu, pot 100 Xu nhân đôi khi đúng',
+    });
+    colliders.push({ x: 14.5, y: 12.0, r: 1.15 });
+
+    // 2. Duck Derby Raceway moved to the northeast plaza.
     hotspots.push({
       id: 'casino_duck_derby',
       type: 'duck_derby',
-      x: 14.5,
-      y: 12.0,
+      x: 22.0,
+      y: 5.5,
       radius: 3.2,
       prompt: '🦆 Đua Vịt Duck Derby · [E] Bắt đầu chặng đua kịch tính 4 chú vịt',
     });
-    colliders.push({ x: 14.5, y: 12.0, r: 1.15 });
+    colliders.push({ x: 22.0, y: 5.5, r: 1.15 });
 
     // 3. Blackjack Table (East Plaza, x=22.0, y=11.5)
     hotspots.push({
@@ -698,7 +719,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       x: 22.0,
       y: 17.5,
       radius: 2.2,
-      prompt: '⚡ Tháp Đinh Plinko · [E] Thả bóng chông nảy 100x',
+      prompt: '⚡ Tháp Đinh Plinko · [E] Thả bóng chông nảy, thưởng tối đa 5x',
     });
     colliders.push({ x: 22.0, y: 17.5, r: 0.8 });
 

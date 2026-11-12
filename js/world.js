@@ -1,7 +1,8 @@
 // Builds the 3D scene, themed centerpieces, seats, Vampire NPC, fireworks, and tomato projectiles.
 import * as THREE from 'three';
 import { THEMES } from './themes.js';
-import { getThemeFeatures } from './maps.js';
+import { getThemeFeatures } from './maps.js?v=2026111218';
+import { instantiateReplacement } from './model-library.js?v=2026111217';
 import {
   buildProp,
   buildTree,
@@ -54,8 +55,9 @@ const rnd = seed => {
 };
 
 export class World {
-  constructor(scene) {
+  constructor(scene, onMapLoadProgress = null) {
     this.scene = scene;
+    this.onMapLoadProgress = onMapLoadProgress;
     this.group = new THREE.Group();
     scene.add(this.group);
     this.dynamic = new THREE.Group();
@@ -76,7 +78,7 @@ export class World {
     this.sun = new THREE.DirectionalLight(0xffffff, 1);
     this.sun.position.set(22, 42, 16);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(1024, 1024);
+    this.sun.shadow.mapSize.set(512, 512);
     const sc = this.sun.shadow.camera;
     sc.left = sc.bottom = -34;
     sc.right = sc.top = 34;
@@ -87,12 +89,24 @@ export class World {
 
     this.mapKey = '';
     this.themeKey = '';
+    this.appliedThemeKey = '';
+    this.pendingMapBuild = null;
+    this.mapBuildPromise = null;
+    this.isLoadingMap = false;
+    this.latestState = null;
+    this.latestRoomSeed = 'lobby';
+    this.modelReplacementPromises = [];
+    this.replacementTemplates = new Map();
     this.ornamentKey = '';
     this.mediaBannerKey = '';
     this.particles = [];
+    this.particleBatches = [];
+    this.particleScale = 1;
+    this.particleDummy = new THREE.Object3D();
     this.fireworks = []; // active rockets & bursts
     this.tomatoes = []; // flying tomato projectiles
     this.campfires = [];
+    this.animatedModels = [];
     this.maiEnvelopes = [];
     this.valentineObjs = [];
     this.treeSlots = [];
@@ -107,16 +121,17 @@ export class World {
 
   /** Reconcile scene with shared room state. */
   sync(state, roomSeed = 'lobby') {
+    this.latestState = state;
+    this.latestRoomSeed = roomSeed;
     const mk = state.map.rows.join('|') + state.map.w + state.theme;
+    let mapBuildPromise = null;
     if (mk !== this.mapKey || state.theme !== this.themeKey) {
       this.mapKey = mk;
-      if (state.theme !== this.themeKey) {
-        this.themeKey = state.theme;
-        this.applyTheme(state.theme);
-      }
-      this.buildMap(state.map, state.theme, roomSeed);
+      this.themeKey = state.theme;
+      mapBuildPromise = this.requestMapBuild(state.map, state.theme, roomSeed);
     }
-    this.setDayNightTime(state.timeOfDay || this.timeOfDay);
+    if (this.appliedThemeKey) this.setDayNightTime(state.timeOfDay || this.timeOfDay);
+    else this.timeOfDay = state.timeOfDay || this.timeOfDay;
 
     // Sync user-placed decorations & ground cards
     this.syncList(state.decor || [], this.decorObjs, d => {
@@ -153,6 +168,49 @@ export class World {
         this.screenObj.userData.updateBanner(cur, q);
       }
     }
+    return mapBuildPromise;
+  }
+
+  requestMapBuild(map, themeKey, roomSeed) {
+    this.pendingMapBuild = { map, themeKey, roomSeed };
+    if (!this.mapBuildPromise) {
+      this.mapBuildPromise = this.processMapBuildQueue()
+        .catch(error => {
+          this.mapKey = '';
+          this.isLoadingMap = true;
+          console.error('Failed to build map:', error);
+          this.onMapLoadProgress?.({ active: true, error, themeKey: this.themeKey });
+        })
+        .finally(() => {
+          this.mapBuildPromise = null;
+        });
+    }
+    return this.mapBuildPromise;
+  }
+
+  async processMapBuildQueue() {
+    this.isLoadingMap = true;
+    try {
+      while (this.pendingMapBuild) {
+        const request = this.pendingMapBuild;
+        this.pendingMapBuild = null;
+        await this.yieldMapBuild(2, 'Chuẩn bị dữ liệu bản đồ...', request.themeKey);
+        await this.buildMap(request.map, request.themeKey, request.roomSeed);
+      }
+      if (this.pendingMapBuild) return this.processMapBuildQueue();
+      if (this.latestState) {
+        this.ornamentKey = '';
+        this.sync(this.latestState, this.latestRoomSeed);
+      }
+      this.onMapLoadProgress?.({ active: false, progress: 100 });
+    } finally {
+      if (!this.pendingMapBuild) this.isLoadingMap = false;
+    }
+  }
+
+  async yieldMapBuild(progress, message, themeKey = this.themeKey) {
+    this.onMapLoadProgress?.({ active: true, progress, message, themeKey });
+    await new Promise(resolve => requestAnimationFrame(resolve));
   }
 
   syncList(list, objs, make) {
@@ -221,6 +279,14 @@ export class World {
     }
   }
 
+  setGraphicsQuality(profile) {
+    this.particleScale = profile.particleScale;
+    this.sun.castShadow = profile.shadows;
+    this.sun.shadow.mapSize.set(profile.shadowMapSize, profile.shadowMapSize);
+    this.sun.shadow.needsUpdate = true;
+    if (this.pcfg) this.initParticles(this.pcfg);
+  }
+
   setDayNightTime(time) {
     const mode = String(time || '').toLowerCase();
     if (mode !== 'day' && mode !== 'night') return false;
@@ -232,13 +298,20 @@ export class World {
     return true;
   }
 
-  buildMap(map, themeKey, roomSeed = 'lobby') {
+  async buildMap(map, themeKey, roomSeed = 'lobby') {
     const th = THEMES[themeKey] || THEMES.christmas;
     this.scene.remove(this.group);
     this.group = new THREE.Group();
     this.scene.add(this.group);
+    if (themeKey !== this.appliedThemeKey) {
+      this.applyTheme(themeKey);
+      this.appliedThemeKey = themeKey;
+    }
+    this.replacementTemplates = new Map();
+    this.modelReplacementPromises = [];
 
     this.campfires = [];
+    this.animatedModels = [];
     this.maiEnvelopes = [];
     this.valentineObjs = [];
     this.casinoObjs = [];
@@ -259,19 +332,27 @@ export class World {
           if (c === 'T') cells.tree.push([x, y]);
         }
       }
+      if (y % 4 === 3 && y < map.h - 1) {
+        await this.yieldMapBuild(4 + (y / map.h) * 10, 'Phân tích bố cục bản đồ...', themeKey);
+      }
     }
 
-    const inst = (g, m, list, fn) => {
+    const inst = async (g, m, list, fn, progressStart, progressEnd, message) => {
       if (!list.length) return null;
       const im = new THREE.InstancedMesh(g, m, list.length);
       const d = new THREE.Object3D(),
         col = new THREE.Color();
-      list.forEach(([x, y], i) => {
+      for (let i = 0; i < list.length; i++) {
+        const [x, y] = list[i];
         const r = fn(x, y, d, col);
         d.updateMatrix();
         im.setMatrixAt(i, d.matrix);
         if (r) im.setColorAt(i, r);
-      });
+        if ((i + 1) % 256 === 0 && i + 1 < list.length) {
+          const progress = progressStart + ((progressEnd - progressStart) * (i + 1)) / list.length;
+          await this.yieldMapBuild(progress, message, themeKey);
+        }
+      }
       im.castShadow = im.receiveShadow = true;
       this.group.add(im);
       return im;
@@ -284,47 +365,60 @@ export class World {
       f1 = new THREE.Color(th.floor[1]),
       pCol = new THREE.Color(th.path || th.floor[0]);
 
-    inst(slab, white, cells.floor, (x, y, d, col) => {
+    await inst(slab, white, cells.floor, (x, y, d, col) => {
       d.position.set(x * TILE, -0.1, y * TILE);
       return col.copy((x + y) & 1 ? f1 : f0);
-    });
-    inst(slab, white, cells.path, (x, y, d, col) => {
+    }, 14, 31, 'Dựng mặt nền...');
+    await inst(slab, white, cells.path, (x, y, d, col) => {
       d.position.set(x * TILE, -0.09, y * TILE);
       return col.copy(pCol);
-    });
-    inst(slab, white, cells.rug, (x, y, d, col) => {
+    }, 31, 35, 'Dựng lối đi...');
+    await inst(slab, white, cells.rug, (x, y, d, col) => {
       d.position.set(x * TILE, -0.07, y * TILE);
       return col.set(th.rug);
-    });
-    inst(
+    }, 35, 38, 'Dựng khu vực trang trí...');
+    await inst(
       slab,
       mat('#ffffff', { roughness: 0.2, metalness: 0.2, emissive: th.water, emissiveIntensity: 0.18 }),
       cells.water,
       (x, y, d, col) => {
         d.position.set(x * TILE, -0.22, y * TILE);
         return col.set(th.water);
-      }
+      },
+      38,
+      41,
+      'Dựng khu vực mặt nước...'
     );
-    inst(wallG, white, cells.wall, (x, y, d, col) => {
+    await inst(wallG, white, cells.wall, (x, y, d, col) => {
       d.position.set(x * TILE, WALL_H / 2, y * TILE);
       return col.set(th.wall).multiplyScalar(0.85 + ((x * 7 + y * 13) % 5) * 0.05);
-    });
+    }, 41, 54, 'Dựng tường và công trình...');
 
-    cells.tree.forEach(([x, y]) => {
+    for (let i = 0; i < cells.tree.length; i++) {
+      const [x, y] = cells.tree[i];
       const t = buildTree(themeKey);
       t.position.set(x * TILE, 0, y * TILE);
       t.rotation.y = (x * 31 + y * 17) % 7;
       this.group.add(t);
-    });
+      this.applyModelReplacement(themeKey, 'map_tree', t);
+      if ((i + 1) % 4 === 0 && i + 1 < cells.tree.length) {
+        await this.yieldMapBuild(54 + ((i + 1) / cells.tree.length) * 6, 'Đặt cây và cảnh quan...', themeKey);
+      }
+    }
 
     // Roof props on perimeter walls
-    cells.wall.forEach(([x, y]) => {
+    for (let i = 0; i < cells.wall.length; i++) {
+      const [x, y] = cells.wall[i];
       if ((x + y) % 5 === 0) {
         const p = buildProp(th.prop);
         p.position.set(x * TILE, WALL_H, y * TILE);
         this.group.add(p);
+        this.applyModelReplacement(themeKey, 'roof_prop', p);
       }
-    });
+      if ((i + 1) % 32 === 0 && i + 1 < cells.wall.length) {
+        await this.yieldMapBuild(60 + ((i + 1) / cells.wall.length) * 7, 'Hoàn thiện cảnh quan...', themeKey);
+      }
+    }
 
     // Ground plane beyond map
     const ground = new THREE.Mesh(
@@ -340,154 +434,195 @@ export class World {
     // BUILD THEMED HOTSPOTS, CINEMA SCREEN, SEATS & CENTERPIECES
     // ========================================================================
     this.features = getThemeFeatures(themeKey, roomSeed);
+    await this.yieldMapBuild(68, 'Dựng các khu vực lễ hội...', themeKey);
 
     // 1. Cinema Screen
     this.screenObj = buildCinemaScreen();
     this.screenObj.position.set(14.5 * TILE, 0, 2.0 * TILE);
     this.group.add(this.screenObj);
+    this.applyModelReplacement(themeKey, 'cinema_screen', this.screenObj);
     this.mediaBannerKey = '';
 
     // 2. Seats (Single chairs, Couple sofas, Campfire logs)
-    for (const s of this.features.seats) {
+    for (let i = 0; i < this.features.seats.length; i++) {
+      const s = this.features.seats[i];
       let mesh;
       if (s.kind === 'single') mesh = buildSingleChair();
       else if (s.kind === 'couple') mesh = buildCoupleSofa();
       else if (s.kind === 'log') mesh = buildLogSeat(s.meshRot || 0);
       if (mesh) {
+        if (s.kind === 'single') mesh.scale.multiplyScalar(1.1);
         mesh.position.set(s.x * TILE, 0, s.y * TILE);
         if (s.kind !== 'log') mesh.rotation.y = 0; // faces North (-Z)
         this.group.add(mesh);
         s.mesh = mesh;
+        const target = s.kind === 'single' ? 'single_chair' : s.kind === 'couple' ? 'couple_sofa' : 'log_seat';
+        this.applyModelReplacement(themeKey, target, mesh);
+      }
+      if ((i + 1) % 8 === 0 && i + 1 < this.features.seats.length) {
+        await this.yieldMapBuild(68 + ((i + 1) / this.features.seats.length) * 8, 'Đặt ghế và điểm nghỉ...', themeKey);
       }
     }
 
     // 3. Hotspots & Theme Centerpieces
-    for (const h of this.features.hotspots) {
+    const addMapModel = (target, object) => {
+      this.group.add(object);
+      this.applyModelReplacement(themeKey, target, object);
+    };
+    for (let i = 0; i < this.features.hotspots.length; i++) {
+      const h = this.features.hotspots[i];
       if (h.type === 'xmas_tree') {
         const { group, slots } = buildGiantChristmasTree();
         group.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(group);
+        addMapModel(h.type, group);
         this.treeSlots = slots;
       } else if (h.type === 'ornament_table') {
         const tb = buildOrnamentTable();
         tb.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(tb);
+        addMapModel(h.type, tb);
       } else if (h.type === 'campfire') {
         const cf = buildCampfire();
         cf.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(cf);
+        addMapModel(h.type, cf);
         this.campfires.push(cf);
       } else if (h.type === 'giant_pumpkin') {
         const gp = buildGiantPumpkin();
         gp.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(gp);
+        addMapModel(h.type, gp);
       } else if (h.type === 'small_pumpkin') {
         const sp = buildCarvedPumpkin(h.styleKey, 1.15);
         sp.position.set(h.x * TILE, 0, h.y * TILE);
         sp.rotation.y = h.rot || 0;
-        this.group.add(sp);
+        addMapModel(h.type, sp);
       } else if (h.type === 'costume_booth') {
         const cb = buildCostumeBooth(h.costumeKey);
         cb.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(cb);
+        addMapModel(h.type, cb);
       } else if (h.type === 'mai_tree') {
         const mt = buildGiantMaiTree();
         mt.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(mt);
+        addMapModel(h.type, mt);
         this.maiEnvelopes = mt.userData.envelopes || [];
       } else if (h.type === 'phuc_loc_tho_shrine') {
         const pls = buildPhucLocThoShrine();
         pls.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(pls);
+        addMapModel(h.type, pls);
+        for (const [statueName, target] of [
+          ['statue-ong-phuc', 'ong_phuc_statue'],
+          ['statue-ong-loc', 'ong_loc_statue'],
+          ['statue-ong-tho', 'ong_tho_statue'],
+        ]) {
+          const statue = pls.getObjectByName(statueName);
+          if (statue) this.applyModelReplacement(themeKey, target, statue);
+        }
       } else if (h.type === 'dragon_altar') {
         const da = buildDragonAltar();
         da.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(da);
+        addMapModel(h.type, da);
+        if (typeof da.userData.update === 'function') {
+          this.animatedModels.push({ model: da, update: da.userData.update });
+        }
       } else if (h.type === 'firework_launcher') {
         const fl = buildFireworkLauncher();
         fl.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(fl);
+        addMapModel(h.type, fl);
       } else if (h.type === 'firecracker_table') {
         const ft = buildFirecrackerTable();
         ft.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(ft);
+        addMapModel(h.type, ft);
       } else if (h.type === 'heart_tree') {
         const ht = buildValentineHeartTree();
         ht.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(ht);
+        addMapModel(h.type, ht);
         this.valentineObjs.push(ht);
       } else if (h.type === 'love_fountain') {
         const lf = buildLoveFountain();
         lf.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(lf);
+        addMapModel(h.type, lf);
         this.valentineObjs.push(lf);
+      } else if (h.type === 'clover_fountain') {
+        const cf = new THREE.Group();
+        cf.name = 'CloverFountainAnchor';
+        cf.userData.type = h.type;
+        cf.position.set(h.x * TILE, 0, h.y * TILE);
+        addMapModel(h.type, cf);
+        this.casinoObjs.push(cf);
       } else if (h.type === 'roulette') {
         const rt = buildRouletteTable();
         rt.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(rt);
+        addMapModel(h.type, rt);
         this.casinoObjs.push(rt);
       } else if (h.type === 'duck_derby') {
         const dd = buildDuckDerbyTrack();
         dd.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(dd);
+        addMapModel(h.type, dd);
         this.casinoObjs.push(dd);
       } else if (h.type === 'blackjack') {
         const bj = buildBlackjackTable();
         bj.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(bj);
+        addMapModel(h.type, bj);
         this.casinoObjs.push(bj);
       } else if (h.type === 'slot_machine') {
         [-0.85, 0, 0.85].forEach(ox => {
           const sm = buildSlotMachine();
           sm.position.set((h.x + ox) * TILE, 0, h.y * TILE);
           sm.rotation.y = Math.PI;
-          this.group.add(sm);
+          addMapModel(h.type, sm);
           this.casinoObjs.push(sm);
         });
       } else if (h.type === 'plinko') {
-        const pk = buildPlinkoBoard();
-        pk.position.set(h.x * TILE, 0, h.y * TILE);
-        pk.rotation.y = Math.PI;
-        this.group.add(pk);
-        this.casinoObjs.push(pk);
+        [-0.8, 0, 0.8].forEach(ox => {
+          const pk = buildPlinkoBoard();
+          pk.position.set((h.x + ox) * TILE, 0, h.y * TILE);
+          pk.rotation.y = Math.PI;
+          addMapModel(h.type, pk);
+          this.casinoObjs.push(pk);
+        });
       } else if (h.type === 'secret_passage') {
         const sp = buildSecretPassage(themeKey);
         sp.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(sp);
+        addMapModel(h.type, sp);
       } else if (h.type === 'secret_note') {
         const sn = buildSecretPaperNote(h.code);
         sn.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(sn);
+        addMapModel(h.type, sn);
       } else if (h.type === 'casino_exit') {
         const ce = buildCasinoExitPortal();
         ce.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(ce);
+        addMapModel(h.type, ce);
       } else if (h.type === 'casino_pub') {
         const pub = buildCasinoPubBar();
         pub.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(pub);
+        addMapModel(h.type, pub);
         this.casinoObjs.push(pub);
+      }
+      if ((i + 1) % 2 === 0 && i + 1 < this.features.hotspots.length) {
+        await this.yieldMapBuild(76 + ((i + 1) / this.features.hotspots.length) * 16, 'Dựng công trình và điểm tương tác...', themeKey);
       }
     }
 
     // 4. Extra props (Random Snowmen, Rose Arch, Illusion Walls)
-    for (const ep of this.features.extraProps) {
+    for (let i = 0; i < this.features.extraProps.length; i++) {
+      const ep = this.features.extraProps[i];
       if (ep.type === 'snowman') {
         const sm = buildSnowman(ep.variant);
         sm.position.set(ep.x * TILE, 0, ep.y * TILE);
         sm.rotation.y = ep.rot || 0;
-        this.group.add(sm);
+        addMapModel(ep.type, sm);
       } else if (ep.type === 'rose_arch') {
         const arch = buildRoseArch();
         arch.position.set(ep.x * TILE, 0, ep.y * TILE);
         arch.rotation.y = ep.rot || 0;
-        this.group.add(arch);
+        addMapModel(ep.type, arch);
         this.valentineObjs.push(arch);
       } else if (ep.type === 'illusion_wall') {
         const iw = buildIllusionWall(themeKey);
         iw.position.set(ep.x * TILE, 0, ep.y * TILE);
         iw.rotation.y = ep.rot || 0;
-        this.group.add(iw);
+        addMapModel(ep.type, iw);
+      }
+      if ((i + 1) % 4 === 0 && i + 1 < this.features.extraProps.length) {
+        await this.yieldMapBuild(92 + ((i + 1) / this.features.extraProps.length) * 4, 'Hoàn thiện chi tiết...', themeKey);
       }
     }
 
@@ -496,9 +631,101 @@ export class World {
       this.vampireNPC = buildVampireNPC();
       this.vampireNPC.position.set(14.5 * TILE, 3.8, 11.5 * TILE);
       this.group.add(this.vampireNPC);
+      this.applyModelReplacement(themeKey, 'vampire_npc', this.vampireNPC);
     }
 
     this. sun.target.position.set((map.w * TILE) / 2, 0, (map.h * TILE) / 2);
+    if (this.modelReplacementPromises.length) {
+      await this.yieldMapBuild(94, 'Đang tải mô hình 3D...', themeKey);
+      while (this.modelReplacementPromises.length) {
+        const pending = this.modelReplacementPromises.splice(0);
+        await Promise.all(pending);
+      }
+    }
+    await this.yieldMapBuild(98, 'Hoàn tất bản đồ...', themeKey);
+  }
+
+  applyModelReplacement(map, target, group) {
+    const operation = this.loadAndApplyModelReplacement(map, target, group);
+    this.modelReplacementPromises.push(operation);
+    return operation;
+  }
+
+  async loadAndApplyModelReplacement(map, target, group) {
+    try {
+      const key = `${map}:${target}`;
+      if (!this.replacementTemplates.has(key)) {
+        this.replacementTemplates.set(key, instantiateReplacement(map, target));
+      }
+      const template = await this.replacementTemplates.get(key);
+      if (!template || !this.group.getObjectById(group.id)) return;
+      const hasAnimation = typeof template.userData.update === 'function';
+      const replacement = hasAnimation
+        ? (template.parent ? await instantiateReplacement(map, target) : template)
+        : template.clone(true);
+      if (!replacement || !this.group.getObjectById(group.id)) return;
+      if (map === 'casino' && target === 'roulette') {
+        group.userData.rotor = replacement.userData.rotor;
+        group.userData.ballGroup = replacement.userData.ballGroup;
+        group.userData.customAnimation = true;
+        replacement.userData.casinoState = group.userData;
+      } else if (map === 'casino' && target === 'duck_derby') {
+        group.userData.replacementModel = replacement;
+        replacement.userData.racing = !!group.userData.isRacing;
+        const startRace = group.userData.startRace;
+        group.userData.startRace = function (onFinish) {
+          startRace.call(this, onFinish);
+          replacement.userData.racing = !!this.isRacing;
+        };
+      } else if (map === 'casino' && target === 'clover_fountain') {
+        group.userData.replacementModel = replacement;
+      } else if (map === 'casino' && target === 'slot_machine') {
+        replacement.userData.auto = false;
+        const pullLever = group.userData.pullLever;
+        group.userData.pullLever = function (onResult) {
+          if (this.isSpinning) return;
+          pullLever.call(this, onResult);
+          replacement.userData.pull?.();
+        };
+      } else if (map === 'casino' && target === 'plinko') {
+        const dropBall = group.userData.dropBall;
+        group.userData.dropBall = function (onLand) {
+          dropBall.call(this, onLand);
+          replacement.userData.drop?.();
+        };
+      }
+      if (hasAnimation) {
+        this.animatedModels = this.animatedModels.filter(({ model: animatedModel }) => animatedModel !== group);
+        if (!this.animatedModels.some(({ model }) => model === replacement)) {
+          const update = map === 'casino' && target === 'plinko'
+            ? (t, dt) => replacement.userData.update(dt, t)
+            : replacement.userData.update;
+          this.animatedModels.push({ model: replacement, update });
+        }
+      }
+
+      group.updateWorldMatrix(true, true);
+      const originalBounds = new THREE.Box3().setFromObject(group);
+      const originalSize = originalBounds.getSize(new THREE.Vector3());
+      const replacementBounds = new THREE.Box3().setFromObject(replacement);
+      const replacementSize = replacementBounds.getSize(new THREE.Vector3());
+      const hasOriginalBounds = !originalBounds.isEmpty();
+      const targetSize = hasOriginalBounds ? Math.max(originalSize.x, originalSize.y, originalSize.z) : 0;
+      const sourceSize = Math.max(replacementSize.x, replacementSize.y, replacementSize.z);
+      const requestedScale = Number(replacement.userData.replacementScale);
+      const scaleMultiplier = Number.isFinite(requestedScale) && requestedScale > 0 ? requestedScale : 1;
+      const fitScale = (targetSize > 0 && sourceSize > 0 ? targetSize / sourceSize : 1) * scaleMultiplier;
+      replacement.scale.multiplyScalar(fitScale);
+      replacement.position.y = hasOriginalBounds
+        ? originalBounds.min.y - group.getWorldPosition(new THREE.Vector3()).y - replacementBounds.min.y * fitScale
+        : -replacementBounds.min.y * fitScale;
+
+      const preservedObjects = new Set(group.userData.envelopes || []);
+      for (const child of group.children) child.visible = preservedObjects.has(child);
+      group.add(replacement);
+    } catch (error) {
+      console.error(`Could not apply model replacement for ${map}/${target}:`, error);
+    }
   }
 
   // ==========================================================================
@@ -698,42 +925,87 @@ export class World {
   }
 
   initParticles(cfg) {
-    for (const p of this.particles) this.scene.remove(p.s);
+    for (const batch of this.particleBatches) {
+      this.scene.remove(batch.mesh);
+      batch.mesh.geometry.dispose();
+      batch.mesh.material.dispose();
+    }
     this.particles = [];
+    this.particleBatches = [];
     this.pcfg = cfg;
-    cfg.emoji.forEach(e => emojiTexture(e));
-    for (let i = 0; i < cfg.count; i++) {
-      const e = cfg.emoji[i % cfg.emoji.length];
-      const s = new THREE.Sprite(
-        new THREE.SpriteMaterial({ map: emojiTexture(e), transparent: true, opacity: 0.85, depthWrite: false })
+    const particleCount = Math.ceil(cfg.count * this.particleScale);
+    const batchByEmoji = new Map(cfg.emoji.map(emoji => {
+      const count = Math.ceil(particleCount / cfg.emoji.length);
+      const mesh = new THREE.InstancedMesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          map: emojiTexture(emoji),
+          transparent: true,
+          opacity: 0.85,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
+        count
       );
-      const sc = 0.35 + Math.random() * 0.3;
-      s.scale.set(sc, sc, 1);
-      s.position.set((Math.random() - 0.5) * 44, Math.random() * 14 + 1, (Math.random() - 0.5) * 44);
-      this.scene.add(s);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
+      const batch = { mesh, count: 0 };
+      this.particleBatches.push(batch);
+      return [emoji, batch];
+    }));
+    for (let i = 0; i < particleCount; i++) {
+      const e = cfg.emoji[i % cfg.emoji.length];
+      const batch = batchByEmoji.get(e);
+      const index = batch.count++;
+      const position = new THREE.Vector3(
+        (Math.random() - 0.5) * 44,
+        Math.random() * 14 + 1,
+        (Math.random() - 0.5) * 44
+      );
+      const scale = 0.35 + Math.random() * 0.3;
+      this.particleDummy.position.copy(position);
+      this.particleDummy.scale.set(scale, scale, 1);
+      this.particleDummy.updateMatrix();
+      batch.mesh.setMatrixAt(index, this.particleDummy.matrix);
       this.particles.push({
-        s,
+        position,
+        scale,
+        batch,
+        index,
         vy: cfg.vy[0] + Math.random() * (cfg.vy[1] - cfg.vy[0]),
         vx: cfg.vx[0] + Math.random() * (cfg.vx[1] - cfg.vx[0]),
         phase: Math.random() * 6.28,
       });
     }
+    for (const batch of this.particleBatches) {
+      batch.mesh.count = batch.count;
+      batch.mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
-  update(dt, center) {
+  update(dt, center, camera) {
     this.t += dt;
+    for (const animation of this.animatedModels) animation.update.call(animation.model.userData, this.t, dt);
     const now = performance.now();
 
     // 1. Ambient theme particles
     for (const p of this.particles) {
-      p.s.position.y -= p.vy * dt;
-      p.s.position.x += (p.vx + Math.sin(this.t + p.phase) * 0.25) * dt;
-      if (p.s.position.y < 0.2) {
-        p.s.position.y = 14;
-        p.s.position.x = center.x + (Math.random() - 0.5) * 42;
-        p.s.position.z = center.z + (Math.random() - 0.5) * 42;
+      p.position.y -= p.vy * dt;
+      p.position.x += (p.vx + Math.sin(this.t + p.phase) * 0.25) * dt;
+      if (p.position.y < 0.2) {
+        p.position.y = 14;
+        p.position.x = center.x + (Math.random() - 0.5) * 42;
+        p.position.z = center.z + (Math.random() - 0.5) * 42;
       }
+      this.particleDummy.position.copy(p.position);
+      if (camera) this.particleDummy.quaternion.copy(camera.quaternion);
+      else this.particleDummy.quaternion.identity();
+      this.particleDummy.scale.set(p.scale, p.scale, 1);
+      this.particleDummy.updateMatrix();
+      p.batch.mesh.setMatrixAt(p.index, this.particleDummy.matrix);
     }
+    for (const batch of this.particleBatches) batch.mesh.instanceMatrix.needsUpdate = true;
 
     // 2. Campfire flame flicker
     for (const cf of this.campfires) {
@@ -843,9 +1115,10 @@ export class World {
             u.onComplete?.();
           }
         } else {
-          u.rotor.rotation.y += 0.25 * dt;
+          if (!u.customAnimation) u.rotor.rotation.y += 0.25 * dt;
         }
       } else if (u.type === 'duck_derby') {
+        if (u.replacementModel) u.replacementModel.userData.racing = !!u.isRacing;
         u.ducks.forEach((d, i) => {
           if (u.isRacing) {
             d.progress += d.speed * dt * 0.12;
@@ -896,7 +1169,7 @@ export class World {
             // Reached reward bin! Calculate bin index
             const binW = 2.1 / 11;
             const binIdx = Math.max(0, Math.min(10, Math.floor((b.x + 1.05) / binW)));
-            const mults = ['100x', '29x', '5x', '2x', '0.5x', '0.2x', '0.5x', '2x', '5x', '29x', '100x'];
+            const mults = ['5x', '3x', '2x', '1.2x', '0.5x', '0.2x', '0.5x', '1.2x', '2x', '3x', '5x'];
             b.onLand?.(mults[binIdx] || '1x');
             setTimeout(() => {
               co.remove(b.mesh);

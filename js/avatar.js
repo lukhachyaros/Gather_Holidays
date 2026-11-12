@@ -657,6 +657,17 @@ export class Avatar {
     this.root.add(this.adminAuraGroup);
 
     this.buildHumanRig();
+    this.poseNodes = [
+      this.hips,
+      this.torso,
+      this.headGroup,
+      this.leftArm,
+      this.rightArm,
+      this.leftLeg,
+      this.rightLeg,
+    ];
+    this.locomotionStateKey = null;
+    this.poseTransition = null;
     this.applyCostume(this.costumeKey);
     this.setPumpkinHat(this.pumpkinHatKey);
 
@@ -1815,9 +1826,23 @@ export class Avatar {
 
   /** Locomotion state: 'idle' | 'walk' | 'run' | 'jump' | 'sit' | 'couple_sit' */
   setLocomotion(s, sitInfo = null) {
-    this.jumping = s === 'jump';
-    this.sitting = s === 'sit' || s === 'couple_sit' ? (sitInfo || { type: s }) : null;
-    this.base = s === 'run' ? 'Running' : s === 'walk' ? 'Walking' : s === 'sit' || s === 'couple_sit' ? 'Sitting' : 'Idle';
+    const jumping = s === 'jump';
+    const sitting = s === 'sit' || s === 'couple_sit' ? (sitInfo || { type: s }) : null;
+    const base = s === 'run' ? 'Running' : s === 'walk' ? 'Walking' : sitting ? 'Sitting' : 'Idle';
+    const stateKey = `${base}:${jumping}:${sitting?.type || ''}:${sitting?.pose || ''}`;
+    if (this.locomotionStateKey && stateKey !== this.locomotionStateKey) {
+      this.poseTransition = {
+        elapsed: 0,
+        from: this.poseNodes.map(node => ({
+          position: node.position.clone(),
+          rotation: node.rotation.clone(),
+        })),
+      };
+    }
+    this.locomotionStateKey = stateKey;
+    this.jumping = jumping;
+    this.sitting = sitting;
+    this.base = base;
   }
 
   playEmote(clipKey, hold = true) {
@@ -1942,6 +1967,13 @@ export class Avatar {
       this.rightLeg.rotation.x = -Math.PI / 2 + 0.05;
       this.leftArm.rotation.x = -0.32;
       this.rightArm.rotation.x = -0.32;
+      if (this.sitting?.pose === 'recline') {
+        this.hips.position.y = 0.58;
+        this.torso.rotation.x = -1.05;
+        this.headGroup.rotation.x = 0.65;
+        this.leftArm.rotation.x = -0.9;
+        this.rightArm.rotation.x = -0.9;
+      }
       // Couple Seat Lean!
       if (this.sitting?.lean) {
         this.torso.rotation.z = this.sitting.lean * 0.14;
@@ -2122,6 +2154,28 @@ export class Avatar {
           break;
         }
       }
+    }
+
+    if (this.poseTransition) {
+      const transition = this.poseTransition;
+      transition.elapsed += dt;
+      const progress = Math.min(1, transition.elapsed / 0.16);
+      const blend = progress * progress * (3 - 2 * progress);
+      for (let i = 0; i < this.poseNodes.length; i++) {
+        const node = this.poseNodes[i];
+        const from = transition.from[i];
+        node.position.set(
+          from.position.x + (node.position.x - from.position.x) * blend,
+          from.position.y + (node.position.y - from.position.y) * blend,
+          from.position.z + (node.position.z - from.position.z) * blend,
+        );
+        node.rotation.set(
+          from.rotation.x + (node.rotation.x - from.rotation.x) * blend,
+          from.rotation.y + (node.rotation.y - from.rotation.y) * blend,
+          from.rotation.z + (node.rotation.z - from.rotation.z) * blend,
+        );
+      }
+      if (progress === 1) this.poseTransition = null;
     }
   }
 }

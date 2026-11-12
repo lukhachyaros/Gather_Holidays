@@ -1,0 +1,146 @@
+{
+  "format": "gather-model-library",
+  "version": 1,
+  "assets": [
+    {
+      "id": "design-model-ong-loc",
+      "name": "ongLoc",
+      "format": "module",
+      "moduleUrl": "../design_model/ongLoc.js"
+    },
+    {
+      "id": "design-model-ngai-vang",
+      "name": "ngaiVang",
+      "format": "module",
+      "moduleUrl": "../design_model/ngaiVang.js?v=2026111220"
+    },
+    {
+      "id": "design-model-love-seat",
+      "name": "love_seat",
+      "format": "module",
+      "moduleUrl": "../design_model/love_seat.js"
+    },
+    {
+      "id": "design-model-skeleton-chair",
+      "name": "skeletonChair",
+      "format": "module",
+      "moduleUrl": "../design_model/skeletonChair.js?v=2026111220"
+    },
+    {
+      "id": "design-model-wood-sofa",
+      "name": "woodSofa",
+      "format": "module",
+      "moduleUrl": "../design_model/woodSofa.js?v=2026111223"
+    },
+    {
+      "id": "design-model-christmas-chair",
+      "name": "christmasChair",
+      "format": "module",
+      "moduleUrl": "../design_model/christmasChair.js?v=2026111220"
+    },
+    {
+      "id": "design-model-christmas-sofa",
+      "name": "christmasSofa",
+      "format": "module",
+      "moduleUrl": "../design_model/christmasSofa.js?v=2026111223"
+    },
+    {
+      "id": "design-model-halloween-sofa",
+      "name": "halloweenSofa",
+      "format": "module",
+      "moduleUrl": "../design_model/halloweenSofa.js?v=2026111221"
+    },
+    {
+      "id": "design-model-kumquat",
+      "name": "kumquat",
+      "format": "module",
+      "moduleUrl": "../design_model/kumquat.js"
+    },
+    {
+      "id": "design-model-mai-tree",
+      "name": "maiTree",
+      "format": "module",
+      "moduleUrl": "../design_model/maiTree.js"
+    },
+    {
+      "id": "design-model-dragon-altar",
+      "name": "dragon_altar",
+      "format": "module",
+      "moduleUrl": "../design_model/dragon_altar.js?v=2026111204"
+    },
+    {
+      "id": "design-model-shrine",
+      "name": "shrine",
+      "format": "module",
+      "moduleUrl": "../design_model/shrine.js?v=2026111201"
+    },
+    {
+      "id": "design-model-ong-phuc",
+      "name": "ongPhuc",
+      "format": "module",
+      "moduleUrl": "../design_model/ongPhuc.js"
+    },
+    {
+      "id": "design-model-ong-tho",
+      "name": "ongtho",
+      "format": "module",
+      "moduleUrl": "../design_model/ongtho.js"
+    },
+    {
+      "id": "design-model-roulette-table",
+      "name": "roulette_table",
+      "format": "module",
+      "moduleUrl": "../design_model/roulette_table.js?v=2026111207"
+    },
+    {
+      "id": "design-model-blackjack-table",
+      "name": "blackjack_table",
+      "format": "module",
+      "moduleUrl": "../design_model/blackjack_table.js?v=2026111208"
+    },
+    {
+      "id": "design-model-duck-derby",
+      "name": "duck_derby",
+      "format": "module",
+      "moduleUrl": "../design_model/duck_derby.js?v=2026111212"
+    },
+    {
+      "id": "design-model-clover-fountain",
+      "name": "clover_fountain",
+      "format": "module",
+      "moduleUrl": "../design_model/clover_fountain.js?v=2026111217"
+    },
+    {
+      "id": "design-model-plinko",
+      "name": "plinko",
+      "format": "module",
+      "moduleUrl": "../design_model/plinko.js?v=2026111214"
+    },
+    {
+      "id": "design-model-slot-machine",
+      "name": "slot_machine",
+      "format": "module",
+      "moduleUrl": "../design_model/slot_machine.js?v=2026111214"
+    }
+  ],
+  "replacements": [
+    { "map": "tet", "target": "single_chair", "assetId": "design-model-ngai-vang" },
+    { "map": "tet", "target": "couple_sofa", "assetId": "design-model-wood-sofa" },
+    { "map": "christmas", "target": "single_chair", "assetId": "design-model-christmas-chair" },
+    { "map": "christmas", "target": "couple_sofa", "assetId": "design-model-christmas-sofa" },
+    { "map": "halloween", "target": "single_chair", "assetId": "design-model-skeleton-chair" },
+    { "map": "halloween", "target": "couple_sofa", "assetId": "design-model-halloween-sofa" },
+    { "map": "valentine", "target": "couple_sofa", "assetId": "design-model-love-seat" },
+    { "map": "tet", "target": "ong_loc_statue", "assetId": "design-model-ong-loc" },
+    { "map": "tet", "target": "map_tree", "assetId": "design-model-kumquat" },
+    { "map": "tet", "target": "mai_tree", "assetId": "design-model-mai-tree" },
+    { "map": "tet", "target": "dragon_altar", "assetId": "design-model-dragon-altar" },
+    { "map": "tet", "target": "phuc_loc_tho_shrine", "assetId": "design-model-shrine" },
+    { "map": "casino", "target": "roulette", "assetId": "design-model-roulette-table" },
+    { "map": "casino", "target": "blackjack", "assetId": "design-model-blackjack-table" },
+    { "map": "casino", "target": "duck_derby", "assetId": "design-model-duck-derby" },
+    { "map": "casino", "target": "clover_fountain", "assetId": "design-model-clover-fountain" },
+    { "map": "casino", "target": "plinko", "assetId": "design-model-plinko" },
+    { "map": "casino", "target": "slot_machine", "assetId": "design-model-slot-machine" }
+  ]
+}

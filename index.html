@@ -5,8 +5,8 @@ git<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gather Holidays 3D 🎄🎃🧧💝</title>
 <link rel="icon" type="image/jpeg" href="assets/logo.jpg">
-<link rel="stylesheet" href="css/style.css">
-<link rel="stylesheet" href="css/casino.css">
+<link rel="stylesheet" href="css/style.css?v=2026111218">
+<link rel="stylesheet" href="css/casino.css?v=2026111211">
 <link rel="stylesheet" href="css/avatar_customizer.css">
 <script type="importmap">
 { "imports": {
@@ -43,6 +43,19 @@ git<!doctype html>
   })();
 </script>
 
+<div id="mapLoadingScreen" class="map-loading-screen hidden" role="status" aria-live="polite">
+  <div class="map-loading-card">
+    <div class="map-loading-spinner" aria-hidden="true"></div>
+    <h2 id="mapLoadingTitle">Đang tải bản đồ</h2>
+    <p id="mapLoadingStatus">Đang chuẩn bị dữ liệu bản đồ...</p>
+    <div class="map-loading-track">
+      <div id="mapLoadingProgress" class="map-loading-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+    </div>
+    <span id="mapLoadingPercent">0%</span>
+    <button id="btnRetryMapLoad" class="primary hidden" type="button">Thử tải lại</button>
+  </div>
+</div>
+
 <!-- Builder Tools HUD -->
 <div id="btoolsHud" class="btools-hud hidden">🧱 BUILDER MODE: Click để ĐẶT khối 3D | Alt+Click khối để XÓA</div>
 
@@ -66,9 +79,20 @@ git<!doctype html>
           🎨 Tùy Chỉnh Avatar
         </button>
         <button id="btnOpenAvatarStudio" class="icon-chip" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c084fc;background:rgba(168,85,247,0.15);padding:8px 14px;border:1px solid rgba(168,85,247,0.4);border-radius:8px;cursor:pointer;font-weight:700;" title="Tùy chỉnh diện mạo & vóc dáng Roblox 3D">🎨 Chỉnh Avatar</button>
-        <a href="admin.html" class="icon-chip" style="display:flex;align-items:center;gap:4px;text-decoration:none;font-size:12px;color:#38bdf8;padding:8px 12px;border:1px solid rgba(56,189,248,0.3);border-radius:8px;" title="Khu vực Admin Builder & Model Studio">🛠 Admin Studio</a>
         <button id="btnCloseLobby" class="hidden" title="Quay lại phòng đang chơi">✕ Đóng</button>
       </div>
+    </div>
+
+    <div class="lobby-graphics">
+      <label for="graphicsQuality">🖥️ Chất lượng đồ họa
+        <select id="graphicsQuality" aria-describedby="graphicsQualityHint">
+          <option value="auto">Tự động — thích ứng theo thiết bị</option>
+          <option value="low">Thấp — ưu tiên FPS</option>
+          <option value="medium">Trung bình — cân bằng</option>
+          <option value="high">Cao — hình ảnh đẹp hơn</option>
+        </select>
+      </label>
+      <span id="graphicsQualityHint" class="hint">Chỉ giảm hiệu ứng hình ảnh; không ảnh hưởng lối chơi. Lựa chọn được lưu trên thiết bị này.</span>
     </div>
 
     <!-- Direct Invite Link Banner (Shown when opening a shared #room=... URL) -->
@@ -226,11 +250,6 @@ git<!doctype html>
       <span class="item-label">Hộp Thư Thiệp Đã Lưu</span>
       <span id="inboxCount" class="mini-badge">0</span>
     </button>
-    <button id="btnSettings" class="drawer-item" title="Cài đặt Âm lượng, Voice Chat, Chuột & Quản lý phòng (Phím O hoặc U)">
-      <span class="item-icon">⚙️</span>
-      <span class="item-label">Cài Đặt & Quản Lý Phòng</span>
-      <kbd class="item-kbd">O/U</kbd>
-    </button>
     <button id="btnAdminCmds" class="drawer-item danger-item hidden" title="Bảng Lệnh Quản Trị Admin Roblox (Phím ;)">
       <span class="item-icon">⚡</span>
       <span class="item-label">Bảng Quản Trị Admin</span>
@@ -284,11 +303,12 @@ git<!doctype html>
     <span id="statTitleLabel" class="title-val">Danh Hiệu</span>
   </button>
   <span class="sep">·</span>
-  <span id="statPlayers" title="Nhấn để xem danh sách người chơi & Quản lý phòng">👥 1</span>
+  <span id="statPlayers" title="Số người chơi trong phòng">👥 1</span>
   <span class="sep">·</span>
   <span id="statFps" title="Số khung hình/giây">⚡ 60 FPS</span>
   <span class="sep sep-lock">·</span>
   <span id="lockLabel" title="Nhấn phím L hoặc Chuột phải để Khóa/Mở chuột">🔓 Tự do</span>
+  <button id="btnSettings" class="settings-btn" title="Mở cài đặt (Phím O)" aria-label="Mở cài đặt">⚙️</button>
   <button id="btnHelpToggle" class="help-btn" title="Ẩn/Hiện bảng hướng dẫn phím tắt (Phím H)">❓</button>
 </div>
 
@@ -303,7 +323,7 @@ git<!doctype html>
     <div><kbd>Shift</kbd> Chạy nhanh</div>
     <div><kbd>Space</kbd> Nhảy / Đứng dậy</div>
     <div><kbd>F</kbd> 🎭 Bộ Emote Pack</div>
-    <div><kbd>O</kbd> / <kbd>U</kbd> 🔊 Âm lượng & Cài đặt</div>
+    <div><kbd>O</kbd> ⚙️ Cài đặt</div>
     <div><kbd>M</kbd> 🎙️ Bật/Tắt Micro nói</div>
     <div><kbd>P</kbd> 🖥️ Chiếu màn hình lên TV</div>
     <div><kbd>E</kbd> Tương tác</div>
@@ -619,6 +639,36 @@ git<!doctype html>
   </div>
 </div>
 
+<!-- DIALOG: Clover Fountain Coin Toss -->
+<div id="dlgCloverCoinToss" class="overlay hidden">
+  <div class="panel clover-coin-panel">
+    <div class="clover-coin-icon">🍀🪙</div>
+    <h2>Đài Phun Cỏ Bốn Lá</h2>
+    <p class="sub">Pot bắt đầu từ 100 Xu. Đoán đúng sẽ nhân đôi pot; bấm Dừng để nhận, đoán sai sẽ mất pot của ván.</p>
+    <div class="lixi-event-notice">
+      <span>⏰ Mở 5 phút trong mỗi chu kỳ 15 phút</span>
+      <b id="cloverCoinEventTimer" class="lixi-timer-badge">⏳ Còn 4:59</b>
+    </div>
+    <div class="clover-coin-pot">Pot hiện tại: <b id="cloverCoinPotAmount">100 Xu</b></div>
+    <div class="clover-coin-choices" role="group" aria-label="Chọn mặt đồng xu">
+      <button type="button" class="clover-coin-choice selected" data-coin-side="heads">🌕 Ngửa</button>
+      <button type="button" class="clover-coin-choice" data-coin-side="tails">🌑 Sấp</button>
+    </div>
+    <div class="clover-coin-stage" aria-hidden="true">
+      <div id="cloverCoinVisual" class="clover-coin-visual" data-side="heads">
+        <div class="clover-coin-face clover-coin-front">NGỬA</div>
+        <div class="clover-coin-face clover-coin-back">SẤP</div>
+      </div>
+    </div>
+    <div id="cloverCoinResult" class="clover-coin-result hidden" role="status" aria-live="polite"></div>
+    <div class="row clover-coin-actions">
+      <button id="btnTossCloverCoin" class="primary">🪙 Tung đồng xu</button>
+      <button id="btnCashoutCloverCoin" class="primary clover-coin-cashout hidden">🏦 Dừng và nhận Xu</button>
+      <button data-close>Đóng</button>
+    </div>
+  </div>
+</div>
+
 <!-- Backward compatibility for existing dlgLixi -->
 <div id="dlgLixi" class="overlay hidden">
   <div class="panel lixi-panel">
@@ -719,6 +769,7 @@ git<!doctype html>
 <!-- DIALOG 8: Mouse Settings, Voice Chat, Password & Host Room Management -->
 <div id="dlgSettings" class="overlay hidden">
   <div class="panel">
+    <button class="settings-close-x" data-close title="Đóng cài đặt" aria-label="Đóng cài đặt">✕</button>
     <h2>⚙️ Cài Đặt & Quản Lý Phòng</h2>
 
     <h3>🎙️ Voice Chat & Âm Thanh Không Gian 3D</h3>
@@ -774,7 +825,6 @@ git<!doctype html>
         <button id="btnOpenLobbyFromSettings" class="info">🏠 Về Sảnh Chờ Đổi Phòng</button>
         <button id="btnCloseRoomSettings" class="danger-btn hidden">🛑 Đóng Phòng Giải Tán</button>
       </div>
-      <button data-close>Đóng</button>
     </div>
   </div>
 </div>
@@ -1028,6 +1078,7 @@ git<!doctype html>
           <span><code>:rearm &lt;tên&gt;</code> — Lắp ráp lại tứ chi nguyên vẹn</span>
           <span><code>:heal &lt;tên&gt;</code> — Hồi máu & sạch sẽ cà chua</span>
           <span><code>:spin / :spinall &lt;tên&gt;</code> — Xoay mòng mòng chóng mặt</span>
+          <span><code>:flex [tên] / :flexall</code> — Flex cơ bắp đồng bộ (chỉ hiệu ứng)</span>
           <span><code>:disco</code> — Vũ trường đèn Disco chớp nháy</span>
           <span><code>:earthquake</code> — Động đất rung chuyển màn hình</span>
           <span><code>:nuke</code> — Kích nổ bom hạt nhân chói lóa</span>
@@ -1261,6 +1312,6 @@ git<!doctype html>
 </div>
 
 <div id="toast"></div>
-<script type="module" src="js/game.js?v=20261111_trystero"></script>
+<script type="module" src="js/game.js?v=2026111221"></script>
 </body>
 </html>

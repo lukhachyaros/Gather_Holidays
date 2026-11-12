@@ -7,7 +7,7 @@ import {
   CARD_STYLES,
   rollLixiReward,
 } from './themes.js';
-import { isSolid, buildThemeMap, validMap } from './maps.js';
+import { isSolid, buildThemeMap, validMap } from './maps.js?v=2026111218';
 import { connect, connectLobby, hashPass } from './net.js';
 import {
   initPlayer,
@@ -29,10 +29,10 @@ import {
   seekPlayer,
   syncPlayback,
 } from './media.js';
-import { World, TILE } from './world.js';
-import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js';
+import { World, TILE } from './world.js?v=2026111221';
+import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=2026111208';
 import { emojiSprite, part, G, mat } from './props.js';
-import { RtcManager } from './rtc.js?v=20261111_trystero';
+import { RtcManager } from './rtc.js?v=20261112_livekit';
 import {
   initAudio,
   playBgm,
@@ -63,7 +63,7 @@ import {
   buyShopItem,
   equipShopItem,
   unequipShopItem,
-} from './casino.js';
+} from './casino.js?v=2026111217';
 import { loadAvatarCustomization, openAvatarStudioModal } from './avatar_customizer.js';
 
 let myAvatarCustom = loadAvatarCustomization();
@@ -79,9 +79,7 @@ function initRtc(selfId, roomId) {
   rtc = new RtcManager({
     selfId,
     roomId: roomId || state?.room || 'quang-truong-noel',
-    sendSignal: (targetId, signal) => {
-      net?.send('rtc_signal', signal, targetId);
-    },
+    participantName: me?.name || selfId,
     onRemoteScreenTrack: (peerId, stream) => {
       updateScreenShareOnTv();
     },
@@ -356,6 +354,89 @@ let currentGravity = 20;
 let adminSpinUntil = 0;
 let mobileMoveVector = { x: 0, y: 0 };
 const adminFireEffects = new WeakMap();
+const GRAPHICS_QUALITY_KEY = 'gh_graphics_quality';
+const GRAPHICS_PROFILES = {
+  low: { pixelRatio: 0.65, shadows: false, shadowMapSize: 512, particleScale: 0.3 },
+  medium: { pixelRatio: 1, shadows: true, shadowMapSize: 512, particleScale: 0.65 },
+  high: { pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5), shadows: true, shadowMapSize: 1024, particleScale: 1 },
+};
+const GRAPHICS_QUALITY_ORDER = ['low', 'medium', 'high'];
+const savedGraphicsQuality = localStorage.getItem(GRAPHICS_QUALITY_KEY);
+let graphicsQuality =
+  savedGraphicsQuality === 'auto' || Object.hasOwn(GRAPHICS_PROFILES, savedGraphicsQuality)
+    ? savedGraphicsQuality
+    : 'auto';
+function detectInitialGraphicsQuality() {
+  const memory = navigator.deviceMemory;
+  const cores = navigator.hardwareConcurrency;
+  const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+  if ((Number.isFinite(memory) && memory <= 2) || (Number.isFinite(cores) && cores <= 2)) return 'low';
+  if ((Number.isFinite(memory) && memory <= 4) || (Number.isFinite(cores) && cores <= 4) || coarsePointer) {
+    return 'medium';
+  }
+  return 'high';
+}
+let adaptiveGraphicsQuality = detectInitialGraphicsQuality();
+let lowGraphicsFpsSamples = 0;
+let highGraphicsFpsSamples = 0;
+
+function getActiveGraphicsQuality() {
+  return graphicsQuality === 'auto' ? adaptiveGraphicsQuality : graphicsQuality;
+}
+
+function updateGraphicsQualityHint() {
+  const hint = $('graphicsQualityHint');
+  if (!hint) return;
+  const labels = { low: 'Thấp', medium: 'Trung bình', high: 'Cao' };
+  hint.textContent = graphicsQuality === 'auto'
+    ? `Tự động điều chỉnh theo thiết bị và FPS · Hiện tại: ${labels[adaptiveGraphicsQuality]}.`
+    : `Đang dùng mức ${labels[graphicsQuality]}. Lựa chọn được lưu trên thiết bị này.`;
+}
+
+function applyGraphicsQuality() {
+  if (!renderer || !world) return;
+  const profile = GRAPHICS_PROFILES[getActiveGraphicsQuality()];
+  renderer.setPixelRatio(profile.pixelRatio);
+  renderer.shadowMap.enabled = profile.shadows;
+  renderer.shadowMap.needsUpdate = true;
+  world.setGraphicsQuality(profile);
+  resize();
+  updateGraphicsQualityHint();
+}
+
+function updateAdaptiveGraphics(fps) {
+  if (graphicsQuality !== 'auto' || document.hidden) {
+    lowGraphicsFpsSamples = 0;
+    highGraphicsFpsSamples = 0;
+    return;
+  }
+
+  if (fps < 28) {
+    lowGraphicsFpsSamples++;
+    highGraphicsFpsSamples = 0;
+  } else if (fps >= 55) {
+    highGraphicsFpsSamples++;
+    lowGraphicsFpsSamples = 0;
+  } else {
+    lowGraphicsFpsSamples = 0;
+    highGraphicsFpsSamples = 0;
+  }
+
+  const tierIndex = GRAPHICS_QUALITY_ORDER.indexOf(adaptiveGraphicsQuality);
+  let nextQuality = adaptiveGraphicsQuality;
+  if (lowGraphicsFpsSamples >= 3 && tierIndex > 0) {
+    lowGraphicsFpsSamples = 0;
+    nextQuality = GRAPHICS_QUALITY_ORDER[tierIndex - 1];
+  } else if (highGraphicsFpsSamples >= 12 && tierIndex < GRAPHICS_QUALITY_ORDER.length - 1) {
+    highGraphicsFpsSamples = 0;
+    nextQuality = GRAPHICS_QUALITY_ORDER[tierIndex + 1];
+  }
+
+  if (nextQuality !== adaptiveGraphicsQuality) {
+    adaptiveGraphicsQuality = nextQuality;
+    applyGraphicsQuality();
+  }
+}
 
 const isHost = () => !!(state && net && state.hostId === net.selfId);
 const requireRoomHost = () => {
@@ -395,15 +476,18 @@ try {
     powerPreference: 'high-performance',
     stencil: false,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
-  renderer.shadowMap.enabled = true;
+  const initialGraphicsProfile = GRAPHICS_PROFILES[getActiveGraphicsQuality()];
+  renderer.setPixelRatio(initialGraphicsProfile.pixelRatio);
+  renderer.shadowMap.enabled = initialGraphicsProfile.shadows;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, 1, 0.1, 300);
-  world = new World(scene);
+  world = new World(scene, updateMapLoadingScreen);
+  world.setGraphicsQuality(initialGraphicsProfile);
+  updateGraphicsQualityHint();
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
   initAudio();
-  initCasino(world, toast, emitOp, () => me, () => peers);
+  initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId);
   initMobileControls();
   setupBuilderToolsInteraction();
   setupAdminCommandAutocomplete();
@@ -453,6 +537,56 @@ function initGameSplashScreen() {
     }
   }, 90);
 }
+
+function updateMapLoadingScreen({ active, progress = 0, message = '', themeKey, error } = {}) {
+  const screen = $('mapLoadingScreen');
+  if (!screen) return;
+  const title = $('mapLoadingTitle');
+  const status = $('mapLoadingStatus');
+  const bar = $('mapLoadingProgress');
+  const percent = $('mapLoadingPercent');
+  const retry = $('btnRetryMapLoad');
+
+  if (error) {
+    screen.classList.remove('hidden');
+    screen.classList.add('error');
+    if (title) title.textContent = 'Không thể tải bản đồ';
+    if (status) status.textContent = 'Đã xảy ra lỗi khi dựng cảnh. Bạn có thể thử tải lại.';
+    if (retry) {
+      retry.disabled = false;
+      retry.classList.remove('hidden');
+    }
+    return;
+  }
+  if (!active) {
+    screen.classList.add('hidden');
+    screen.classList.remove('error');
+    if (retry) retry.classList.add('hidden');
+    return;
+  }
+
+  const value = Math.max(0, Math.min(100, Math.round(progress)));
+  screen.classList.remove('hidden');
+  screen.classList.remove('error');
+  if (title) title.textContent = `Đang tải ${THEMES[themeKey]?.name || 'bản đồ'}`;
+  if (status) status.textContent = message || 'Đang dựng cảnh...';
+  if (bar) {
+    bar.style.width = `${value}%`;
+    bar.setAttribute('aria-valuenow', String(value));
+  }
+  if (percent) percent.textContent = `${value}%`;
+  if (retry) retry.classList.add('hidden');
+}
+
+function retryMapLoading() {
+  if (!world || !state) return;
+  const retry = $('btnRetryMapLoad');
+  if (retry) retry.disabled = true;
+  world.mapKey = '';
+  world.sync(state, roomName);
+}
+
+$('btnRetryMapLoad')?.addEventListener('click', retryMapLoading);
 
 function initMobileControls() {
   const isMobile =
@@ -666,6 +800,17 @@ function slugifyRoom(str = '') {
 }
 
 $('inName').value = localStorage.getItem('gh_name') || '';
+$('graphicsQuality').value = graphicsQuality;
+$('graphicsQuality').addEventListener('change', event => {
+  const selectedQuality = event.target.value;
+  if (selectedQuality !== 'auto' && !Object.hasOwn(GRAPHICS_PROFILES, selectedQuality)) return;
+  graphicsQuality = selectedQuality;
+  if (graphicsQuality === 'auto') adaptiveGraphicsQuality = detectInitialGraphicsQuality();
+  lowGraphicsFpsSamples = 0;
+  highGraphicsFpsSamples = 0;
+  localStorage.setItem(GRAPHICS_QUALITY_KEY, graphicsQuality);
+  applyGraphicsQuality();
+});
 $('inName').addEventListener('change', () => {
   const n = $('inName').value.trim();
   if (n) {
@@ -1216,7 +1361,7 @@ async function start() {
   scene.add(me.av.root);
 
   // Immediately synchronize 3D world before starting animation loop
-  world.sync(state, roomName);
+  await world.sync(state, roomName);
 
   $('topTheme').value = state.theme;
   $('topTheme').classList.toggle('hidden', roomName === SECRET_CASINO_ROOM);
@@ -1257,6 +1402,7 @@ const pubInfo = () => ({
   nametagStyle: me.nametagStyle || null,
   isAdmin: typeof isAdminVerified === 'function' ? isAdminVerified() : false,
   seatId: me.seatSlot?.id || null,
+  pose: me.seatSlot?.pose || null,
   avatarCustom: me.avatarCustom || null,
 });
 
@@ -1427,6 +1573,7 @@ async function addOrUpdatePeer(id, d) {
     pumpkinHat: d.pumpkinHat || null,
     heldItem: d.heldItem || null,
     seatId: d.seatId || null,
+    pose: d.pose || null,
     avatarCustom: d.avatarCustom !== undefined ? d.avatarCustom : p.avatarCustom,
   });
   if (state && id === state.hostId && d.name) {
@@ -1540,9 +1687,6 @@ const handlers = {
     addOrUpdatePeer(id, d);
     rtc?.getOrCreatePeer(id);
   },
-  rtc_signal(d, id) {
-    rtc?.handleSignal(id, d);
-  },
   voice_speaking(d, id) {
     const p = peers.get(id);
     if (p?.av) p.av.setSpeaking(!!d?.speaking);
@@ -1558,6 +1702,7 @@ const handlers = {
       p.th = d.h || 0;
       p.seatId = d.seatId || null;
       p.lean = d.lean || 0;
+      p.pose = d.pose || null;
     }
   },
   state(s) {
@@ -1986,7 +2131,7 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'casino_broadcast': {
-      handleCasinoBroadcast(op);
+      handleCasinoBroadcast(op, senderId);
       break;
     }
     case 'admin_spin': {
@@ -2043,6 +2188,16 @@ function applyOp(op, senderId = null) {
         me.av?.playEmote?.('dance');
         toast('💃 Nhạc lên là quẩy! Toàn server cùng nhảy múa!');
       }
+      break;
+    }
+    case 'admin_flex': {
+      if (isAdminTarget(op.target, me?.name)) {
+        me.av?.playEmote?.('flex');
+        toast(`💪 Bạn vừa được Admin ${op.by} gọi flex cơ bắp!`);
+      }
+      peers.forEach(player => {
+        if (isAdminTarget(op.target, player.name)) player.av?.playEmote?.('flex');
+      });
       break;
     }
     case 'admin_clown': {
@@ -2123,11 +2278,46 @@ function applyOp(op, senderId = null) {
     }
     case 'admin_truonggiang': {
       if (op.active) {
-        spawnTruongGiangSlime(op.target, op.by);
+        spawnTruongGiangSlime(op.target, op.by, {
+          entityId: op.entityId,
+          ownerId: senderId || op.ownerId,
+          targetId: op.targetId,
+          spawnX: op.spawnX,
+          spawnZ: op.spawnZ,
+        });
       } else {
         removeTruongGiangSlime();
       }
       break;
+    }
+    case 'admin_truonggiang_state': {
+      if (!op.entityId || op.ownerId !== senderId ||
+          ![op.x, op.y, op.z, op.rotationY, op.meshRotationX, op.spawnX, op.spawnZ].every(Number.isFinite) ||
+          !Array.isArray(op.meshScale) || !op.meshScale.every(Number.isFinite) ||
+          !Number.isInteger(op.stateSequence)) return;
+      if (!activeTruongGiangSlimes.has(op.entityId)) {
+        spawnTruongGiangSlime(op.target, op.by, {
+          entityId: op.entityId,
+          ownerId: op.ownerId,
+          targetId: op.targetId,
+          spawnX: op.spawnX,
+          spawnZ: op.spawnZ,
+        });
+      }
+      const slime = activeTruongGiangSlimes.get(op.entityId);
+      if (!slime || slime.isAuthority || slime.ownerId !== senderId ||
+          op.stateSequence <= slime.lastStateSequence) return;
+      slime.lastStateSequence = op.stateSequence;
+      slime.lastStateAt = performance.now();
+      slime.remotePosition.set(op.x, op.y, op.z);
+      slime.remoteRotationY = op.rotationY;
+      slime.remoteMeshRotationX = op.meshRotationX;
+      slime.remoteMeshScale.set(...op.meshScale);
+      if (Number.isInteger(op.impactId) && op.impactId > slime.impactId) {
+        slime.impactId = op.impactId;
+        showTruongGiangImpact(op.impactTargetId);
+      }
+      return;
     }
     case 'admin_golden': {
       if (isAdminTarget(op.target, me?.name)) {
@@ -3163,7 +3353,6 @@ function toggleSettingsModal(forceState = null) {
 }
 
 $('btnSettings').onclick = () => toggleSettingsModal();
-$('statPlayers').onclick = () => toggleSettingsModal();
 $('btnRejoinOther').onclick = () => {
   $('dlgKicked').classList.add('hidden');
   openLobbyOverlay();
@@ -3405,6 +3594,160 @@ function getLixiEventStatus() {
   const timeStr = `${m}:${s < 10 ? '0' : ''}${s}`;
   return { inEvent, remainSec, timeStr };
 }
+
+let cloverCoinTimerInterval = null;
+let cloverCoinSelectedSide = 'heads';
+let isCloverCoinTossing = false;
+let cloverCoinPot = 100;
+let cloverCoinCanCashOut = false;
+let cloverCoinRoundEnded = false;
+
+const formatCloverCoinAmount = amount => amount.toLocaleString('vi-VN');
+
+function startNewCloverCoinRound() {
+  cloverCoinPot = 100;
+  cloverCoinCanCashOut = false;
+  cloverCoinRoundEnded = false;
+  cloverCoinSelectedSide = 'heads';
+  document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
+    button.classList.toggle('selected', button.dataset.coinSide === cloverCoinSelectedSide);
+  });
+  $('cloverCoinResult').classList.add('hidden');
+  updateCloverCoinEventStatus();
+}
+
+function updateCloverCoinEventStatus() {
+  const dialog = $('dlgCloverCoinToss');
+  if (!dialog || dialog.classList.contains('hidden')) {
+    clearInterval(cloverCoinTimerInterval);
+    cloverCoinTimerInterval = null;
+    return;
+  }
+
+  const status = getLixiEventStatus();
+  $('cloverCoinEventTimer').textContent = status.inEvent
+    ? `⏳ Còn ${status.timeStr}`
+    : `⏰ Mở lại sau ${status.timeStr}`;
+  $('btnTossCloverCoin').disabled = isCloverCoinTossing || !status.inEvent;
+  $('btnTossCloverCoin').textContent = cloverCoinRoundEnded
+    ? '🔄 Ván mới (100 Xu)'
+    : cloverCoinCanCashOut
+      ? '🎲 Đoán tiếp'
+      : '🪙 Tung đồng xu';
+  $('cloverCoinPotAmount').textContent = `${formatCloverCoinAmount(cloverCoinPot)} Xu`;
+  document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
+    button.disabled = isCloverCoinTossing || cloverCoinRoundEnded || !status.inEvent;
+  });
+  const cashoutButton = $('btnCashoutCloverCoin');
+  cashoutButton.classList.toggle('hidden', !cloverCoinCanCashOut);
+  cashoutButton.disabled = isCloverCoinTossing;
+  cashoutButton.textContent = `🏦 Dừng và nhận ${formatCloverCoinAmount(cloverCoinPot)} Xu`;
+
+  if (!status.inEvent && !isCloverCoinTossing && !cloverCoinRoundEnded) {
+    $('cloverCoinResult').textContent = cloverCoinCanCashOut
+      ? 'Sự kiện đã kết thúc. Bạn vẫn có thể Dừng và nhận pot hiện tại.'
+      : 'Sự kiện đã kết thúc. Hãy quay lại khi mở cửa!';
+    $('cloverCoinResult').classList.remove('hidden');
+  }
+}
+
+function openCloverCoinTossDialog() {
+  const status = getLixiEventStatus();
+  if (!status.inEvent && !cloverCoinCanCashOut) {
+    toast(`⏳ Sự kiện tung xu chưa mở! Còn ${status.timeStr} nữa. Hãy quay lại sau nhé!`);
+    return;
+  }
+
+  openDialog('dlgCloverCoinToss');
+  updateCloverCoinEventStatus();
+  clearInterval(cloverCoinTimerInterval);
+  cloverCoinTimerInterval = setInterval(updateCloverCoinEventStatus, 1000);
+}
+
+document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
+  button.addEventListener('click', () => {
+    if (isCloverCoinTossing) return;
+    cloverCoinSelectedSide = button.dataset.coinSide;
+    document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(choice => {
+      choice.classList.toggle('selected', choice === button);
+    });
+  });
+});
+
+$('btnTossCloverCoin')?.addEventListener('click', () => {
+  if (isCloverCoinTossing) return;
+  const status = getLixiEventStatus();
+  if (!status.inEvent) {
+    updateCloverCoinEventStatus();
+    toast(`⏳ Sự kiện tung xu chưa mở! Còn ${status.timeStr} nữa.`);
+    return;
+  }
+  if (cloverCoinRoundEnded) {
+    startNewCloverCoinRound();
+    return;
+  }
+
+  isCloverCoinTossing = true;
+  updateCloverCoinEventStatus();
+  document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
+    button.disabled = true;
+  });
+  const result = Math.random() < 0.5 ? 'heads' : 'tails';
+  const guess = cloverCoinSelectedSide;
+  const visual = $('cloverCoinVisual');
+  visual.style.setProperty('--coin-start', visual.dataset.side === 'tails' ? '180deg' : '0deg');
+  visual.style.setProperty('--coin-end', result === 'heads' ? '1800deg' : '1980deg');
+  visual.classList.remove('flipping');
+  void visual.offsetWidth;
+  visual.classList.add('flipping');
+  $('cloverCoinResult').textContent = 'Đồng xu đang được tung...';
+  $('cloverCoinResult').classList.remove('hidden');
+
+  const fountain = world?.casinoObjs?.find(object => object.userData?.type === 'clover_fountain');
+  fountain?.userData?.replacementModel?.userData?.tossCoin?.(result);
+  playSfx('coin', 'casino');
+  me.av?.playEmote('interact');
+
+  setTimeout(() => {
+    visual.classList.remove('flipping');
+    visual.dataset.side = result;
+    const isCorrect = result === guess;
+    if (isCorrect) {
+      const previousPot = cloverCoinPot;
+      cloverCoinPot = Math.min(cloverCoinPot * 2, Number.MAX_SAFE_INTEGER);
+      cloverCoinCanCashOut = true;
+      playSfx('plinko_win', 'casino');
+      me.av?.playEmote('cheer');
+      $('cloverCoinResult').textContent = `🎉 Mặt ${result === 'heads' ? 'Ngửa' : 'Sấp'} xuất hiện! Pot đã tăng từ ${formatCloverCoinAmount(previousPot)} lên ${formatCloverCoinAmount(cloverCoinPot)} Xu.`;
+      toast(`🍀 Đoán đúng! Pot đã nhân đôi thành ${formatCloverCoinAmount(cloverCoinPot)} Xu. Dừng để nhận hoặc đoán tiếp!`);
+    } else {
+      const lostPot = cloverCoinPot;
+      cloverCoinPot = 100;
+      cloverCoinCanCashOut = false;
+      cloverCoinRoundEnded = true;
+      $('cloverCoinResult').textContent = `Mặt ${result === 'heads' ? 'Ngửa' : 'Sấp'} xuất hiện. Bạn mất toàn bộ pot ${formatCloverCoinAmount(lostPot)} Xu; xu đã có trong ví được giữ nguyên.`;
+      toast(`🪙 Đoán sai, mất pot ${formatCloverCoinAmount(lostPot)} Xu. Xu trong ví của bạn không bị trừ.`);
+    }
+
+    isCloverCoinTossing = false;
+    updateCloverCoinEventStatus();
+  }, 1550);
+});
+
+$('btnCashoutCloverCoin')?.addEventListener('click', () => {
+  if (isCloverCoinTossing || !cloverCoinCanCashOut) return;
+  const reward = cloverCoinPot;
+  addChips(reward);
+  cloverCoinPot = 100;
+  cloverCoinCanCashOut = false;
+  cloverCoinRoundEnded = true;
+  $('cloverCoinResult').textContent = `🏦 Bạn đã Dừng và nhận ${formatCloverCoinAmount(reward)} Xu. Ván mới bắt đầu với pot 100 Xu.`;
+  $('cloverCoinResult').classList.remove('hidden');
+  playSfx('plinko_win', 'casino');
+  toast(`🍀 Đã nhận ${formatCloverCoinAmount(reward)} Xu vào ví!`);
+  floaters.push({ e: `🪙 +${formatCloverCoinAmount(reward)} Xu!`, who: net?.selfId, t: Date.now() });
+  updateCloverCoinEventStatus();
+});
 
 let rhythmAnimationId = null;
 let rhythmNeedlePos = 50;
@@ -4002,6 +4345,9 @@ function triggerInteract(target = activeTarget) {
       case 'duck_derby':
         openDuckDerby();
         break;
+      case 'clover_fountain':
+        openCloverCoinTossDialog();
+        break;
       case 'blackjack':
         openBlackjack();
         break;
@@ -4095,7 +4441,7 @@ addEventListener('keydown', e => {
   else if (k === 'm' || code === 'KeyM') toggleMic();
   else if (k === 'p' || code === 'KeyP') toggleScreenShare();
   else if (k === 'h' || code === 'KeyH') $('hud').classList.toggle('hidden');
-  else if (k === 'o' || code === 'KeyO' || k === 'u' || code === 'KeyU') {
+  else if (k === 'o' || code === 'KeyO') {
     toggleSettingsModal();
     e.preventDefault();
   }
@@ -4208,7 +4554,7 @@ addEventListener('compositionend', () => {
 addEventListener(
   'wheel',
   e => {
-    if (e.target.closest('#chat, #mediaBox, .overlay:not(.hidden), .dialog:not(.hidden), #dlgCard, #dlgCostume, #dlgMusic, #inboxModal')) {
+    if (e.target.closest('#chat, #mediaBox, .overlay:not(.hidden), .dialog:not(.hidden), #dlgCard, #dlgCostume, #dlgMusic, #inboxModal, .casino-modal-overlay')) {
       return;
     }
     e.preventDefault();
@@ -4581,6 +4927,11 @@ function loop(now) {
     }
     return;
   }
+  if (world?.isLoadingMap) {
+    last = now;
+    rafId = requestAnimationFrame(loop);
+    return;
+  }
 
   try {
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -4592,6 +4943,7 @@ function loop(now) {
       currentFps = Math.round((frameCount * 1000) / (now - fpsLastTime));
       const fpsEl = $('statFps');
       if (fpsEl) fpsEl.textContent = `⚡ ${currentFps} FPS`;
+      updateAdaptiveGraphics(currentFps);
       frameCount = 0;
       fpsLastTime = now;
     }
@@ -4707,7 +5059,9 @@ function loop(now) {
 
     // Check Couple Sofa Pairing & Campfire Proximity
     let myLean = 0;
+    let myPose = null;
     if (me.seatSlot) {
+      myPose = me.seatSlot.pose || null;
       const partner = findCouplePartner();
       if (partner) {
         myLean = me.seatSlot.lean || 0;
@@ -4741,7 +5095,7 @@ function loop(now) {
       } else {
         av.root.position.set(me.x * TILE, me.h, me.y * TILE);
         av.root.rotation.y = me.r;
-        av.setLocomotion(me.loco, { lean: myLean });
+        av.setLocomotion(me.loco, { lean: myLean, pose: myPose });
       }
       av.update(dt);
     }
@@ -4770,6 +5124,7 @@ function loop(now) {
       h: me.h,
       seatId: me.seatSlot?.id || null,
       lean: myLean,
+      pose: myPose,
     };
     if (
       net &&
@@ -4777,6 +5132,7 @@ function loop(now) {
       (cur.a !== sent.a ||
         cur.seatId !== sent.seatId ||
         cur.lean !== sent.lean ||
+        cur.pose !== sent.pose ||
         Math.abs(cur.x - sent.x) > 0.005 ||
         Math.abs(cur.y - sent.y) > 0.005 ||
         Math.abs(cur.r - sent.r) > 0.02 ||
@@ -4797,7 +5153,7 @@ function loop(now) {
       if (p.av) {
         p.av.root.position.set(p.x * TILE, p.h, p.y * TILE);
         p.av.root.rotation.y = p.r;
-        p.av.setLocomotion(p.a, { lean: p.lean || 0 });
+        p.av.setLocomotion(p.a, { lean: p.lean || 0, pose: p.pose || null });
         p.av.update(dt);
       }
     });
@@ -4811,7 +5167,7 @@ function loop(now) {
       lastWorldSync = now;
       world?.sync(state, roomName);
     }
-    world?.update(dt, { x: me.x * TILE, z: me.y * TILE });
+    world?.update(dt, { x: me.x * TILE, z: me.y * TILE }, camera);
     minigames?.update(dt, yaw);
     updateCamera(dt);
     if (world?.bgColor && renderer) renderer.setClearColor(world.bgColor, 1);
@@ -6155,54 +6511,71 @@ function spawnGuillotineStrike(targetName) {
 // Minecraft style slime bouncing cube with 6-sided comedian Trường Giang face,
 // hopping around and chasing a random non-admin player with funny quotes
 // ============================================================================
-let activeTruongGiangSlime = null;
-let truongGiangAnimFrame = null;
-let truongGiangSpeechTimer = null;
+const activeTruongGiangSlimes = new Map();
+const MAX_TRUONGGIANG_SLIMES = 12;
+let truongGiangTexture = null;
+let truongGiangTextureUsers = 0;
 
-export function removeTruongGiangSlime() {
-  if (activeTruongGiangSlime) {
-    if (activeTruongGiangSlime.speechEl) activeTruongGiangSlime.speechEl.remove();
-    scene.remove(activeTruongGiangSlime.group);
-    activeTruongGiangSlime = null;
+export function removeTruongGiangSlime(entityId = null) {
+  const slimes = entityId
+    ? [activeTruongGiangSlimes.get(entityId)].filter(Boolean)
+    : Array.from(activeTruongGiangSlimes.values());
+  for (const slime of slimes) {
+    if (slime.animFrame) cancelAnimationFrame(slime.animFrame);
+    if (slime.speechTimer) clearTimeout(slime.speechTimer);
+    if (slime.speechEl) slime.speechEl.remove();
+    scene.remove(slime.group);
+    slime.group.traverse(object => {
+      if (!object.isMesh) return;
+      object.geometry.dispose();
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      materials.forEach(material => material.dispose());
+    });
+    activeTruongGiangSlimes.delete(slime.entityId);
+    truongGiangTextureUsers--;
   }
-  if (truongGiangAnimFrame) {
-    cancelAnimationFrame(truongGiangAnimFrame);
-    truongGiangAnimFrame = null;
-  }
-  if (truongGiangSpeechTimer) {
-    clearTimeout(truongGiangSpeechTimer);
-    truongGiangSpeechTimer = null;
+  if (truongGiangTextureUsers === 0 && truongGiangTexture) {
+    truongGiangTexture.dispose();
+    truongGiangTexture = null;
   }
 }
 
-export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin') {
-  removeTruongGiangSlime();
+function showTruongGiangImpact(targetId) {
+  if (targetId !== net?.selfId) return;
+  me.vx = (Math.random() - 0.5) * 6;
+  me.vy = 4;
+  me.av?.showTomatoSplat?.();
+  toast('Bạn đã bị DÊ !');
 
-  // If no target specified or if target is admin, automatically find a non-admin player in room
-  let target = targetName;
-  if (!target) {
-    const nonAdminPeers = [];
-    peers.forEach(p => {
-      if (p.name && !isAdminUser(p.name) && !p.isAdmin) {
-        nonAdminPeers.push(p.name);
-      }
-    });
-    if (nonAdminPeers.length > 0) {
-      target = nonAdminPeers[Math.floor(Math.random() * nonAdminPeers.length)];
-    } else {
-      const allPeers = [];
-      peers.forEach(p => { if (p.name) allPeers.push(p.name); });
-      target = allPeers.length > 0 ? allPeers[0] : me.name;
-    }
+  const flash = document.createElement('div');
+  flash.className = 'truonggiang-hit-flash';
+  document.body.appendChild(flash);
+  requestAnimationFrame(() => flash.classList.add('visible'));
+  setTimeout(() => flash.remove(), 280);
+}
+
+export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin', options = {}) {
+  const target = targetName || me.name;
+  const entityId = options.entityId || `${net?.selfId || 'local'}:${Date.now()}:${Math.random()}`;
+  removeTruongGiangSlime(entityId);
+  if (activeTruongGiangSlimes.size >= MAX_TRUONGGIANG_SLIMES) {
+    if (!options.entityId) toast(`⚠️ Đã đạt giới hạn ${MAX_TRUONGGIANG_SLIMES} slime Trường Giang cùng lúc.`);
+    return;
   }
+  const ownerId = options.ownerId || net?.selfId;
+  const targetId = options.targetId || net?.selfId;
+  const isAuthority = ownerId === net?.selfId;
 
   toast(`🤪 ${byAdmin} đã triệu hồi Khối Slime TRƯỜNG GIANG săn đuổi [${target}]!`);
   playSfx('duck_quack', 'casino');
 
   const slimeGroup = new THREE.Group();
-  const texLoader = new THREE.TextureLoader();
-  const tgTex = texLoader.load('assets/truonggiang.webp');
-  tgTex.colorSpace = THREE.SRGBColorSpace;
+  if (!truongGiangTexture) {
+    truongGiangTexture = new THREE.TextureLoader().load('assets/truonggiang.webp');
+    truongGiangTexture.colorSpace = THREE.SRGBColorSpace;
+  }
+  const tgTex = truongGiangTexture;
+  truongGiangTextureUsers++;
 
   const cubeGeo = new THREE.BoxGeometry(1.25, 1.25, 1.25);
   // Apply Trường Giang face to all 6 faces of the cube
@@ -6216,8 +6589,11 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin') {
   slimeMesh.position.y = 0.625;
   slimeGroup.add(slimeMesh);
 
-  // Position slime near admin or target
-  slimeGroup.position.set(me.x * TILE + 2, 0, me.y * TILE + 2);
+  slimeGroup.position.set(
+    Number.isFinite(options.spawnX) ? options.spawnX : me.x * TILE + 2,
+    0,
+    Number.isFinite(options.spawnZ) ? options.spawnZ : me.y * TILE + 2,
+  );
   scene.add(slimeGroup);
 
   // Speech bubble DOM element attached to 3D world position
@@ -6243,111 +6619,146 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin') {
   function showSpeech(text, durationMs = 2800) {
     speechEl.textContent = text;
     speechEl.style.display = 'block';
-    if (truongGiangSpeechTimer) clearTimeout(truongGiangSpeechTimer);
-    truongGiangSpeechTimer = setTimeout(() => {
+    if (slime.speechTimer) clearTimeout(slime.speechTimer);
+    slime.speechTimer = setTimeout(() => {
       speechEl.style.display = 'none';
+      slime.speechTimer = null;
     }, durationMs);
   }
-
-  showSpeech('Mười Khó xuất chiêu! Chạy đâu con sâu! 🏃💨', 3200);
 
   let vy = 0;
   let onGround = true;
   let hopTimer = 0.4;
   let pesterCooldown = 0;
   let lastTime = performance.now();
+  let lastStateBroadcastAt = 0;
+  let stateSequence = 0;
+  let impactId = 0;
 
-  activeTruongGiangSlime = {
+  const slime = {
     group: slimeGroup,
     mesh: slimeMesh,
     speechEl,
+    speechTimer: null,
     target,
+    targetId,
+    ownerId,
+    entityId,
+    isAuthority,
+    impactId,
+    lastStateSequence: 0,
+    lastStateAt: performance.now(),
+    remotePosition: slimeGroup.position.clone(),
+    remoteRotationY: 0,
+    remoteMeshRotationX: 0,
+    remoteMeshScale: slimeMesh.scale.clone(),
+    animFrame: null,
   };
+  activeTruongGiangSlimes.set(entityId, slime);
+  showSpeech('Mười Khó xuất chiêu! Chạy đâu con sâu! 🏃💨', 3200);
 
   function updateSlime() {
-    if (!activeTruongGiangSlime) return;
+    const active = activeTruongGiangSlimes.get(entityId);
+    if (!active) return;
 
     const now = performance.now();
     const dt = Math.min((now - lastTime) / 1000, 0.1);
     lastTime = now;
 
-    // Determine target world position
-    let tx = me.x * TILE;
-    let tz = me.y * TILE;
-    if (!isAdminTarget(target, me.name)) {
-      const pEntry = findPeerByName(target);
-      if (pEntry) {
-        tx = pEntry[1].x * TILE;
-        tz = pEntry[1].y * TILE;
+    if (!isAuthority) {
+      if (now - active.lastStateAt > 1500) {
+        removeTruongGiangSlime(entityId);
+        return;
       }
-    }
-
-    const dx = tx - slimeGroup.position.x;
-    const dz = tz - slimeGroup.position.z;
-    const dist = Math.hypot(dx, dz);
-
-    if (onGround) {
-      hopTimer -= dt;
-      // Slime squashing effect on ground
-      slimeMesh.scale.set(1.4, 0.6, 1.4);
-
-      if (hopTimer <= 0) {
-        // Slime jump launch!
-        onGround = false;
-        vy = 7.0 + Math.random() * 2.5; // Jump vertical velocity
-        slimeMesh.scale.set(0.75, 1.4, 0.75); // Stretch
-        hopTimer = 0.6 + Math.random() * 0.4;
-        playSfx('plinko_peg', 'casino');
-      }
+      slimeGroup.position.lerp(active.remotePosition, Math.min(1, dt * 12));
+      slimeGroup.rotation.y += (active.remoteRotationY - slimeGroup.rotation.y) * Math.min(1, dt * 12);
+      slimeMesh.rotation.x += (active.remoteMeshRotationX - slimeMesh.rotation.x) * Math.min(1, dt * 12);
+      slimeMesh.scale.lerp(active.remoteMeshScale, Math.min(1, dt * 12));
     } else {
-      // In air physics
-      vy -= 22.0 * dt; // gravity
-      slimeGroup.position.y += vy * dt;
-
-      // Move horizontally toward target while in air
-      if (dist > 0.3) {
-        const speed = 4.8;
-        slimeGroup.position.x += (dx / dist) * speed * dt;
-        slimeGroup.position.z += (dz / dist) * speed * dt;
-        slimeGroup.rotation.y = Math.atan2(dx, dz);
+      pesterCooldown = Math.max(0, pesterCooldown - dt);
+      let tx = me.x * TILE;
+      let tz = me.y * TILE;
+      if (targetId !== net?.selfId) {
+        const targetPeer = peers.get(targetId);
+        if (targetPeer) {
+          tx = targetPeer.x * TILE;
+          tz = targetPeer.y * TILE;
+        }
       }
 
-      // Air rotation spin
-      slimeMesh.rotation.x += dt * 3.5;
+      const dx = tx - slimeGroup.position.x;
+      const dz = tz - slimeGroup.position.z;
+      const dist = Math.hypot(dx, dz);
 
-      // Check ground landing
-      if (slimeGroup.position.y <= 0) {
-        slimeGroup.position.y = 0;
-        vy = 0;
-        onGround = true;
-        slimeMesh.rotation.x = 0;
-        slimeMesh.scale.set(1.4, 0.6, 1.4); // Land squash
-        playSfx('plinko_peg', 'casino');
+      if (onGround) {
+        hopTimer -= dt;
+        slimeMesh.scale.set(1.4, 0.6, 1.4);
 
-        // Check if close enough to pester target
-        pesterCooldown -= 0.6;
-        if (dist < 2.0 && pesterCooldown <= 0) {
-          pesterCooldown = 3.0;
-          const randomQuote = funnyQuotes[Math.floor(Math.random() * funnyQuotes.length)];
-          showSpeech(randomQuote, 2500);
-          playSfx('slap', 'casino');
+        if (hopTimer <= 0) {
+          onGround = false;
+          vy = 7.0 + Math.random() * 2.5;
+          slimeMesh.scale.set(0.75, 1.4, 0.75);
+          hopTimer = 0.6 + Math.random() * 0.4;
+          playSfx('plinko_peg', 'casino');
+        }
+      } else {
+        vy -= 22.0 * dt;
+        slimeGroup.position.y += vy * dt;
 
-          if (isAdminTarget(target, me.name)) {
-            toast(`🤪 Trường Giang Slime vừa ủi mông trêu chọc bạn: "${randomQuote}"`);
-            me.vx = (Math.random() - 0.5) * 6;
-            me.vy = 4;
-            me.av?.showTomatoSplat?.();
-          } else {
-            const pEntry = findPeerByName(target);
-            if (pEntry) {
-              pEntry[1].av?.showTomatoSplat?.();
-            }
+        if (dist > 0.3) {
+          const speed = 4.8;
+          slimeGroup.position.x += (dx / dist) * speed * dt;
+          slimeGroup.position.z += (dz / dist) * speed * dt;
+          slimeGroup.rotation.y = Math.atan2(dx, dz);
+        }
+
+        slimeMesh.rotation.x += dt * 3.5;
+
+        if (slimeGroup.position.y <= 0) {
+          slimeGroup.position.y = 0;
+          vy = 0;
+          onGround = true;
+          slimeMesh.rotation.x = 0;
+          slimeMesh.scale.set(1.4, 0.6, 1.4);
+          playSfx('plinko_peg', 'casino');
+
+          if (dist < 2.0 && pesterCooldown <= 0) {
+            pesterCooldown = 3.0;
+            const randomQuote = funnyQuotes[Math.floor(Math.random() * funnyQuotes.length)];
+            showSpeech(randomQuote, 2500);
+            playSfx('slap', 'casino');
+            impactId += 1;
+            active.impactId = impactId;
+            showTruongGiangImpact(targetId);
           }
         }
       }
+
+      if (net && now - lastStateBroadcastAt >= 100) {
+        lastStateBroadcastAt = now;
+        net.send('op', {
+          k: 'admin_truonggiang_state',
+          entityId,
+          ownerId,
+          target,
+          targetId,
+          by: byAdmin,
+          spawnX: Number.isFinite(options.spawnX) ? options.spawnX : me.x * TILE + 2,
+          spawnZ: Number.isFinite(options.spawnZ) ? options.spawnZ : me.y * TILE + 2,
+          stateSequence: ++stateSequence,
+          x: slimeGroup.position.x,
+          y: slimeGroup.position.y,
+          z: slimeGroup.position.z,
+          rotationY: slimeGroup.rotation.y,
+          meshRotationX: slimeMesh.rotation.x,
+          meshScale: slimeMesh.scale.toArray(),
+          impactId,
+          impactTargetId: targetId,
+          v: Date.now(),
+        });
+      }
     }
 
-    // Update floating speech bubble screen projection
     if (speechEl.style.display !== 'none' && camera) {
       const slimePos = slimeGroup.position.clone();
       slimePos.y += 1.8;
@@ -6362,10 +6773,10 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin') {
       }
     }
 
-    truonggiangAnimFrame = requestAnimationFrame(updateSlime);
+    active.animFrame = requestAnimationFrame(updateSlime);
   }
 
-  truonggiangAnimFrame = requestAnimationFrame(updateSlime);
+  slime.animFrame = requestAnimationFrame(updateSlime);
 }
 
 // ============================================================================
@@ -6671,6 +7082,8 @@ export const ADMIN_COMMAND_CATALOG = [
   { cmd: ':rocket', usage: ':rocket <tên>', desc: 'Bắn bay vút lên trời như tên lửa' },
   { cmd: ':slap', usage: ':slap <tên>', desc: 'Tát bay người chơi kèm ném cà chua' },
   { cmd: ':danceall', usage: ':danceall', desc: 'Bắt toàn bộ server cùng nhảy múa' },
+  { cmd: ':flex', usage: ':flex [tên]', desc: 'Flex cơ bắp đồng bộ (chỉ hiệu ứng)' },
+  { cmd: ':flexall', usage: ':flexall', desc: 'Cho toàn server cùng flex cơ bắp' },
   { cmd: ':clown', usage: ':clown <tên>', desc: 'Đội mũ bí ngô hề hước' },
   { cmd: ':fire', usage: ':fire <tên>', desc: 'Gắn lửa bốc cháy bập bùng' },
   { cmd: ':blind', usage: ':blind <tên>', desc: 'Làm tối đen màn hình mục tiêu' },
@@ -7173,8 +7586,36 @@ function executeAdminCommand(raw) {
     }
     case 'truonggiang':
     case 'tg': {
-      const targetName = args[0] || null;
-      emitOp({ k: 'admin_truonggiang', target: targetName, active: true, by: me.name });
+      const requestedTarget = args[0];
+      let targetEntry = requestedTarget && normalizePlayerName(requestedTarget) !== 'all'
+        ? findPeerByName(requestedTarget)
+        : null;
+      if (requestedTarget && normalizePlayerName(requestedTarget) !== 'all' &&
+          !isAdminTarget(requestedTarget, me.name) && !targetEntry) {
+        toast(`Không tìm thấy người chơi "${requestedTarget}".`);
+        return true;
+      }
+      if (isAdminTarget(requestedTarget, me.name)) targetEntry = [net.selfId, me];
+      if (!targetEntry) {
+        const candidates = Array.from(peers.entries()).filter(([, player]) =>
+          player.name && !isAdminUser(player.name) && !player.isAdmin,
+        );
+        targetEntry = candidates.length
+          ? candidates[Math.floor(Math.random() * candidates.length)]
+          : [net.selfId, me];
+      }
+      const [targetId, targetPlayer] = targetEntry;
+      emitOp({
+        k: 'admin_truonggiang',
+        target: targetPlayer.name,
+        targetId,
+        entityId: `${net.selfId}:${Date.now()}:${Math.random()}`,
+        ownerId: net.selfId,
+        spawnX: me.x * TILE + 2 + (Math.random() - 0.5) * 4,
+        spawnZ: me.y * TILE + 2 + (Math.random() - 0.5) * 4,
+        active: true,
+        by: me.name,
+      });
       return true;
     }
     case 'untruonggiang':
@@ -7204,6 +7645,14 @@ function executeAdminCommand(raw) {
     case 'spinall': {
       const targetName = (cmd === 'spinall' || args[0] === 'all') ? 'all' : (args[0] || me.name);
       emitOp({ k: 'admin_spin', target: targetName, by: me.name });
+      return true;
+    }
+    case 'flex':
+    case 'flexall': {
+      const targetName = cmd === 'flexall' || normalizePlayerName(args[0]) === 'all'
+        ? 'all'
+        : args[0] || me.name;
+      emitOp({ k: 'admin_flex', target: targetName, by: me.name });
       return true;
     }
     case 'disco': {
@@ -7445,4 +7894,3 @@ function executeAdminCommand(raw) {
 // Initial UI refresh for top-right wallet and title badges
 updateCasinoChipsUI();
 updateTitleUI();
-
