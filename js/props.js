@@ -1725,6 +1725,7 @@ export function buildSlotMachine() {
 // 5. PLINKO BOARD (THÁP THẢ BÓNG PLINKO)
 // ============================================================================
 export function buildPlinkoBoard() {
+  const maxActiveBalls = 5;
   const g = new THREE.Group();
 
   const darkMat = mat('#0b0f19', { roughness: 0.35 });
@@ -1779,6 +1780,7 @@ export function buildPlinkoBoard() {
     pegs,
     activeBalls: [],
     dropBall(onLand) {
+      if (this.activeBalls.length >= maxActiveBalls) return false;
       const ballMat = mat('#facc15', { emissive: '#eab308', emissiveIntensity: 0.75, roughness: 0.2 });
       const b = part(g, G.sph(), ballMat, [ (Math.random() - 0.5) * 0.08, 3.35, 0.12 ], [0.07, 0.07, 0.07]);
       this.activeBalls.push({
@@ -1789,6 +1791,7 @@ export function buildPlinkoBoard() {
         vy: 0,
         onLand,
       });
+      return true;
     }
   };
 

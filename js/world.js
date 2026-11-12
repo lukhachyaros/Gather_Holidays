@@ -690,8 +690,9 @@ export class World {
       } else if (map === 'casino' && target === 'plinko') {
         const dropBall = group.userData.dropBall;
         group.userData.dropBall = function (onLand) {
-          dropBall.call(this, onLand);
+          if (dropBall.call(this, onLand) === false) return false;
           replacement.userData.drop?.();
+          return true;
         };
       }
       if (hasAnimation) {
@@ -1149,6 +1150,14 @@ export class World {
           b.x += b.vx * dt;
           b.y += b.vy * dt;
 
+          if (b.y > 0.48 && b.x < -1.015) {
+            b.x = -1.015;
+            b.vx = Math.abs(b.vx) * 0.65;
+          } else if (b.y > 0.48 && b.x > 1.015) {
+            b.x = 1.015;
+            b.vx = -Math.abs(b.vx) * 0.65;
+          }
+
           // Check collisions against pegs
           for (const peg of u.pegs) {
             const dx = b.x - peg.x;
@@ -1166,14 +1175,16 @@ export class World {
           b.mesh.position.y = b.y;
 
           if (b.y <= 0.48) {
-            // Reached reward bin! Calculate bin index
+            // Award only when the ball lands inside a visible bin, not on dividers or outside.
             const binW = 2.1 / 11;
-            const binIdx = Math.max(0, Math.min(10, Math.floor((b.x + 1.05) / binW)));
+            const relativeX = b.x + 1.05;
+            const binIdx = Math.floor(relativeX / binW);
+            const binOffset = relativeX - binIdx * binW;
             const mults = ['5x', '3x', '2x', '1.2x', '0.5x', '0.2x', '0.5x', '1.2x', '2x', '3x', '5x'];
-            b.onLand?.(mults[binIdx] || '1x');
-            setTimeout(() => {
-              co.remove(b.mesh);
-            }, 1200);
+            const landedInBin = binIdx >= 0 && binIdx < mults.length &&
+              binOffset >= binW * 0.05 && binOffset < binW * 0.95;
+            b.onLand?.(landedInBin ? mults[binIdx] : null);
+            co.remove(b.mesh);
             u.activeBalls.splice(bi, 1);
           }
         }

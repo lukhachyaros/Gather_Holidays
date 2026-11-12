@@ -499,7 +499,7 @@ try {
   updateGraphicsQualityHint();
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
   initAudio();
-  initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId);
+  initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId, logChat);
   initMobileControls();
   setupBuilderToolsInteraction();
   setupAdminCommandAutocomplete();
@@ -1828,6 +1828,7 @@ const handlers = {
 function applyOp(op, senderId = null) {
   switch (op.k) {
     case 'theme': {
+      if (!state?.hostId || senderId !== state.hostId) return;
       if (THEMES[op.theme]) {
         state.theme = op.theme;
         state.map = buildThemeMap(op.theme);
@@ -5374,48 +5375,33 @@ function updateCamera(dt = 0.016) {
 let lastRoomBeforeCasino = null;
 
 function enterSecretCasino() {
-  leaveSeat();
+  if (!net || !me?.started || roomName === SECRET_CASINO_ROOM) return;
   lastRoomBeforeCasino = {
     id: roomName,
     title: roomTitle,
     theme: state?.theme || 'christmas',
+    passHash: state?.passHash || '',
   };
-  state.theme = 'casino';
-  state.map = buildThemeMap('casino');
-  state.decor = [];
-  world.sync(state, roomName);
-  me.x = 14.5;
-  me.y = 17.5;
-  me.h = 0;
-  me.vy = 0;
-  yaw = Math.PI;
-  pitch = 0.15;
-  if (me.av?.root) {
-    me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
-  }
-  playBgm('casino');
-  minigames?.setTheme('casino');
-  emitOp({ k: 'theme', theme: 'casino', isSecretChamber: true, byHost: state?.hostId || net?.selfId });
-  toast('🎰 Đã bước vào Mật Thất Casino & Pub Hoàng Gia!');
+  toast('🎰 Đang chuyển riêng bạn tới Mật Thất Casino!');
+  joinRoomConfig({
+    id: SECRET_CASINO_ROOM,
+    title: 'Mật Thất Casino & Pub Hoàng Gia',
+    theme: 'casino',
+    passHash: '',
+  });
 }
 
 function exitSecretCasino() {
-  const returnTheme = lastRoomBeforeCasino?.theme || 'christmas';
+  const returnRoom = lastRoomBeforeCasino || {
+    id: OFFICIAL_ROOMS[0].id,
+    title: OFFICIAL_ROOMS[0].title,
+    theme: OFFICIAL_ROOMS[0].theme,
+    passHash: '',
+  };
+  lastRoomBeforeCasino = null;
+  verifiedPassHash = returnRoom.passHash || '';
   toast('🚪 Bạn đã bước qua cánh cửa cổ kính trở về thế giới bên trên!');
-  leaveSeat();
-  state.theme = returnTheme;
-  state.map = buildThemeMap(returnTheme);
-  world.sync(state, roomName);
-  me.x = 14.5;
-  me.y = 18.5;
-  me.h = 0;
-  me.vy = 0;
-  if (me.av?.root) {
-    me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
-  }
-  playBgm(returnTheme);
-  minigames?.setTheme(returnTheme);
-  emitOp({ k: 'theme', theme: returnTheme, byHost: state?.hostId || net?.selfId });
+  joinRoomConfig(returnRoom);
 }
 
 let activeFoundNoteCode = '';
