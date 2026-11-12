@@ -173,9 +173,30 @@ export async function instantiateModelAsset(asset) {
     const url = URL.createObjectURL(new Blob([asset.source], { type: 'text/javascript' }));
     try {
       const module = await import(url);
-      const factory = module.createModel || module.default || module.createOngPhuc || module.createOngTho;
+      const exports = Object.entries(module);
+      const modelName = asset.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const namedFactories = exports.filter(([name, value]) =>
+        typeof value === 'function' && /^(create|build|make)/i.test(name)
+      );
+      const matchingFactory = namedFactories.find(([name]) =>
+        name.toLowerCase().replace(/^(create|build|make)/, '').replace(/[^a-z0-9]/g, '').startsWith(modelName)
+      );
+      const genericFactories = namedFactories.filter(([name]) =>
+        /^(create|build|make)(model|object|group)$/i.test(name)
+      );
+      const factory = module.createModel ||
+        module.default ||
+        matchingFactory?.[1] ||
+        (genericFactories.length === 1 ? genericFactories[0][1] : null) ||
+        (namedFactories.length === 1 ? namedFactories[0][1] : null) ||
+        (exports.filter(([, value]) => typeof value === 'function').length === 1
+          ? exports.find(([, value]) => typeof value === 'function')[1]
+          : null);
       if (typeof factory !== 'function') {
-        throw new Error('Module .js cần export createModel() hoặc export default function.');
+        const exportNames = exports.map(([name]) => name).join(', ') || 'không có export';
+        throw new Error(
+          `Module .js cần export createModel(), export default, hoặc hàm create${asset.name}/build${asset.name}(). Export tìm thấy: ${exportNames}.`
+        );
       }
       object = await factory();
     } finally {

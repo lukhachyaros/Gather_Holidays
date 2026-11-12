@@ -77,7 +77,7 @@
             <span>hoặc bấm để chọn tệp .js / .json</span>
           </label>
           <input id="modelFileInput" type="file" accept=".js,.json,text/javascript,application/json" multiple hidden>
-          <p class="library-hint">.js: export hàm createModel() hoặc export default (không dùng import tương đối). .json: Three.js Object JSON. Model được gán vào bản đồ và loại model đang chọn.</p>
+          <p class="library-hint">.js: export createModel(), export default hoặc hàm createTênModel()/buildTênModel() (không dùng import tương đối). .json: Three.js Object JSON. Model được gán vào bản đồ và loại model đang chọn.</p>
 
           <div class="section-title library-list-title"><span>🗂 Model đã nạp</span></div>
           <div id="libraryList" class="library-list"></div>
