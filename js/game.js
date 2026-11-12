@@ -32,7 +32,7 @@ import {
 import { World, TILE } from './world.js?v=2026111221';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=2026111208';
 import { emojiSprite, part, G, mat } from './props.js';
-import { RtcManager } from './rtc.js?v=20261112_voice_nostr_direct';
+import { RtcManager } from './rtc.js?v=20261112_native_voice';
 import {
   initAudio,
   playBgm,
@@ -71,6 +71,7 @@ let rtc = null;
 let minigames = null;
 
 function initRtc(selfId, roomId) {
+  let voiceSignalSequence = 0;
   if (rtc) {
     try {
       rtc.destroy();
@@ -79,8 +80,12 @@ function initRtc(selfId, roomId) {
   rtc = new RtcManager({
     selfId,
     roomId: roomId || state?.room || 'quang-truong-noel',
+    getPeerIds: () => [...peers.keys()],
     sendSignal: (targetId, signal) => {
-      net?.send('rtc_signal', signal, targetId);
+      net?.send('rtc_signal', {
+        ...signal,
+        _rtcSignalId: `${selfId}:${++voiceSignalSequence}`,
+      }, targetId);
     },
     onRemoteScreenTrack: (peerId, stream) => {
       updateScreenShareOnTv();
@@ -1625,6 +1630,7 @@ async function addOrUpdatePeer(id, d) {
 const handlers = {
   join(id) {
     rtc?.getOrCreatePeer(id);
+    if (rtc?.localVoiceStream) rtc.connectPeer(id);
     if (me?.started && !isKicked) {
       if (state?.kickedIds?.includes(id)) {
         net.send('op', { k: 'kick', targetId: id, byHost: state.hostId, v: Date.now() }, id);
@@ -1688,6 +1694,7 @@ const handlers = {
     }
     addOrUpdatePeer(id, d);
     rtc?.getOrCreatePeer(id);
+    if (rtc?.localVoiceStream) rtc.connectPeer(id);
   },
   rtc_signal(d, id) {
     rtc?.handleSignal(id, d);
