@@ -411,6 +411,14 @@ export class World {
         const pls = buildPhucLocThoShrine();
         pls.position.set(h.x * TILE, 0, h.y * TILE);
         addMapModel(h.type, pls);
+        for (const [statueName, target] of [
+          ['statue-ong-phuc', 'ong_phuc_statue'],
+          ['statue-ong-loc', 'ong_loc_statue'],
+          ['statue-ong-tho', 'ong_tho_statue'],
+        ]) {
+          const statue = pls.getObjectByName(statueName);
+          if (statue) this.applyModelReplacement(themeKey, target, statue);
+        }
       } else if (h.type === 'dragon_altar') {
         const da = buildDragonAltar();
         da.position.set(h.x * TILE, 0, h.y * TILE);
@@ -522,7 +530,7 @@ export class World {
       }
       const template = await this.replacementTemplates.get(key);
       const replacement = template?.clone(true);
-      if (!replacement || group.parent !== this.group) return;
+      if (!replacement || !this.group.getObjectById(group.id)) return;
 
       group.updateWorldMatrix(true, true);
       const originalBounds = new THREE.Box3().setFromObject(group);

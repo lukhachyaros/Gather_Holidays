@@ -327,7 +327,7 @@ async function addModelFile(file) {
   renderLibraryList();
   updateCurrentReplacement();
   await selectAsset(asset.id, model);
-  showToast(`Đã thêm và gán model "${asset.name}".`);
+  showToast(`Đã thêm "${asset.name}" trên máy này. Xuất cấu hình và cập nhật repo để mọi người cùng thấy.`);
 }
 
 async function handleModelFiles(files) {
@@ -355,7 +355,7 @@ function assignSelectedAsset() {
   saveLocalLibrary();
   renderLibraryList();
   updateCurrentReplacement();
-  showToast('Đã thay model cho bản đồ này.');
+  showToast('Đã thay model trên máy này. Xuất cấu hình và cập nhật repo để mọi người cùng thấy.');
 }
 
 function removeSelectedAsset() {

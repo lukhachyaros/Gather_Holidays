@@ -486,6 +486,7 @@ function buildLegacyPhucLocThoShrine() {
   // --- STATUE 2: ÔNG LỘC (Center: x = 0, Tallest & Grandest) ---
   // Robe: Emerald Jade silk with golden dragon sash. Imperial Hat with wing flaps, holding Jade Ruyi & Pearl!
   const locGroup = new THREE.Group();
+  locGroup.name = 'statue-ong-loc';
   locGroup.position.set(0, 1.25, -0.35);
 
   // Triple Lotus Throne (Đài sen hoàng gia)
@@ -691,28 +692,42 @@ function buildLegacyPhucLocThoShrine() {
 
 export function buildPhucLocThoShrine() {
   const g = buildLegacyPhucLocThoShrine();
-  const phucPosition = new THREE.Vector3(-1.35, 1.22, -0.35);
-  const thoPosition = new THREE.Vector3(1.35, 1.22, -0.35);
 
   for (const child of [...g.children]) {
     if (child.name === 'legacy-ong-phuc' || child.name === 'legacy-ong-tho') g.remove(child);
   }
 
-  const phuc = createOngPhuc({ height: 1.8, pedestal: true });
-  phuc.position.copy(phucPosition);
-  const lblPhuc = labelSprite('✨ ÔNG PHÚC ✨', 'rgba(185,28,28,0.92)', '#fef08a', 0.40);
-  lblPhuc.position.set(0, 2.05, 0);
-  phuc.add(lblPhuc);
-  g.add(phuc);
+  g.add(buildOngPhucStatue());
+  g.add(buildOngThoStatue());
 
-  const tho = createOngTho({ height: 1.8 });
-  tho.position.copy(thoPosition);
-  const lblTho = labelSprite('🍑 ÔNG THỌ 🍑', 'rgba(217,119,6,0.92)', '#fef08a', 0.40);
-  lblTho.position.set(0, 2.05, 0);
-  tho.add(lblTho);
-  g.add(tho);
-
+  g.userData.statueTargets = ['statue-ong-phuc', 'statue-ong-loc', 'statue-ong-tho'];
   return g;
+}
+
+export function buildOngPhucStatue() {
+  const statue = createOngPhuc({ height: 1.8, pedestal: true });
+  statue.name = 'statue-ong-phuc';
+  statue.position.set(-1.35, 1.22, -0.35);
+  const label = labelSprite('✨ ÔNG PHÚC ✨', 'rgba(185,28,28,0.92)', '#fef08a', 0.40);
+  label.position.set(0, 2.05, 0);
+  statue.add(label);
+  return statue;
+}
+
+export function buildOngLocStatue() {
+  const statue = buildLegacyPhucLocThoShrine().getObjectByName('statue-ong-loc');
+  if (!statue) throw new Error('Không tìm thấy tượng Ông Lộc trong điện thờ.');
+  return statue.clone(true);
+}
+
+export function buildOngThoStatue() {
+  const statue = createOngTho({ height: 1.8 });
+  statue.name = 'statue-ong-tho';
+  statue.position.set(1.35, 1.22, -0.35);
+  const label = labelSprite('🍑 ÔNG THỌ 🍑', 'rgba(217,119,6,0.92)', '#fef08a', 0.40);
+  label.position.set(0, 2.05, 0);
+  statue.add(label);
+  return statue;
 }
 
 // ============================================================================

@@ -18,6 +18,9 @@ import {
   buildIllusionWall,
   buildLoveFountain,
   buildLogSeat,
+  buildOngLocStatue,
+  buildOngPhucStatue,
+  buildOngThoStatue,
   buildOrnamentTable,
   buildPhucLocThoShrine,
   buildPlinkoBoard,
@@ -80,6 +83,9 @@ export const MODEL_MAPS = {
       ...COMMON_MAP_TARGETS,
       mai_tree: 'Cây mai',
       phuc_loc_tho_shrine: 'Điện Phúc Lộc Thọ',
+      ong_phuc_statue: 'Tượng Ông Phúc',
+      ong_loc_statue: 'Tượng Ông Lộc',
+      ong_tho_statue: 'Tượng Ông Thọ',
       dragon_altar: 'Đài triệu hồi rồng',
       firework_launcher: 'Bệ phóng pháo hoa',
       firecracker_table: 'Bàn pháo tép',
@@ -215,6 +221,14 @@ export async function instantiateModelAsset(asset) {
 
 export async function instantiateReplacement(map, target) {
   const library = await loadModelLibrary();
+  const isShrineStatue = ['ong_phuc_statue', 'ong_loc_statue', 'ong_tho_statue'].includes(target);
+  if (
+    map === 'tet' &&
+    isShrineStatue &&
+    library.replacements.some(item => item.map === map && item.target === 'phuc_loc_tho_shrine')
+  ) {
+    return null;
+  }
   const replacement = library.replacements.find(item => item.map === map && item.target === target);
   if (!replacement) return null;
   const asset = library.assets.find(item => item.id === replacement.assetId);
@@ -266,6 +280,9 @@ export function instantiateDefaultModel(map, target) {
     'halloween:vampire_npc': buildVampireNPC,
     'tet:mai_tree': buildGiantMaiTree,
     'tet:phuc_loc_tho_shrine': buildPhucLocThoShrine,
+    'tet:ong_phuc_statue': buildOngPhucStatue,
+    'tet:ong_loc_statue': buildOngLocStatue,
+    'tet:ong_tho_statue': buildOngThoStatue,
     'tet:dragon_altar': buildDragonAltar,
     'tet:firework_launcher': buildFireworkLauncher,
     'tet:firecracker_table': buildFirecrackerTable,

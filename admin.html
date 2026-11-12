@@ -53,8 +53,8 @@
         <span class="badge-role">ADMIN</span>
       </div>
       <div class="admin-header-actions">
-        <button id="btnSaveLibrary" class="btn-sub primary-action">💾 Lưu thư viện</button>
-        <button id="btnExportLibrary" class="btn-sub">⬇ Xuất cấu hình</button>
+        <button id="btnSaveLibrary" class="btn-sub primary-action">💾 Lưu trên máy</button>
+        <button id="btnExportLibrary" class="btn-sub">⬇ Xuất để chia sẻ</button>
         <button id="btnImportLibrary" class="btn-sub">📂 Nạp cấu hình</button>
         <input id="libraryConfigInput" type="file" accept=".json,application/json" hidden>
         <button id="btnAdminLogout" class="btn-danger">Đăng xuất</button>
@@ -105,9 +105,8 @@
           <button id="btnAssignModel" class="btn-admin-primary" disabled>Thay model đang chọn</button>
           <button id="btnRemoveModel" class="btn-danger" disabled>Xóa model khỏi thư viện</button>
           <div class="library-note">
-            <b>Chia sẻ cho mọi người:</b> lưu thư viện, xuất cấu hình JSON rồi thay
-            <code>design_model/model-library.json</code> trong repo bằng tệp vừa xuất và push lên GitHub.
-            Thư viện lưu trong trình duyệt chỉ áp dụng trên máy này cho đến khi cấu hình được push.
+            <b>Để mọi người cùng thấy model:</b> web game không có máy chủ lưu tệp tải lên. Model mới hiện chỉ lưu trên trình duyệt này.
+            Chọn <b>Xuất để chia sẻ</b>, thay tệp <code>design_model/model-library.json</code> trong repo bằng tệp xuất ra, rồi push repo để cập nhật cho tất cả người chơi.
           </div>
         </section>
       </aside>
