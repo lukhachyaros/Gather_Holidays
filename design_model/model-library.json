@@ -12,13 +12,43 @@
       "id": "design-model-ngai-vang",
       "name": "ngaiVang",
       "format": "module",
-      "moduleUrl": "../design_model/ngaiVang.js"
+      "moduleUrl": "../design_model/ngaiVang.js?v=2026111220"
     },
     {
       "id": "design-model-love-seat",
       "name": "love_seat",
       "format": "module",
       "moduleUrl": "../design_model/love_seat.js"
+    },
+    {
+      "id": "design-model-skeleton-chair",
+      "name": "skeletonChair",
+      "format": "module",
+      "moduleUrl": "../design_model/skeletonChair.js?v=2026111220"
+    },
+    {
+      "id": "design-model-wood-sofa",
+      "name": "woodSofa",
+      "format": "module",
+      "moduleUrl": "../design_model/woodSofa.js?v=2026111223"
+    },
+    {
+      "id": "design-model-christmas-chair",
+      "name": "christmasChair",
+      "format": "module",
+      "moduleUrl": "../design_model/christmasChair.js?v=2026111220"
+    },
+    {
+      "id": "design-model-christmas-sofa",
+      "name": "christmasSofa",
+      "format": "module",
+      "moduleUrl": "../design_model/christmasSofa.js?v=2026111223"
+    },
+    {
+      "id": "design-model-halloween-sofa",
+      "name": "halloweenSofa",
+      "format": "module",
+      "moduleUrl": "../design_model/halloweenSofa.js?v=2026111221"
     },
     {
       "id": "design-model-kumquat",
@@ -95,6 +125,11 @@
   ],
   "replacements": [
     { "map": "tet", "target": "single_chair", "assetId": "design-model-ngai-vang" },
+    { "map": "tet", "target": "couple_sofa", "assetId": "design-model-wood-sofa" },
+    { "map": "christmas", "target": "single_chair", "assetId": "design-model-christmas-chair" },
+    { "map": "christmas", "target": "couple_sofa", "assetId": "design-model-christmas-sofa" },
+    { "map": "halloween", "target": "single_chair", "assetId": "design-model-skeleton-chair" },
+    { "map": "halloween", "target": "couple_sofa", "assetId": "design-model-halloween-sofa" },
     { "map": "valentine", "target": "couple_sofa", "assetId": "design-model-love-seat" },
     { "map": "tet", "target": "ong_loc_statue", "assetId": "design-model-ong-loc" },
     { "map": "tet", "target": "map_tree", "assetId": "design-model-kumquat" },

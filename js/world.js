@@ -451,6 +451,7 @@ export class World {
       else if (s.kind === 'couple') mesh = buildCoupleSofa();
       else if (s.kind === 'log') mesh = buildLogSeat(s.meshRot || 0);
       if (mesh) {
+        if (s.kind === 'single') mesh.scale.multiplyScalar(1.1);
         mesh.position.set(s.x * TILE, 0, s.y * TILE);
         if (s.kind !== 'log') mesh.rotation.y = 0; // faces North (-Z)
         this.group.add(mesh);

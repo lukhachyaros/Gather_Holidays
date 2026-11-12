@@ -163,5 +163,6 @@ export function buildSingleChair() {
   });
   g.add(inst);
 
+  outer.userData.replacementScale = 1.2;
   return outer;
 }
