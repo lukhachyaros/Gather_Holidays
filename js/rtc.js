@@ -44,6 +44,8 @@ export class RtcManager {
     this.localVoiceSource = null;
     this.isLocalSpeaking = false;
     this.vadInterval = null;
+    this.audioUnlockHandler = null;
+    this.audioContextStateHandler = null;
 
     // Settings
     this.proximityEnabled = true;
@@ -57,7 +59,6 @@ export class RtcManager {
 
     // Trystero Room instance & actions
     this.room = null;
-    this.sendHandshake = null;
 
     this.initAudioContext();
     this.initTrystero();
@@ -76,19 +77,18 @@ export class RtcManager {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (AudioContextClass) {
         this.audioCtx = new AudioContextClass();
+        this.audioContextStateHandler = () => {
+          for (const peer of this.remotePeers.values()) this.updateRemoteAudioRouting(peer);
+        };
+        this.audioCtx.addEventListener('statechange', this.audioContextStateHandler);
       }
     }
-    const resumeAudio = () => {
-      if (this.audioCtx && this.audioCtx.state !== 'running') {
-        this.audioCtx.resume().catch(() => {});
-      }
-      this.unlockAudioPlayback();
-    };
-    if (typeof window !== 'undefined') {
-      window.addEventListener('pointerdown', resumeAudio, { passive: true });
-      window.addEventListener('keydown', resumeAudio, { passive: true });
-      window.addEventListener('click', resumeAudio, { passive: true });
-      window.addEventListener('touchstart', resumeAudio, { passive: true });
+    if (typeof window !== 'undefined' && !this.audioUnlockHandler) {
+      this.audioUnlockHandler = () => this.unlockAudioPlayback();
+      window.addEventListener('pointerdown', this.audioUnlockHandler, { passive: true });
+      window.addEventListener('keydown', this.audioUnlockHandler, { passive: true });
+      window.addEventListener('click', this.audioUnlockHandler, { passive: true });
+      window.addEventListener('touchstart', this.audioUnlockHandler, { passive: true });
     }
   }
 
@@ -105,92 +105,47 @@ export class RtcManager {
       console.log(`[Trystero] Joining voice room: ${cleanRoomId} with selfId=${this.selfId}`);
       this.room = joinRoom(config, cleanRoomId);
 
-      // Handshake action to associate Trystero peerId <-> game selfId
-      const handshake = this.room.makeAction('handshake');
-      this.handshake = handshake;
-
-      const handleJoin = tPeerId => {
-        console.log(`[Trystero] Peer joined room: ${tPeerId}`);
-        // Send our game selfId to the newcomer
-        try {
-          handshake.send({ selfId: this.selfId }, { target: tPeerId });
-        } catch (e) {
-          try { handshake.send({ selfId: this.selfId }, tPeerId); } catch {}
-        }
-
-        // If local voice or screen is currently active, push stream to the new peer
-        if (this.localVoiceStream) {
-          try {
-            this.room.addStream(this.localVoiceStream, { target: tPeerId, metadata: { kind: 'voice', selfId: this.selfId } });
-          } catch (e) {
-            try { this.room.addStream(this.localVoiceStream, tPeerId, { kind: 'voice', selfId: this.selfId }); } catch {}
-          }
-        }
-        if (this.localScreenStream) {
-          try {
-            this.room.addStream(this.localScreenStream, { target: tPeerId, metadata: { kind: 'screen', selfId: this.selfId } });
-          } catch (e) {
-            try { this.room.addStream(this.localScreenStream, tPeerId, { kind: 'screen', selfId: this.selfId }); } catch {}
-          }
-        }
+      const handleJoin = info => {
+        const userId = typeof info === 'string' ? info : info?.userId;
+        if (!userId) return;
+        console.log(`[Trystero] User joined room: ${userId}`);
+        if (this.localVoiceStream) this.publishStream(this.localVoiceStream, userId, 'voice');
+        if (this.localScreenStream) this.publishStream(this.localScreenStream, userId, 'screen');
       };
 
-      if (typeof this.room.onPeerJoin === 'function') {
+      const handleLeave = info => {
+        const userId = typeof info === 'string' ? info : info?.userId;
+        const peerId = typeof info === 'object' ? info?.peerId : null;
+        const gameId = this.trysteroToGameId.get(userId) ||
+          this.trysteroToGameId.get(peerId) || userId || peerId;
+        if (gameId) this.removePeer(gameId);
+        if (userId) this.trysteroToGameId.delete(userId);
+        if (peerId) this.trysteroToGameId.delete(peerId);
+      };
+
+      if (typeof this.room.onUserJoin === 'function') {
+        this.room.onUserJoin(handleJoin);
+      } else if (typeof this.room.onPeerJoin === 'function') {
         this.room.onPeerJoin(handleJoin);
-      } else {
-        this.room.onPeerJoin = handleJoin;
       }
 
-      handshake.onMessage = (data, peerInfo) => {
-        const tPeerId = typeof peerInfo === 'string' ? peerInfo : peerInfo?.peerId;
-        if (data && data.selfId && tPeerId) {
-          console.log(`[Trystero] Handshake confirmed: ${tPeerId} <==> ${data.selfId}`);
-          this.trysteroToGameId.set(tPeerId, data.selfId);
-          // If we already had streams stored under tPeerId, migrate to data.selfId
-          let p = this.remotePeers.get(tPeerId);
-          if (p && !this.remotePeers.has(data.selfId)) {
-            p.peerId = data.selfId;
-            p.tPeerId = tPeerId;
-            this.remotePeers.set(data.selfId, p);
-            this.remotePeers.delete(tPeerId);
-          }
-
-          // If we have active voice or screen stream, ensure the peer receives it
-          if (this.localVoiceStream) {
-            try {
-              this.room.addStream(this.localVoiceStream, { target: tPeerId, metadata: { kind: 'voice', selfId: this.selfId } });
-            } catch (e) {
-              try { this.room.addStream(this.localVoiceStream, tPeerId, { kind: 'voice', selfId: this.selfId }); } catch {}
-            }
-          }
-          if (this.localScreenStream) {
-            try {
-              this.room.addStream(this.localScreenStream, { target: tPeerId, metadata: { kind: 'screen', selfId: this.selfId } });
-            } catch (e) {
-              try { this.room.addStream(this.localScreenStream, tPeerId, { kind: 'screen', selfId: this.selfId }); } catch {}
-            }
-          }
-        }
-      };
-
-      const handleLeave = tPeerId => {
-        console.log(`[Trystero] Peer left room: ${tPeerId}`);
-        const gameId = this.trysteroToGameId.get(tPeerId) || tPeerId;
-        this.removePeer(gameId);
-        this.removePeer(tPeerId);
-        this.trysteroToGameId.delete(tPeerId);
-      };
-
-      if (typeof this.room.onPeerLeave === 'function') {
+      if (typeof this.room.onUserLeave === 'function') {
+        this.room.onUserLeave(handleLeave);
+      } else if (typeof this.room.onPeerLeave === 'function') {
         this.room.onPeerLeave(handleLeave);
-      } else {
-        this.room.onPeerLeave = handleLeave;
       }
 
       // Handle incoming streams (Microphone Voice or Screen Share)
-      const handleStream = (stream, tPeerId, metadata) => {
-        const gameId = metadata?.selfId || this.trysteroToGameId.get(tPeerId) || tPeerId;
-        console.log(`[Trystero] Incoming stream from ${gameId} (${tPeerId}):`, metadata, stream.getTracks().map(t => `${t.kind}:${t.id}`));
+      const handleStream = (stream, peerInfo, legacyMetadata) => {
+        const userId = typeof peerInfo === 'string' ? peerInfo : peerInfo?.userId;
+        const peerId = typeof peerInfo === 'object' ? peerInfo?.peerId : userId;
+        const metadata = typeof peerInfo === 'object' ? peerInfo?.metadata : legacyMetadata;
+        const gameId = metadata?.selfId || this.trysteroToGameId.get(userId) ||
+          this.trysteroToGameId.get(peerId) || userId || peerId;
+        if (!gameId) return;
+        if (userId) this.trysteroToGameId.set(userId, gameId);
+        if (peerId) this.trysteroToGameId.set(peerId, gameId);
+        console.log(`[Trystero] Incoming stream from ${gameId} (${userId || peerId}):`, metadata, stream.getTracks().map(t => `${t.kind}:${t.id}`));
 
         const hasVideo = stream.getVideoTracks().length > 0;
         const isScreen = metadata?.kind === 'screen' || hasVideo;
@@ -199,7 +154,7 @@ export class RtcManager {
           // Screen Share Video Track
           let p = this.remotePeers.get(gameId);
           if (!p) {
-            p = { peerId: gameId, tPeerId, audioEl: null, gainNode: null, source: null, screenStream: null };
+            p = { peerId: gameId, tPeerId: userId || peerId, audioEl: null, gainNode: null, source: null, screenStream: null };
             this.remotePeers.set(gameId, p);
           }
           p.screenStream = stream;
@@ -215,17 +170,39 @@ export class RtcManager {
           }
         } else {
           // Voice Audio Track
-          this.attachRemoteAudio(gameId, tPeerId, stream);
+          this.attachRemoteAudio(gameId, userId || peerId, stream);
         }
       };
 
       if (typeof this.room.onPeerStream === 'function') {
         this.room.onPeerStream(handleStream);
-      } else {
-        this.room.onPeerStream = handleStream;
       }
     } catch (err) {
       console.error('[Trystero] Initialization error:', err);
+    }
+  }
+
+  async publishStream(stream, target, kind) {
+    if (!this.room) {
+      console.warn(`[Trystero] Cannot publish ${kind} stream before joining the room.`);
+      this.toast('⚠️ Voice chat chưa kết nối tới phòng.');
+      return false;
+    }
+    if (typeof this.room.addStream !== 'function') {
+      console.error(`[Trystero] The room does not support publishing ${kind} streams.`);
+      this.toast('⚠️ Phiên bản voice chat hiện tại không hỗ trợ gửi media.');
+      return false;
+    }
+
+    const options = { metadata: { kind, selfId: this.selfId } };
+    if (target) options.target = target;
+    try {
+      await this.room.addStream(stream, options);
+      return true;
+    } catch (error) {
+      console.warn(`[Trystero] Could not publish ${kind} stream:`, error);
+      this.toast(`⚠️ Không thể gửi ${kind === 'voice' ? 'âm thanh' : 'màn hình'} tới người chơi.`);
+      return false;
     }
   }
 
@@ -280,13 +257,13 @@ export class RtcManager {
         this.localVoiceSource.connect(this.localAnalyser);
       }
 
-      // Broadcast voice stream to all peers in the room via Trystero
-      if (this.room) {
-        try {
-          this.room.addStream(stream, null, { kind: 'voice', selfId: this.selfId });
-        } catch (e) {
-          console.warn('[Trystero] Error broadcasting voice stream:', e);
-        }
+      if (!await this.publishStream(stream, null, 'voice')) {
+        stream.getTracks().forEach(track => track.stop());
+        this.localVoiceStream = null;
+        this.isMicMuted = true;
+        this.isMicRequested = false;
+        this.onMicStateChange?.(false);
+        return false;
       }
 
       this.startVadLoop();
@@ -388,13 +365,11 @@ export class RtcManager {
         };
       }
 
-      // Broadcast screen share stream to all peers via Trystero
-      if (this.room) {
-        try {
-          this.room.addStream(stream, null, { kind: 'screen', selfId: this.selfId });
-        } catch (e) {
-          console.warn('[Trystero] Error broadcasting screen stream:', e);
-        }
+      if (!await this.publishStream(stream, null, 'screen')) {
+        stream.getTracks().forEach(track => track.stop());
+        this.localScreenStream = null;
+        this.isSharingScreen = false;
+        return null;
       }
 
       this.onScreenShareChange?.(true, stream);
@@ -434,31 +409,11 @@ export class RtcManager {
 
     let p = this.remotePeers.get(peerId);
     if (!p) {
-      p = { peerId, tPeerId, audioEl: null, gainNode: null, source: null, screenStream: null };
+      p = { peerId, tPeerId, audioEl: null, gainNode: null, source: null, sourceStream: null, stream: null, screenStream: null };
       this.remotePeers.set(peerId, p);
     }
     p.tPeerId = tPeerId;
-
-    // 1. Direct Web Audio API Speaker Routing
-    if (this.audioCtx) {
-      try {
-        if (!p.gainNode) {
-          p.gainNode = this.audioCtx.createGain();
-          p.gainNode.gain.value = this.masterVoiceVolume;
-          p.gainNode.connect(this.audioCtx.destination);
-        }
-        if (p.source) {
-          try { p.source.disconnect(); } catch {}
-        }
-        p.source = this.audioCtx.createMediaStreamSource(stream);
-        p.source.connect(p.gainNode);
-        console.log(`[Trystero] Direct Web Audio speakers connected for ${peerId}`);
-      } catch (e) {
-        console.warn('[Trystero] Web Audio routing notice:', e);
-      }
-    }
-
-    // 2. HTMLAudioElement on DOM (dual fallback & Chromium WebRTC active sink)
+    p.stream = stream;
     let audio = p.audioEl;
     if (!audio) {
       audio = document.createElement('audio');
@@ -479,19 +434,55 @@ export class RtcManager {
     if (audio.srcObject !== stream) {
       audio.srcObject = stream;
     }
-    audio.muted = false;
-    audio.volume = this.masterVoiceVolume;
+    this.updateRemoteAudioRouting(p);
+  }
 
-    audio.play().catch(err => {
-      console.warn(`[Trystero] Audio element play waiting for click gesture:`, err);
-    });
+  updateRemoteAudioRouting(peer) {
+    if (!peer?.stream || !peer.audioEl) return;
+    const audio = peer.audioEl;
+
+    if (this.audioCtx?.state === 'running') {
+      try {
+        if (!peer.gainNode) {
+          peer.gainNode = this.audioCtx.createGain();
+          peer.gainNode.connect(this.audioCtx.destination);
+        }
+        peer.gainNode.gain.value = peer.voiceVolume ?? this.masterVoiceVolume;
+        if (!peer.source || peer.sourceStream !== peer.stream) {
+          if (peer.source) {
+            try { peer.source.disconnect(); } catch {}
+          }
+          peer.source = this.audioCtx.createMediaStreamSource(peer.stream);
+          peer.sourceStream = peer.stream;
+          peer.source.connect(peer.gainNode);
+        }
+        audio.muted = true;
+        audio.pause();
+        return;
+      } catch (error) {
+        console.warn('[Trystero] Web Audio routing failed; falling back to audio element:', error);
+      }
+    }
+
+    if (peer.source) {
+      try { peer.source.disconnect(); } catch {}
+      peer.source = null;
+      peer.sourceStream = null;
+    }
+    audio.muted = false;
+    audio.volume = peer.voiceVolume ?? this.masterVoiceVolume;
+    if (audio.paused) {
+      audio.play().catch(error => {
+        console.warn(`[Trystero] Audio playback is waiting for a user gesture (${peer.peerId}):`, error);
+      });
+    }
   }
 
   updatePeerDistances(myPos, peerPositionsMap) {
     if (!this.remotePeers.size) return;
 
     for (const [peerId, peer] of this.remotePeers.entries()) {
-      let volume = this.masterVoiceVolume;
+      let spatialFactor = 1;
 
       if (this.proximityEnabled && myPos && peerPositionsMap?.has(peerId)) {
         const pPos = peerPositionsMap.get(peerId);
@@ -499,40 +490,40 @@ export class RtcManager {
         const py = pPos.y ?? pPos.ty ?? myPos.y;
         const dist = Math.hypot(px - myPos.x, py - myPos.y);
 
-        if (dist <= this.minAudibleDistance) {
-          volume = this.masterVoiceVolume;
-        } else if (dist >= this.maxAudibleDistance) {
-          volume = this.masterVoiceVolume * 0.40;
-        } else {
+        if (dist > this.minAudibleDistance) {
           const t =
             (dist - this.minAudibleDistance) / (this.maxAudibleDistance - this.minAudibleDistance);
-          volume = this.masterVoiceVolume * (0.45 + 0.55 * Math.pow(1 - t, 1.2));
+          spatialFactor = 0.40 + 0.60 * Math.pow(1 - Math.min(1, t), 1.2);
         }
       }
 
-      const clampedVol = Math.max(0.35, Math.min(1, volume));
-      try {
-        if (peer.gainNode) {
-          peer.gainNode.gain.value = clampedVol;
-        }
-        if (peer.audioEl && Math.abs(peer.audioEl.volume - clampedVol) > 0.02) {
-          peer.audioEl.volume = clampedVol;
-        }
-      } catch {}
+      peer.voiceVolume = this.masterVoiceVolume * spatialFactor;
+      this.applyPeerVolume(peer);
+    }
+  }
+
+  applyPeerVolume(peer) {
+    const volume = Math.max(0, Math.min(1, peer.voiceVolume ?? this.masterVoiceVolume));
+    try {
+      if (peer.gainNode) peer.gainNode.gain.value = volume;
+      if (peer.audioEl && Math.abs(peer.audioEl.volume - volume) > 0.02) {
+        peer.audioEl.volume = volume;
+      }
+    } catch (error) {
+      console.warn(`[Trystero] Could not update voice volume for ${peer.peerId}:`, error);
     }
   }
 
   unlockAudioPlayback() {
     if (this.audioCtx && this.audioCtx.state !== 'running') {
-      this.audioCtx.resume().catch(() => {});
+      this.audioCtx.resume().then(() => {
+        for (const peer of this.remotePeers.values()) this.updateRemoteAudioRouting(peer);
+      }).catch(error => {
+        console.warn('[Trystero] AudioContext could not be resumed:', error);
+      });
     }
     for (const peer of this.remotePeers.values()) {
-      if (peer.audioEl && peer.audioEl.srcObject) {
-        peer.audioEl.muted = false;
-        if (peer.audioEl.paused) {
-          peer.audioEl.play().catch(() => {});
-        }
-      }
+      this.updateRemoteAudioRouting(peer);
     }
   }
 
@@ -540,10 +531,8 @@ export class RtcManager {
     this.proximityEnabled = !!enabled;
     if (!this.proximityEnabled) {
       for (const peer of this.remotePeers.values()) {
-        try {
-          if (peer.gainNode) peer.gainNode.gain.value = this.masterVoiceVolume;
-          if (peer.audioEl) peer.audioEl.volume = this.masterVoiceVolume;
-        } catch {}
+        peer.voiceVolume = this.masterVoiceVolume;
+        this.applyPeerVolume(peer);
       }
     }
   }
@@ -551,10 +540,8 @@ export class RtcManager {
   setMasterVoiceVolume(val) {
     this.masterVoiceVolume = Math.max(0, Math.min(1, val));
     for (const peer of this.remotePeers.values()) {
-      try {
-        if (peer.gainNode) peer.gainNode.gain.value = this.masterVoiceVolume;
-        if (peer.audioEl) peer.audioEl.volume = this.masterVoiceVolume;
-      } catch {}
+      peer.voiceVolume = this.masterVoiceVolume;
+      this.applyPeerVolume(peer);
     }
   }
 
@@ -563,14 +550,7 @@ export class RtcManager {
   }
 
   getOrCreatePeer(peerId) {
-    // Trystero automatically handles peer connections.
-    // Ensure handshake is sent to announce our selfId to the peer:
-    if (this.handshake) {
-      try {
-        this.handshake.send({ selfId: this.selfId });
-      } catch {}
-    }
-    return null;
+    return this.remotePeers.get(peerId) || null;
   }
 
   handleSignal(fromPeerId, signal) {
@@ -581,6 +561,7 @@ export class RtcManager {
     const peer = this.remotePeers.get(peerId);
     if (!peer) return;
 
+    if (peer.screenStream) this.onRemoteScreenTrack?.(peerId, null);
     if (peer.source) {
       try { peer.source.disconnect(); } catch {}
     }
@@ -614,10 +595,20 @@ export class RtcManager {
       this.room = null;
     }
     if (this.audioCtx) {
+      if (this.audioContextStateHandler) {
+        this.audioCtx.removeEventListener('statechange', this.audioContextStateHandler);
+      }
       try {
         this.audioCtx.close();
       } catch {}
       this.audioCtx = null;
+    }
+    if (typeof window !== 'undefined' && this.audioUnlockHandler) {
+      window.removeEventListener('pointerdown', this.audioUnlockHandler);
+      window.removeEventListener('keydown', this.audioUnlockHandler);
+      window.removeEventListener('click', this.audioUnlockHandler);
+      window.removeEventListener('touchstart', this.audioUnlockHandler);
+      this.audioUnlockHandler = null;
     }
   }
 }

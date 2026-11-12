@@ -1788,6 +1788,22 @@ body.matrix-active::after {
   transform: scale(1.04);
   box-shadow: 0 0 28px rgba(225, 29, 72, 0.7);
 }
+.truonggiang-hit-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.42);
+  opacity: 0;
+}
+.truonggiang-hit-flash.visible {
+  animation: truonggiang-hit-flash 280ms ease-out forwards;
+}
+@keyframes truonggiang-hit-flash {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  100% { opacity: 0; }
+}
 
 
 

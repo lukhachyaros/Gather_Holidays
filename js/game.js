@@ -2045,6 +2045,16 @@ function applyOp(op, senderId = null) {
       }
       break;
     }
+    case 'admin_flex': {
+      if (isAdminTarget(op.target, me?.name)) {
+        me.av?.playEmote?.('flex');
+        toast(`💪 Bạn vừa được Admin ${op.by} gọi flex cơ bắp!`);
+      }
+      peers.forEach(player => {
+        if (isAdminTarget(op.target, player.name)) player.av?.playEmote?.('flex');
+      });
+      break;
+    }
     case 'admin_clown': {
       if (isAdminTarget(op.target, me?.name)) {
         me.pumpkinHat = me.pumpkinHat ? null : 'classic';
@@ -2123,11 +2133,46 @@ function applyOp(op, senderId = null) {
     }
     case 'admin_truonggiang': {
       if (op.active) {
-        spawnTruongGiangSlime(op.target, op.by);
+        spawnTruongGiangSlime(op.target, op.by, {
+          entityId: op.entityId,
+          ownerId: senderId || op.ownerId,
+          targetId: op.targetId,
+          spawnX: op.spawnX,
+          spawnZ: op.spawnZ,
+        });
       } else {
         removeTruongGiangSlime();
       }
       break;
+    }
+    case 'admin_truonggiang_state': {
+      if (!op.entityId || op.ownerId !== senderId ||
+          ![op.x, op.y, op.z, op.rotationY, op.meshRotationX, op.spawnX, op.spawnZ].every(Number.isFinite) ||
+          !Array.isArray(op.meshScale) || !op.meshScale.every(Number.isFinite) ||
+          !Number.isInteger(op.stateSequence)) return;
+      if (!activeTruongGiangSlime) {
+        spawnTruongGiangSlime(op.target, op.by, {
+          entityId: op.entityId,
+          ownerId: op.ownerId,
+          targetId: op.targetId,
+          spawnX: op.spawnX,
+          spawnZ: op.spawnZ,
+        });
+      }
+      const slime = activeTruongGiangSlime;
+      if (!slime || slime.isAuthority || slime.entityId !== op.entityId || slime.ownerId !== senderId ||
+          op.stateSequence <= slime.lastStateSequence) return;
+      slime.lastStateSequence = op.stateSequence;
+      slime.lastStateAt = performance.now();
+      slime.remotePosition.set(op.x, op.y, op.z);
+      slime.remoteRotationY = op.rotationY;
+      slime.remoteMeshRotationX = op.meshRotationX;
+      slime.remoteMeshScale.set(...op.meshScale);
+      if (Number.isInteger(op.impactId) && op.impactId > slime.impactId) {
+        slime.impactId = op.impactId;
+        showTruongGiangImpact(op.impactTargetId);
+      }
+      return;
     }
     case 'admin_golden': {
       if (isAdminTarget(op.target, me?.name)) {
@@ -6163,6 +6208,13 @@ export function removeTruongGiangSlime() {
   if (activeTruongGiangSlime) {
     if (activeTruongGiangSlime.speechEl) activeTruongGiangSlime.speechEl.remove();
     scene.remove(activeTruongGiangSlime.group);
+    activeTruongGiangSlime.group.traverse(object => {
+      if (!object.isMesh) return;
+      object.geometry.dispose();
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      materials.forEach(material => material.dispose());
+    });
+    activeTruongGiangSlime.texture.dispose();
     activeTruongGiangSlime = null;
   }
   if (truongGiangAnimFrame) {
@@ -6175,26 +6227,28 @@ export function removeTruongGiangSlime() {
   }
 }
 
-export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin') {
+function showTruongGiangImpact(targetId) {
+  if (targetId !== net?.selfId) return;
+  me.vx = (Math.random() - 0.5) * 6;
+  me.vy = 4;
+  me.av?.showTomatoSplat?.();
+  toast('Bạn đã bị DÊ !');
+
+  const flash = document.createElement('div');
+  flash.className = 'truonggiang-hit-flash';
+  document.body.appendChild(flash);
+  requestAnimationFrame(() => flash.classList.add('visible'));
+  setTimeout(() => flash.remove(), 280);
+}
+
+export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin', options = {}) {
   removeTruongGiangSlime();
 
-  // If no target specified or if target is admin, automatically find a non-admin player in room
-  let target = targetName;
-  if (!target) {
-    const nonAdminPeers = [];
-    peers.forEach(p => {
-      if (p.name && !isAdminUser(p.name) && !p.isAdmin) {
-        nonAdminPeers.push(p.name);
-      }
-    });
-    if (nonAdminPeers.length > 0) {
-      target = nonAdminPeers[Math.floor(Math.random() * nonAdminPeers.length)];
-    } else {
-      const allPeers = [];
-      peers.forEach(p => { if (p.name) allPeers.push(p.name); });
-      target = allPeers.length > 0 ? allPeers[0] : me.name;
-    }
-  }
+  const target = targetName || me.name;
+  const entityId = options.entityId || `${net?.selfId || 'local'}:${Date.now()}`;
+  const ownerId = options.ownerId || net?.selfId;
+  const targetId = options.targetId || net?.selfId;
+  const isAuthority = ownerId === net?.selfId;
 
   toast(`🤪 ${byAdmin} đã triệu hồi Khối Slime TRƯỜNG GIANG săn đuổi [${target}]!`);
   playSfx('duck_quack', 'casino');
@@ -6216,8 +6270,11 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin') {
   slimeMesh.position.y = 0.625;
   slimeGroup.add(slimeMesh);
 
-  // Position slime near admin or target
-  slimeGroup.position.set(me.x * TILE + 2, 0, me.y * TILE + 2);
+  slimeGroup.position.set(
+    Number.isFinite(options.spawnX) ? options.spawnX : me.x * TILE + 2,
+    0,
+    Number.isFinite(options.spawnZ) ? options.spawnZ : me.y * TILE + 2,
+  );
   scene.add(slimeGroup);
 
   // Speech bubble DOM element attached to 3D world position
@@ -6256,98 +6313,131 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin') {
   let hopTimer = 0.4;
   let pesterCooldown = 0;
   let lastTime = performance.now();
+  let lastStateBroadcastAt = 0;
+  let stateSequence = 0;
+  let impactId = 0;
 
   activeTruongGiangSlime = {
     group: slimeGroup,
     mesh: slimeMesh,
     speechEl,
     target,
+    targetId,
+    ownerId,
+    entityId,
+    isAuthority,
+    texture: tgTex,
+    impactId,
+    lastStateSequence: 0,
+    lastStateAt: performance.now(),
+    remotePosition: slimeGroup.position.clone(),
+    remoteRotationY: 0,
+    remoteMeshRotationX: 0,
+    remoteMeshScale: slimeMesh.scale.clone(),
   };
 
   function updateSlime() {
-    if (!activeTruongGiangSlime) return;
+    const active = activeTruongGiangSlime;
+    if (!active || active.entityId !== entityId) return;
 
     const now = performance.now();
     const dt = Math.min((now - lastTime) / 1000, 0.1);
     lastTime = now;
 
-    // Determine target world position
-    let tx = me.x * TILE;
-    let tz = me.y * TILE;
-    if (!isAdminTarget(target, me.name)) {
-      const pEntry = findPeerByName(target);
-      if (pEntry) {
-        tx = pEntry[1].x * TILE;
-        tz = pEntry[1].y * TILE;
+    if (!isAuthority) {
+      if (now - active.lastStateAt > 1500) {
+        removeTruongGiangSlime();
+        return;
       }
-    }
-
-    const dx = tx - slimeGroup.position.x;
-    const dz = tz - slimeGroup.position.z;
-    const dist = Math.hypot(dx, dz);
-
-    if (onGround) {
-      hopTimer -= dt;
-      // Slime squashing effect on ground
-      slimeMesh.scale.set(1.4, 0.6, 1.4);
-
-      if (hopTimer <= 0) {
-        // Slime jump launch!
-        onGround = false;
-        vy = 7.0 + Math.random() * 2.5; // Jump vertical velocity
-        slimeMesh.scale.set(0.75, 1.4, 0.75); // Stretch
-        hopTimer = 0.6 + Math.random() * 0.4;
-        playSfx('plinko_peg', 'casino');
-      }
+      slimeGroup.position.lerp(active.remotePosition, Math.min(1, dt * 12));
+      slimeGroup.rotation.y += (active.remoteRotationY - slimeGroup.rotation.y) * Math.min(1, dt * 12);
+      slimeMesh.rotation.x += (active.remoteMeshRotationX - slimeMesh.rotation.x) * Math.min(1, dt * 12);
+      slimeMesh.scale.lerp(active.remoteMeshScale, Math.min(1, dt * 12));
     } else {
-      // In air physics
-      vy -= 22.0 * dt; // gravity
-      slimeGroup.position.y += vy * dt;
-
-      // Move horizontally toward target while in air
-      if (dist > 0.3) {
-        const speed = 4.8;
-        slimeGroup.position.x += (dx / dist) * speed * dt;
-        slimeGroup.position.z += (dz / dist) * speed * dt;
-        slimeGroup.rotation.y = Math.atan2(dx, dz);
+      pesterCooldown = Math.max(0, pesterCooldown - dt);
+      let tx = me.x * TILE;
+      let tz = me.y * TILE;
+      if (targetId !== net?.selfId) {
+        const targetPeer = peers.get(targetId);
+        if (targetPeer) {
+          tx = targetPeer.x * TILE;
+          tz = targetPeer.y * TILE;
+        }
       }
 
-      // Air rotation spin
-      slimeMesh.rotation.x += dt * 3.5;
+      const dx = tx - slimeGroup.position.x;
+      const dz = tz - slimeGroup.position.z;
+      const dist = Math.hypot(dx, dz);
 
-      // Check ground landing
-      if (slimeGroup.position.y <= 0) {
-        slimeGroup.position.y = 0;
-        vy = 0;
-        onGround = true;
-        slimeMesh.rotation.x = 0;
-        slimeMesh.scale.set(1.4, 0.6, 1.4); // Land squash
-        playSfx('plinko_peg', 'casino');
+      if (onGround) {
+        hopTimer -= dt;
+        slimeMesh.scale.set(1.4, 0.6, 1.4);
 
-        // Check if close enough to pester target
-        pesterCooldown -= 0.6;
-        if (dist < 2.0 && pesterCooldown <= 0) {
-          pesterCooldown = 3.0;
-          const randomQuote = funnyQuotes[Math.floor(Math.random() * funnyQuotes.length)];
-          showSpeech(randomQuote, 2500);
-          playSfx('slap', 'casino');
+        if (hopTimer <= 0) {
+          onGround = false;
+          vy = 7.0 + Math.random() * 2.5;
+          slimeMesh.scale.set(0.75, 1.4, 0.75);
+          hopTimer = 0.6 + Math.random() * 0.4;
+          playSfx('plinko_peg', 'casino');
+        }
+      } else {
+        vy -= 22.0 * dt;
+        slimeGroup.position.y += vy * dt;
 
-          if (isAdminTarget(target, me.name)) {
-            toast(`🤪 Trường Giang Slime vừa ủi mông trêu chọc bạn: "${randomQuote}"`);
-            me.vx = (Math.random() - 0.5) * 6;
-            me.vy = 4;
-            me.av?.showTomatoSplat?.();
-          } else {
-            const pEntry = findPeerByName(target);
-            if (pEntry) {
-              pEntry[1].av?.showTomatoSplat?.();
-            }
+        if (dist > 0.3) {
+          const speed = 4.8;
+          slimeGroup.position.x += (dx / dist) * speed * dt;
+          slimeGroup.position.z += (dz / dist) * speed * dt;
+          slimeGroup.rotation.y = Math.atan2(dx, dz);
+        }
+
+        slimeMesh.rotation.x += dt * 3.5;
+
+        if (slimeGroup.position.y <= 0) {
+          slimeGroup.position.y = 0;
+          vy = 0;
+          onGround = true;
+          slimeMesh.rotation.x = 0;
+          slimeMesh.scale.set(1.4, 0.6, 1.4);
+          playSfx('plinko_peg', 'casino');
+
+          if (dist < 2.0 && pesterCooldown <= 0) {
+            pesterCooldown = 3.0;
+            const randomQuote = funnyQuotes[Math.floor(Math.random() * funnyQuotes.length)];
+            showSpeech(randomQuote, 2500);
+            playSfx('slap', 'casino');
+            impactId += 1;
+            active.impactId = impactId;
+            showTruongGiangImpact(targetId);
           }
         }
       }
+
+      if (net && now - lastStateBroadcastAt >= 100) {
+        lastStateBroadcastAt = now;
+        net.send('op', {
+          k: 'admin_truonggiang_state',
+          entityId,
+          ownerId,
+          target,
+          targetId,
+          by: byAdmin,
+          spawnX: Number.isFinite(options.spawnX) ? options.spawnX : me.x * TILE + 2,
+          spawnZ: Number.isFinite(options.spawnZ) ? options.spawnZ : me.y * TILE + 2,
+          stateSequence: ++stateSequence,
+          x: slimeGroup.position.x,
+          y: slimeGroup.position.y,
+          z: slimeGroup.position.z,
+          rotationY: slimeGroup.rotation.y,
+          meshRotationX: slimeMesh.rotation.x,
+          meshScale: slimeMesh.scale.toArray(),
+          impactId,
+          impactTargetId: targetId,
+          v: Date.now(),
+        });
+      }
     }
 
-    // Update floating speech bubble screen projection
     if (speechEl.style.display !== 'none' && camera) {
       const slimePos = slimeGroup.position.clone();
       slimePos.y += 1.8;
@@ -6671,6 +6761,8 @@ export const ADMIN_COMMAND_CATALOG = [
   { cmd: ':rocket', usage: ':rocket <tên>', desc: 'Bắn bay vút lên trời như tên lửa' },
   { cmd: ':slap', usage: ':slap <tên>', desc: 'Tát bay người chơi kèm ném cà chua' },
   { cmd: ':danceall', usage: ':danceall', desc: 'Bắt toàn bộ server cùng nhảy múa' },
+  { cmd: ':flex', usage: ':flex [tên]', desc: 'Flex cơ bắp đồng bộ (chỉ hiệu ứng)' },
+  { cmd: ':flexall', usage: ':flexall', desc: 'Cho toàn server cùng flex cơ bắp' },
   { cmd: ':clown', usage: ':clown <tên>', desc: 'Đội mũ bí ngô hề hước' },
   { cmd: ':fire', usage: ':fire <tên>', desc: 'Gắn lửa bốc cháy bập bùng' },
   { cmd: ':blind', usage: ':blind <tên>', desc: 'Làm tối đen màn hình mục tiêu' },
@@ -7173,8 +7265,36 @@ function executeAdminCommand(raw) {
     }
     case 'truonggiang':
     case 'tg': {
-      const targetName = args[0] || null;
-      emitOp({ k: 'admin_truonggiang', target: targetName, active: true, by: me.name });
+      const requestedTarget = args[0];
+      let targetEntry = requestedTarget && normalizePlayerName(requestedTarget) !== 'all'
+        ? findPeerByName(requestedTarget)
+        : null;
+      if (requestedTarget && normalizePlayerName(requestedTarget) !== 'all' &&
+          !isAdminTarget(requestedTarget, me.name) && !targetEntry) {
+        toast(`Không tìm thấy người chơi "${requestedTarget}".`);
+        return true;
+      }
+      if (isAdminTarget(requestedTarget, me.name)) targetEntry = [net.selfId, me];
+      if (!targetEntry) {
+        const candidates = Array.from(peers.entries()).filter(([, player]) =>
+          player.name && !isAdminUser(player.name) && !player.isAdmin,
+        );
+        targetEntry = candidates.length
+          ? candidates[Math.floor(Math.random() * candidates.length)]
+          : [net.selfId, me];
+      }
+      const [targetId, targetPlayer] = targetEntry;
+      emitOp({
+        k: 'admin_truonggiang',
+        target: targetPlayer.name,
+        targetId,
+        entityId: `${net.selfId}:${Date.now()}:${Math.random()}`,
+        ownerId: net.selfId,
+        spawnX: me.x * TILE + 2,
+        spawnZ: me.y * TILE + 2,
+        active: true,
+        by: me.name,
+      });
       return true;
     }
     case 'untruonggiang':
@@ -7204,6 +7324,14 @@ function executeAdminCommand(raw) {
     case 'spinall': {
       const targetName = (cmd === 'spinall' || args[0] === 'all') ? 'all' : (args[0] || me.name);
       emitOp({ k: 'admin_spin', target: targetName, by: me.name });
+      return true;
+    }
+    case 'flex':
+    case 'flexall': {
+      const targetName = cmd === 'flexall' || normalizePlayerName(args[0]) === 'all'
+        ? 'all'
+        : args[0] || me.name;
+      emitOp({ k: 'admin_flex', target: targetName, by: me.name });
       return true;
     }
     case 'disco': {
