@@ -574,9 +574,30 @@ kbd{background:#334155;border:1px solid #64748b;border-radius:4px;padding:1px 5p
   backdrop-filter: blur(4px);
 }
 .overlay#dlgSettings .panel {
+  position: relative;
+  padding-top: 52px;
   max-height: calc(100vh - 72px);
   border: 1px solid rgba(56,189,248,0.3);
   box-shadow: 0 16px 45px rgba(0,0,0,0.75);
+}
+.settings-close-x {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.08);
+  color: #cbd5e1;
+  cursor: pointer;
+  line-height: 1;
+}
+.settings-close-x:hover {
+  background: rgba(239,68,68,0.3);
+  border-color: #ef4444;
+  color: #fca5a5;
 }
 
 /* Blinded screen troll */

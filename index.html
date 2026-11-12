@@ -73,6 +73,7 @@ git<!doctype html>
     <div class="lobby-graphics">
       <label for="graphicsQuality">🖥️ Chất lượng đồ họa
         <select id="graphicsQuality" aria-describedby="graphicsQualityHint">
+          <option value="auto">Tự động — thích ứng theo thiết bị</option>
           <option value="low">Thấp — ưu tiên FPS</option>
           <option value="medium">Trung bình — cân bằng</option>
           <option value="high">Cao — hình ảnh đẹp hơn</option>
@@ -725,6 +726,7 @@ git<!doctype html>
 <!-- DIALOG 8: Mouse Settings, Voice Chat, Password & Host Room Management -->
 <div id="dlgSettings" class="overlay hidden">
   <div class="panel">
+    <button class="settings-close-x" data-close title="Đóng cài đặt" aria-label="Đóng cài đặt">✕</button>
     <h2>⚙️ Cài Đặt & Quản Lý Phòng</h2>
 
     <h3>🎙️ Voice Chat & Âm Thanh Không Gian 3D</h3>
@@ -780,7 +782,6 @@ git<!doctype html>
         <button id="btnOpenLobbyFromSettings" class="info">🏠 Về Sảnh Chờ Đổi Phòng</button>
         <button id="btnCloseRoomSettings" class="danger-btn hidden">🛑 Đóng Phòng Giải Tán</button>
       </div>
-      <button data-close>Đóng</button>
     </div>
   </div>
 </div>

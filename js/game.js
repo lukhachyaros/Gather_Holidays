@@ -362,8 +362,83 @@ const GRAPHICS_PROFILES = {
   medium: { pixelRatio: 1, shadows: true, shadowMapSize: 512, particleScale: 0.65 },
   high: { pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5), shadows: true, shadowMapSize: 1024, particleScale: 1 },
 };
+const GRAPHICS_QUALITY_ORDER = ['low', 'medium', 'high'];
 const savedGraphicsQuality = localStorage.getItem(GRAPHICS_QUALITY_KEY);
-let graphicsQuality = Object.hasOwn(GRAPHICS_PROFILES, savedGraphicsQuality) ? savedGraphicsQuality : 'medium';
+let graphicsQuality =
+  savedGraphicsQuality === 'auto' || Object.hasOwn(GRAPHICS_PROFILES, savedGraphicsQuality)
+    ? savedGraphicsQuality
+    : 'auto';
+function detectInitialGraphicsQuality() {
+  const memory = navigator.deviceMemory;
+  const cores = navigator.hardwareConcurrency;
+  const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+  if ((Number.isFinite(memory) && memory <= 2) || (Number.isFinite(cores) && cores <= 2)) return 'low';
+  if ((Number.isFinite(memory) && memory <= 4) || (Number.isFinite(cores) && cores <= 4) || coarsePointer) {
+    return 'medium';
+  }
+  return 'high';
+}
+let adaptiveGraphicsQuality = detectInitialGraphicsQuality();
+let lowGraphicsFpsSamples = 0;
+let highGraphicsFpsSamples = 0;
+
+function getActiveGraphicsQuality() {
+  return graphicsQuality === 'auto' ? adaptiveGraphicsQuality : graphicsQuality;
+}
+
+function updateGraphicsQualityHint() {
+  const hint = $('graphicsQualityHint');
+  if (!hint) return;
+  const labels = { low: 'Thấp', medium: 'Trung bình', high: 'Cao' };
+  hint.textContent = graphicsQuality === 'auto'
+    ? `Tự động điều chỉnh theo thiết bị và FPS · Hiện tại: ${labels[adaptiveGraphicsQuality]}.`
+    : `Đang dùng mức ${labels[graphicsQuality]}. Lựa chọn được lưu trên thiết bị này.`;
+}
+
+function applyGraphicsQuality() {
+  if (!renderer || !world) return;
+  const profile = GRAPHICS_PROFILES[getActiveGraphicsQuality()];
+  renderer.setPixelRatio(profile.pixelRatio);
+  renderer.shadowMap.enabled = profile.shadows;
+  renderer.shadowMap.needsUpdate = true;
+  world.setGraphicsQuality(profile);
+  resize();
+  updateGraphicsQualityHint();
+}
+
+function updateAdaptiveGraphics(fps) {
+  if (graphicsQuality !== 'auto' || document.hidden) {
+    lowGraphicsFpsSamples = 0;
+    highGraphicsFpsSamples = 0;
+    return;
+  }
+
+  if (fps < 28) {
+    lowGraphicsFpsSamples++;
+    highGraphicsFpsSamples = 0;
+  } else if (fps >= 55) {
+    highGraphicsFpsSamples++;
+    lowGraphicsFpsSamples = 0;
+  } else {
+    lowGraphicsFpsSamples = 0;
+    highGraphicsFpsSamples = 0;
+  }
+
+  const tierIndex = GRAPHICS_QUALITY_ORDER.indexOf(adaptiveGraphicsQuality);
+  let nextQuality = adaptiveGraphicsQuality;
+  if (lowGraphicsFpsSamples >= 3 && tierIndex > 0) {
+    lowGraphicsFpsSamples = 0;
+    nextQuality = GRAPHICS_QUALITY_ORDER[tierIndex - 1];
+  } else if (highGraphicsFpsSamples >= 12 && tierIndex < GRAPHICS_QUALITY_ORDER.length - 1) {
+    highGraphicsFpsSamples = 0;
+    nextQuality = GRAPHICS_QUALITY_ORDER[tierIndex + 1];
+  }
+
+  if (nextQuality !== adaptiveGraphicsQuality) {
+    adaptiveGraphicsQuality = nextQuality;
+    applyGraphicsQuality();
+  }
+}
 
 const isHost = () => !!(state && net && state.hostId === net.selfId);
 const requireRoomHost = () => {
@@ -403,13 +478,15 @@ try {
     powerPreference: 'high-performance',
     stencil: false,
   });
-  renderer.setPixelRatio(GRAPHICS_PROFILES[graphicsQuality].pixelRatio);
-  renderer.shadowMap.enabled = GRAPHICS_PROFILES[graphicsQuality].shadows;
+  const initialGraphicsProfile = GRAPHICS_PROFILES[getActiveGraphicsQuality()];
+  renderer.setPixelRatio(initialGraphicsProfile.pixelRatio);
+  renderer.shadowMap.enabled = initialGraphicsProfile.shadows;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, 1, 0.1, 300);
   world = new World(scene);
-  world.setGraphicsQuality(GRAPHICS_PROFILES[graphicsQuality]);
+  world.setGraphicsQuality(initialGraphicsProfile);
+  updateGraphicsQualityHint();
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
   initAudio();
   initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId);
@@ -678,14 +755,13 @@ $('inName').value = localStorage.getItem('gh_name') || '';
 $('graphicsQuality').value = graphicsQuality;
 $('graphicsQuality').addEventListener('change', event => {
   const selectedQuality = event.target.value;
-  if (!Object.hasOwn(GRAPHICS_PROFILES, selectedQuality)) return;
+  if (selectedQuality !== 'auto' && !Object.hasOwn(GRAPHICS_PROFILES, selectedQuality)) return;
   graphicsQuality = selectedQuality;
+  if (graphicsQuality === 'auto') adaptiveGraphicsQuality = detectInitialGraphicsQuality();
+  lowGraphicsFpsSamples = 0;
+  highGraphicsFpsSamples = 0;
   localStorage.setItem(GRAPHICS_QUALITY_KEY, graphicsQuality);
-  const profile = GRAPHICS_PROFILES[graphicsQuality];
-  renderer.setPixelRatio(profile.pixelRatio);
-  renderer.shadowMap.enabled = profile.shadows;
-  world.setGraphicsQuality(profile);
-  resize();
+  applyGraphicsQuality();
 });
 $('inName').addEventListener('change', () => {
   const n = $('inName').value.trim();
@@ -4660,6 +4736,7 @@ function loop(now) {
       currentFps = Math.round((frameCount * 1000) / (now - fpsLastTime));
       const fpsEl = $('statFps');
       if (fpsEl) fpsEl.textContent = `⚡ ${currentFps} FPS`;
+      updateAdaptiveGraphics(currentFps);
       frameCount = 0;
       fpsLastTime = now;
     }
