@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 import { PUMPKIN_HATS, ORNAMENTS, COSTUMES } from './themes.js';
 import { geo, mat, G, part, labelSprite } from './modelUtils.js';
+import { createOngPhuc } from '../design_model/ongPhuc.js';
+import { createOngTho } from '../design_model/ongtho.js';
 export { geo, mat, G, part, labelSprite } from './modelUtils.js';
 export { buildGiantMaiTree } from '../design_model/maiTree.js';
 
@@ -375,7 +377,7 @@ export function buildFirecrackerTable() {
 // ============================================================================
 // SACRED SHRINE OF THE 3 STAR GODS: PHÚC - LỘC - THỌ (TAM ĐA TÀI LỘC)
 // ============================================================================
-export function buildPhucLocThoShrine() {
+function buildLegacyPhucLocThoShrine() {
   const g = new THREE.Group();
 
   // 1. Temple Pavilion Base & Stone Terrace
@@ -418,6 +420,7 @@ export function buildPhucLocThoShrine() {
   // --- STATUE 1: ÔNG PHÚC (Left: x = -1.35) ---
   // Robe: Crimson Imperial silk with gold cloud dragon trim. Holding baby boy in left arm & gold ingot in right!
   const phucGroup = new THREE.Group();
+  phucGroup.name = 'legacy-ong-phuc';
   phucGroup.position.set(-1.35, 1.22, -0.35);
 
   // Triple-tiered Lotus Throne (Đài sen 3 tầng dát vàng)
@@ -553,6 +556,7 @@ export function buildPhucLocThoShrine() {
   // --- STATUE 3: ÔNG THỌ (Right: x = 1.35) ---
   // High Cranial Forehead, Snowy White Beard, Dragon Staff with Gourd & Giant Celestial Peach!
   const thoGroup = new THREE.Group();
+  thoGroup.name = 'legacy-ong-tho';
   thoGroup.position.set(1.35, 1.22, -0.35);
 
   // Triple Lotus Throne
@@ -681,6 +685,32 @@ export function buildPhucLocThoShrine() {
   );
   mainLabel.position.set(0, 3.8, 0.3);
   g.add(mainLabel);
+
+  return g;
+}
+
+export function buildPhucLocThoShrine() {
+  const g = buildLegacyPhucLocThoShrine();
+  const phucPosition = new THREE.Vector3(-1.35, 1.22, -0.35);
+  const thoPosition = new THREE.Vector3(1.35, 1.22, -0.35);
+
+  for (const child of [...g.children]) {
+    if (child.name === 'legacy-ong-phuc' || child.name === 'legacy-ong-tho') g.remove(child);
+  }
+
+  const phuc = createOngPhuc({ height: 1.8, pedestal: true });
+  phuc.position.copy(phucPosition);
+  const lblPhuc = labelSprite('✨ ÔNG PHÚC ✨', 'rgba(185,28,28,0.92)', '#fef08a', 0.40);
+  lblPhuc.position.set(0, 2.05, 0);
+  phuc.add(lblPhuc);
+  g.add(phuc);
+
+  const tho = createOngTho({ height: 1.8 });
+  tho.position.copy(thoPosition);
+  const lblTho = labelSprite('🍑 ÔNG THỌ 🍑', 'rgba(217,119,6,0.92)', '#fef08a', 0.40);
+  lblTho.position.set(0, 2.05, 0);
+  tho.add(lblTho);
+  g.add(tho);
 
   return g;
 }

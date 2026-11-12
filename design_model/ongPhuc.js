@@ -1,4 +1,4 @@
-// js/ongPhuc.js — Ông Phúc (Phúc Thần) procedural model, three.js r170 (ES module)
+// ongPhuc.js — Ông Phúc (Phúc Thần) procedural model, three.js r170 (ES module)
 // Dùng: import { createOngPhuc } from './ongPhuc.js'; scene.add(createOngPhuc({ height: 2.2, pedestal: true }));
 // Hướng mặt: +Z. Gốc (0,0,0) nằm ở đáy bệ sen.
 import * as THREE from 'three';
@@ -85,18 +85,18 @@ export function createOngPhuc(opts = {}) {
   };
   const SX = 1.08, SZ = 0.72;
   const bg = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y + BASE_Y)), 56);
-  {
-    const p = bg.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-      const w = Math.max(0, 1 - (y - BASE_Y) / 1.0), th = Math.atan2(x, z), b = (1 - Math.cos(th)) / 2;
-      const k = 1 + w * b * (0.05 * Math.sin(8 * th) + 0.025);
-      p.setXYZ(i, x * k, y, z * k);
-    }
-    bg.computeVertexNormals();
+{
+  const p = bg.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const w = Math.max(0, 1 - (y - BASE_Y) / 1.0), th = Math.atan2(x, z), b = (1 - Math.cos(th)) / 2;
+    const k = 1 + w * b * (0.05 * Math.sin(8 * th) + 0.025);
+    p.setXYZ(i, x * k, y, z * k);
   }
-  const body = new THREE.Mesh(bg, robeSide);
-  body.scale.set(SX, 1, SZ); body.castShadow = castShadow; g.add(body);
+  bg.computeVertexNormals();
+}
+const body = new THREE.Mesh(bg, robeSide);
+body.scale.set(SX, 1, SZ); body.castShadow = castShadow; g.add(body);
   // viền gấu áo
   const hem = [[0.405, 0.0], [0.405, 0.07], [0.39, 0.075], [0.385, 0.0]];
   const hemM = new THREE.Mesh(new THREE.LatheGeometry(hem.map(([r, y]) => new THREE.Vector2(r + 0.005, y + BASE_Y)), 40), gold);
