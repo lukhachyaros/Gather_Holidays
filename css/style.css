@@ -1826,6 +1826,17 @@ body.matrix-active::after {
 .clover-coin-panel .sub {
   margin: 0 0 14px;
 }
+.clover-coin-pot {
+  padding: 9px 12px;
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  border-radius: 10px;
+  background: rgba(250, 204, 21, 0.1);
+  color: #fef3c7;
+  font-size: 14px;
+}
+.clover-coin-pot b {
+  color: #fde047;
+}
 .clover-coin-choices {
   display: flex;
   justify-content: center;
@@ -1888,6 +1899,12 @@ body.matrix-active::after {
 }
 .clover-coin-actions {
   justify-content: center;
+  flex-wrap: wrap;
+}
+.clover-coin-actions .clover-coin-cashout {
+  border-color: rgba(134, 239, 172, 0.55);
+  background: linear-gradient(135deg, #15803d, #166534);
+  color: #f0fdf4;
 }
 .clover-coin-actions button:disabled {
   cursor: not-allowed;

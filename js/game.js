@@ -7,7 +7,7 @@ import {
   CARD_STYLES,
   rollLixiReward,
 } from './themes.js';
-import { isSolid, buildThemeMap, validMap } from './maps.js?v=2026111217';
+import { isSolid, buildThemeMap, validMap } from './maps.js?v=2026111218';
 import { connect, connectLobby, hashPass } from './net.js';
 import {
   initPlayer,
@@ -29,7 +29,7 @@ import {
   seekPlayer,
   syncPlayback,
 } from './media.js';
-import { World, TILE } from './world.js?v=2026111217';
+import { World, TILE } from './world.js?v=2026111218';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=2026111208';
 import { emojiSprite, part, G, mat } from './props.js';
 import { RtcManager } from './rtc.js?v=20261111_trystero';
@@ -3603,6 +3603,23 @@ function getLixiEventStatus() {
 let cloverCoinTimerInterval = null;
 let cloverCoinSelectedSide = 'heads';
 let isCloverCoinTossing = false;
+let cloverCoinPot = 100;
+let cloverCoinCanCashOut = false;
+let cloverCoinRoundEnded = false;
+
+const formatCloverCoinAmount = amount => amount.toLocaleString('vi-VN');
+
+function startNewCloverCoinRound() {
+  cloverCoinPot = 100;
+  cloverCoinCanCashOut = false;
+  cloverCoinRoundEnded = false;
+  cloverCoinSelectedSide = 'heads';
+  document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
+    button.classList.toggle('selected', button.dataset.coinSide === cloverCoinSelectedSide);
+  });
+  $('cloverCoinResult').classList.add('hidden');
+  updateCloverCoinEventStatus();
+}
 
 function updateCloverCoinEventStatus() {
   const dialog = $('dlgCloverCoinToss');
@@ -3617,28 +3634,35 @@ function updateCloverCoinEventStatus() {
     ? `⏳ Còn ${status.timeStr}`
     : `⏰ Mở lại sau ${status.timeStr}`;
   $('btnTossCloverCoin').disabled = isCloverCoinTossing || !status.inEvent;
-  if (!status.inEvent && !isCloverCoinTossing) {
-    $('cloverCoinResult').textContent = 'Sự kiện đã kết thúc. Hãy quay lại khi mở cửa!';
+  $('btnTossCloverCoin').textContent = cloverCoinRoundEnded
+    ? '🔄 Ván mới (100 Xu)'
+    : cloverCoinCanCashOut
+      ? '🎲 Đoán tiếp'
+      : '🪙 Tung đồng xu';
+  $('cloverCoinPotAmount').textContent = `${formatCloverCoinAmount(cloverCoinPot)} Xu`;
+  document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
+    button.disabled = isCloverCoinTossing || cloverCoinRoundEnded || !status.inEvent;
+  });
+  const cashoutButton = $('btnCashoutCloverCoin');
+  cashoutButton.classList.toggle('hidden', !cloverCoinCanCashOut);
+  cashoutButton.disabled = isCloverCoinTossing;
+  cashoutButton.textContent = `🏦 Dừng và nhận ${formatCloverCoinAmount(cloverCoinPot)} Xu`;
+
+  if (!status.inEvent && !isCloverCoinTossing && !cloverCoinRoundEnded) {
+    $('cloverCoinResult').textContent = cloverCoinCanCashOut
+      ? 'Sự kiện đã kết thúc. Bạn vẫn có thể Dừng và nhận pot hiện tại.'
+      : 'Sự kiện đã kết thúc. Hãy quay lại khi mở cửa!';
     $('cloverCoinResult').classList.remove('hidden');
   }
 }
 
 function openCloverCoinTossDialog() {
   const status = getLixiEventStatus();
-  if (!status.inEvent) {
+  if (!status.inEvent && !cloverCoinCanCashOut) {
     toast(`⏳ Sự kiện tung xu chưa mở! Còn ${status.timeStr} nữa. Hãy quay lại sau nhé!`);
     return;
   }
 
-  cloverCoinSelectedSide = 'heads';
-  document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
-    button.disabled = isCloverCoinTossing;
-    button.classList.toggle('selected', button.dataset.coinSide === cloverCoinSelectedSide);
-  });
-  if (!isCloverCoinTossing) {
-    $('cloverCoinResult').classList.add('hidden');
-    $('btnTossCloverCoin').textContent = '🪙 Tung đồng xu';
-  }
   openDialog('dlgCloverCoinToss');
   updateCloverCoinEventStatus();
   clearInterval(cloverCoinTimerInterval);
@@ -3663,6 +3687,10 @@ $('btnTossCloverCoin')?.addEventListener('click', () => {
     toast(`⏳ Sự kiện tung xu chưa mở! Còn ${status.timeStr} nữa.`);
     return;
   }
+  if (cloverCoinRoundEnded) {
+    startNewCloverCoinRound();
+    return;
+  }
 
   isCloverCoinTossing = true;
   updateCloverCoinEventStatus();
@@ -3670,6 +3698,7 @@ $('btnTossCloverCoin')?.addEventListener('click', () => {
     button.disabled = true;
   });
   const result = Math.random() < 0.5 ? 'heads' : 'tails';
+  const guess = cloverCoinSelectedSide;
   const visual = $('cloverCoinVisual');
   visual.style.setProperty('--coin-start', visual.dataset.side === 'tails' ? '180deg' : '0deg');
   visual.style.setProperty('--coin-end', result === 'heads' ? '1800deg' : '1980deg');
@@ -3687,26 +3716,42 @@ $('btnTossCloverCoin')?.addEventListener('click', () => {
   setTimeout(() => {
     visual.classList.remove('flipping');
     visual.dataset.side = result;
-    const isCorrect = result === cloverCoinSelectedSide;
+    const isCorrect = result === guess;
     if (isCorrect) {
-      addChips(500);
+      const previousPot = cloverCoinPot;
+      cloverCoinPot = Math.min(cloverCoinPot * 2, Number.MAX_SAFE_INTEGER);
+      cloverCoinCanCashOut = true;
       playSfx('plinko_win', 'casino');
       me.av?.playEmote('cheer');
-      $('cloverCoinResult').textContent = `🎉 Mặt ${result === 'heads' ? 'Ngửa' : 'Sấp'} xuất hiện! Bạn đoán đúng, nhận +500 Xu.`;
-      toast('🍀 Đoán đúng mặt đồng xu! Bạn nhận được +500 Xu!');
-      floaters.push({ e: '🪙 +500 Xu!', who: net?.selfId, t: Date.now() });
+      $('cloverCoinResult').textContent = `🎉 Mặt ${result === 'heads' ? 'Ngửa' : 'Sấp'} xuất hiện! Pot đã tăng từ ${formatCloverCoinAmount(previousPot)} lên ${formatCloverCoinAmount(cloverCoinPot)} Xu.`;
+      toast(`🍀 Đoán đúng! Pot đã nhân đôi thành ${formatCloverCoinAmount(cloverCoinPot)} Xu. Dừng để nhận hoặc đoán tiếp!`);
     } else {
-      $('cloverCoinResult').textContent = `Mặt ${result === 'heads' ? 'Ngửa' : 'Sấp'} xuất hiện. Chưa đúng lần này, bạn có thể tung lại!`;
-      toast('🪙 Chưa đúng mặt xu, bạn có thể thử lại trong thời gian sự kiện.');
+      const lostPot = cloverCoinPot;
+      cloverCoinPot = 100;
+      cloverCoinCanCashOut = false;
+      cloverCoinRoundEnded = true;
+      $('cloverCoinResult').textContent = `Mặt ${result === 'heads' ? 'Ngửa' : 'Sấp'} xuất hiện. Bạn mất toàn bộ pot ${formatCloverCoinAmount(lostPot)} Xu; xu đã có trong ví được giữ nguyên.`;
+      toast(`🪙 Đoán sai, mất pot ${formatCloverCoinAmount(lostPot)} Xu. Xu trong ví của bạn không bị trừ.`);
     }
 
     isCloverCoinTossing = false;
-    $('btnTossCloverCoin').textContent = '🔄 Tung lại';
-    document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
-      button.disabled = false;
-    });
     updateCloverCoinEventStatus();
   }, 1550);
+});
+
+$('btnCashoutCloverCoin')?.addEventListener('click', () => {
+  if (isCloverCoinTossing || !cloverCoinCanCashOut) return;
+  const reward = cloverCoinPot;
+  addChips(reward);
+  cloverCoinPot = 100;
+  cloverCoinCanCashOut = false;
+  cloverCoinRoundEnded = true;
+  $('cloverCoinResult').textContent = `🏦 Bạn đã Dừng và nhận ${formatCloverCoinAmount(reward)} Xu. Ván mới bắt đầu với pot 100 Xu.`;
+  $('cloverCoinResult').classList.remove('hidden');
+  playSfx('plinko_win', 'casino');
+  toast(`🍀 Đã nhận ${formatCloverCoinAmount(reward)} Xu vào ví!`);
+  floaters.push({ e: `🪙 +${formatCloverCoinAmount(reward)} Xu!`, who: net?.selfId, t: Date.now() });
+  updateCloverCoinEventStatus();
 });
 
 let rhythmAnimationId = null;

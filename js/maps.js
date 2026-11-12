@@ -658,7 +658,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       x: 14.5,
       y: 12.0,
       radius: 2.9,
-      prompt: '🍀 Đài phun cỏ bốn lá · [E] Đoán mặt đồng xu, đúng nhận 500 Xu',
+      prompt: '🍀 Đài phun cỏ bốn lá · [E] Đoán mặt xu, pot 100 Xu nhân đôi khi đúng',
     });
     colliders.push({ x: 14.5, y: 12.0, r: 1.15 });
 
