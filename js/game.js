@@ -69,8 +69,11 @@ import { loadAvatarCustomization, openAvatarStudioModal } from './avatar_customi
 let myAvatarCustom = loadAvatarCustomization();
 let rtc = null;
 let minigames = null;
+const voiceFallbackPeers = new Set();
+let rtcSignalSequence = 0;
 
 function initRtc(selfId, roomId) {
+  voiceFallbackPeers.clear();
   if (rtc) {
     try {
       rtc.destroy();
@@ -80,6 +83,15 @@ function initRtc(selfId, roomId) {
     selfId,
     roomId: roomId || state?.room || 'quang-truong-noel',
     participantName: me?.name || selfId,
+    sendSignal: (targetId, signal) => net?.send('rtc_signal', {
+      ...signal,
+      _rtcSignalId: `${selfId}:${++rtcSignalSequence}`,
+    }, targetId),
+    getPeerIds: () => [...peers.keys()],
+    onFallbackActivated: () => {
+      voiceFallbackPeers.add(selfId);
+      net?.send('voice_fallback', { fallback: true });
+    },
     onRemoteScreenTrack: (peerId, stream) => {
       updateScreenShareOnTv();
     },
@@ -1623,6 +1635,8 @@ async function addOrUpdatePeer(id, d) {
 const handlers = {
   join(id) {
     rtc?.getOrCreatePeer(id);
+    if (rtc?.voiceMode === 'p2p' && rtc.localVoiceStream) rtc.connectPeer(id);
+    if (voiceFallbackPeers.size) net?.send('voice_fallback', { fallback: true }, id);
     if (me?.started && !isKicked) {
       if (state?.kickedIds?.includes(id)) {
         net.send('op', { k: 'kick', targetId: id, byHost: state.hostId, v: Date.now() }, id);
@@ -1641,6 +1655,7 @@ const handlers = {
     }
   },
   leave(id) {
+    voiceFallbackPeers.delete(id);
     rtc?.removePeer(id);
     if (state?.mediaCurrent?.kind === 'screen' && state.mediaCurrent.addedBy === id) {
       state.mediaCurrent = null;
@@ -1690,6 +1705,15 @@ const handlers = {
   voice_speaking(d, id) {
     const p = peers.get(id);
     if (p?.av) p.av.setSpeaking(!!d?.speaking);
+  },
+  voice_fallback(d, id) {
+    if (!d?.fallback || !id) return;
+    voiceFallbackPeers.add(id);
+    rtc?.activateP2PFallback('another room member switched to P2P', false);
+    if (rtc?.localVoiceStream) rtc.connectPeer(id);
+  },
+  rtc_signal(d, id) {
+    rtc?.handleSignal(id, d);
   },
   pos(d, id) {
     if (state?.kickedIds?.includes(id)) return;
