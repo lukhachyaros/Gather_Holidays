@@ -1943,7 +1943,7 @@ export class Avatar {
       this.leftArm.rotation.x = -0.32;
       this.rightArm.rotation.x = -0.32;
       if (this.sitting?.pose === 'recline') {
-        this.hips.position.y = 0.3;
+        this.hips.position.y = 0.58;
         this.torso.rotation.x = -1.05;
         this.headGroup.rotation.x = 0.65;
         this.leftArm.rotation.x = -0.9;

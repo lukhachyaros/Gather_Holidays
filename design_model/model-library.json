@@ -42,7 +42,7 @@
       "id": "design-model-shrine",
       "name": "shrine",
       "format": "module",
-      "moduleUrl": "../design_model/shrine.js"
+      "moduleUrl": "../design_model/shrine.js?v=20261112"
     },
     {
       "id": "design-model-ong-phuc",

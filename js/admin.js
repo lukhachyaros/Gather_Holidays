@@ -604,7 +604,7 @@ async function importLibraryFile(file) {
   for (const asset of imported.assets) {
     const isModule = asset.format === 'module' &&
       typeof asset.moduleUrl === 'string' &&
-      /^\.\.\/design_model\/[A-Za-z0-9_-]+\.js$/.test(asset.moduleUrl);
+      /^\.\.\/design_model\/[A-Za-z0-9_-]+\.js(?:\?v=\d+)?$/.test(asset.moduleUrl);
     if (
       typeof asset.id !== 'string' ||
       typeof asset.name !== 'string' ||

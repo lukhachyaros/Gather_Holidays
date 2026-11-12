@@ -155,7 +155,7 @@ let staticLibraryPromise;
 
 export async function loadModelLibrary() {
   if (!staticLibraryPromise) {
-    staticLibraryPromise = fetch('./design_model/model-library.json')
+    staticLibraryPromise = fetch('./design_model/model-library.json?v=20261112', { cache: 'no-cache' })
       .then(response => {
         if (!response.ok) throw new Error(`Không tải được thư viện model (${response.status}).`);
         return response.json();
@@ -205,7 +205,7 @@ export async function instantiateModelAsset(asset) {
   } else if (
     asset.format === 'module' &&
     typeof asset.moduleUrl === 'string' &&
-    /^\.\.\/design_model\/[A-Za-z0-9_-]+\.js$/.test(asset.moduleUrl)
+    /^\.\.\/design_model\/[A-Za-z0-9_-]+\.js(?:\?v=\d+)?$/.test(asset.moduleUrl)
   ) {
     const module = await import(new URL(asset.moduleUrl, import.meta.url).href);
     const factory = getModelFactory(module, asset);
