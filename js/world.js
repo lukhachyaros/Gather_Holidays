@@ -1,8 +1,8 @@
 // Builds the 3D scene, themed centerpieces, seats, Vampire NPC, fireworks, and tomato projectiles.
 import * as THREE from 'three';
 import { THEMES } from './themes.js';
-import { getThemeFeatures } from './maps.js?v=20261112_shrine_recline';
-import { instantiateReplacement } from './model-library.js?v=20261112_shrine_recline';
+import { getThemeFeatures } from './maps.js?v=2026111201';
+import { instantiateReplacement } from './model-library.js?v=2026111201';
 import {
   buildProp,
   buildTree,

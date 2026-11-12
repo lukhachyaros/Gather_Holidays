@@ -7,7 +7,7 @@ import {
   CARD_STYLES,
   rollLixiReward,
 } from './themes.js';
-import { isSolid, buildThemeMap, validMap } from './maps.js?v=20261112_shrine_recline';
+import { isSolid, buildThemeMap, validMap } from './maps.js?v=2026111201';
 import { connect, connectLobby, hashPass } from './net.js';
 import {
   initPlayer,
@@ -29,8 +29,8 @@ import {
   seekPlayer,
   syncPlayback,
 } from './media.js';
-import { World, TILE } from './world.js?v=20261112_shrine_recline';
-import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=20261112_shrine_recline';
+import { World, TILE } from './world.js?v=2026111201';
+import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=2026111201';
 import { emojiSprite, part, G, mat } from './props.js';
 import { RtcManager } from './rtc.js?v=20261111_trystero';
 import {

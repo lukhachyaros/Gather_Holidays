@@ -3,128 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gather Holidays — Thư viện Model</title>
+  <title>Gather Holidays — Model Library</title>
   <link rel="icon" type="image/jpeg" href="assets/logo.jpg">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/admin.css">
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "./vendor/three/build/three.module.js",
-      "three/addons/": "./vendor/three/examples/jsm/"
-    }
-  }
-  </script>
 </head>
-<body class="admin-body">
-  <div id="adminAuthOverlay" class="admin-auth-overlay">
-    <div class="admin-auth-card">
-      <div class="admin-auth-brand">
-        <img src="assets/logo.jpg" alt="Admin Gate" class="admin-logo">
-        <div>
-          <h2>Gather Studio Admin</h2>
-          <p>Thư viện model cho các bản đồ lễ hội</p>
-        </div>
-      </div>
-      <form id="adminLoginForm">
-        <div class="admin-field">
-          <label for="adminUsername">👤 Tài khoản quản trị</label>
-          <input type="text" id="adminUsername" autocomplete="username" required>
-        </div>
-        <div class="admin-field">
-          <label for="adminPassword">🔑 Mật khẩu</label>
-          <input type="password" id="adminPassword" autocomplete="current-password" required>
-        </div>
-        <div id="authErrorMsg" class="auth-error-msg hidden"></div>
-        <div class="admin-actions">
-          <button type="submit" id="btnLogin" class="btn-admin-primary">Đăng nhập</button>
-          <a href="index.html" class="btn-admin-link">← Quay về Game</a>
-        </div>
-      </form>
-      <div class="admin-auth-hint">Chỉ tải các tệp JavaScript model bạn tin cậy. Module .js được chạy trong trình duyệt này.</div>
-    </div>
-  </div>
-
-  <div id="adminApp" class="admin-app hidden">
-    <header class="admin-header">
-      <div class="admin-brand">
-        <img src="assets/logo.jpg" alt="Logo">
-        <span><b>Gather Holidays</b> — Thư viện Model</span>
-        <span class="badge-role">ADMIN</span>
-      </div>
-      <div class="admin-header-actions">
-        <button id="btnSaveLibrary" class="btn-sub primary-action">💾 Lưu trên máy</button>
-        <button id="btnExportLibrary" class="btn-sub">⬇ Xuất để chia sẻ</button>
-        <button id="btnImportLibrary" class="btn-sub">📂 Nạp cấu hình</button>
-        <input id="libraryConfigInput" type="file" accept=".json,application/json" hidden>
-        <button id="btnAdminLogout" class="btn-danger">Đăng xuất</button>
-      </div>
-    </header>
-
-    <div class="admin-workspace library-workspace">
-      <aside class="admin-sidebar library-sidebar">
-        <section class="panel-section">
-          <div class="section-title"><span>📦 Thư viện model</span></div>
-          <label class="group-label" for="mapSelector">Phân loại theo bản đồ</label>
-          <select id="mapSelector" class="admin-select"></select>
-          <label class="group-label" for="targetSelector">Model cần thay thế</label>
-          <select id="targetSelector" class="admin-select"></select>
-          <div id="currentReplacement" class="library-current"></div>
-
-          <label id="modelDropZone" class="model-drop-zone" for="modelFileInput">
-            <span class="drop-icon">📥</span>
-            <strong>Thả model vào đây</strong>
-            <span>hoặc bấm để chọn tệp .js / .json</span>
-          </label>
-          <input id="modelFileInput" type="file" accept=".js,.json,text/javascript,application/json" multiple hidden>
-          <p class="library-hint">.js: export createModel(), export default hoặc hàm createTênModel()/buildTênModel() (không dùng import tương đối). Factory được truyền THREE trực tiếp và qua thuộc tính {THREE}. .json: Three.js Object JSON. Model được gán vào bản đồ và loại model đang chọn.</p>
-
-          <div class="section-title library-list-title"><span>🗂 Model đã nạp</span></div>
-          <div id="libraryList" class="library-list"></div>
-        </section>
-      </aside>
-
-      <main class="admin-viewport-container library-preview">
-        <div id="viewport3D" class="viewport-canvas"></div>
-        <div id="adminToast" class="admin-toast hidden"></div>
-        <div class="viewport-toolbar">
-          <button id="btnResetCamera" class="btn-vp-tool">🎥 Camera</button>
-          <button id="btnPreviewDefault" class="btn-vp-tool">👁 Xem model gốc</button>
-          <button id="btnPreviewActive" class="btn-vp-tool">👁 Xem model đang dùng</button>
-          <button id="btnClearReplacement" class="btn-vp-tool">↩ Bỏ thay thế</button>
-        </div>
-        <div id="previewLabel" class="preview-label">Model mặc định</div>
-        <div id="emptyPreview" class="empty-preview">Model của lựa chọn hiện tại sẽ hiển thị ở đây.</div>
-      </main>
-
-      <aside class="admin-sidebar right-panel library-details">
-        <section class="panel-section">
-          <div class="section-title"><span>🔎 Chi tiết model</span></div>
-          <div id="selectedModelName" class="selected-model-name">Chưa chọn model</div>
-          <div id="selectedModelInfo" class="library-hint">Tải model vào thư viện rồi chọn model muốn dùng cho bản đồ.</div>
-          <button id="btnAssignModel" class="btn-admin-primary" disabled>Thay model đang chọn</button>
-          <button id="btnRemoveModel" class="btn-danger" disabled>Xóa model khỏi thư viện</button>
-          <div class="section-title design-title"><span>🧩 Ghép và chỉnh kích thước</span></div>
-          <p class="library-hint">Chọn model trong thư viện rồi thêm vào bản thiết kế. Chỉnh vị trí và tỷ lệ từng phần, sau đó lưu thành một model thay thế.</p>
-          <button id="btnAddDesignComponent" class="btn-sub" disabled>＋ Thêm model đang chọn</button>
-          <div id="designComponents" class="design-components">
-            <div class="library-empty">Chưa có thành phần trong thiết kế.</div>
-          </div>
-          <label class="group-label" for="designOverallScale">Kích thước tổng thể</label>
-          <div class="design-scale-control">
-            <input id="designOverallScale" type="number" min="0.1" max="5" step="0.1" value="1">
-            <span>× kích thước model gốc</span>
-          </div>
-          <label class="group-label" for="designName">Tên thiết kế</label>
-          <input id="designName" class="admin-input" type="text" maxlength="80" value="Model tổng hợp">
-          <button id="btnSaveDesign" class="btn-admin-primary" disabled>Lưu thiết kế và thay model</button>
-          <div class="library-note">
-            <b>Để mọi người cùng thấy:</b> thư viện tải lên đang lưu trên máy này. Sau khi hoàn tất, chọn <b>Xuất để chia sẻ</b>, đưa tệp xuất vào <code>design_model/model-library.json</code> trong repo rồi push và deploy. Khi đó mọi người mới tải được cùng cấu hình và model.
-          </div>
-        </section>
-      </aside>
-    </div>
-  </div>
-  <script type="module" src="js/admin.js"></script>
+<body style="min-height:100vh;display:grid;place-items:center;margin:0;padding:24px;background:#0b1020;color:#e2e8f0;font-family:system-ui,sans-serif">
+  <main style="max-width:560px;padding:32px;border:1px solid #334155;border-radius:16px;background:#111827">
+    <h1>Model Library đang tạm đóng</h1>
+    <p>Model trong game hiện được lấy trực tiếp từ các tệp đã push trong repository, không dùng cấu hình Model Library lưu trong trình duyệt.</p>
+    <p>Để cập nhật model, sửa tệp trong <code>design_model/</code> và cập nhật <code>design_model/model-library.json</code> nếu cần, sau đó push lên GitHub.</p>
+    <a href="index.html" style="color:#7dd3fc">← Quay lại game</a>
+  </main>
 </body>
 </html>
