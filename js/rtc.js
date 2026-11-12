@@ -10,7 +10,7 @@
 import { joinRoom } from 'https://cdn.jsdelivr.net/npm/trystero/+esm';
 
 const LIVEKIT_URL = 'wss://gather-holidays-72e5l6gu.livekit.cloud';
-const LIVEKIT_SANDBOX_ID = 'gatherholidays-gpzvfy';
+const LIVEKIT_TOKEN_SERVER_ID = 'gatherholidays-gpzvfy';
 const LIVEKIT_SDK_URL = 'https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/+esm';
 
 export class RtcManager {
@@ -77,7 +77,7 @@ export class RtcManager {
     try {
       const { Room, RoomEvent, Track, TokenSource } = await import(LIVEKIT_SDK_URL);
       const roomName = `gh_${encodeURIComponent(this.roomId)}`;
-      const tokenSource = TokenSource.sandboxTokenServer(LIVEKIT_SANDBOX_ID);
+      const tokenSource = TokenSource.developmentTokenServer(LIVEKIT_TOKEN_SERVER_ID);
       const { serverUrl, participantToken } = await tokenSource.fetch({
         roomName,
         participantIdentity: String(this.selfId),
