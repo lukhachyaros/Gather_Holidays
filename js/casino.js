@@ -570,8 +570,8 @@ export function handleCasinoBroadcast(op, senderId = null) {
       updateCasinoTicker(`🎰 ${player} vừa giật cần quay Slot Machine 777!`);
       toastRef?.(`🎰 ${player} vừa giật cần quay Slot Machine 777!`);
     } else if (game === 'plinko') {
-      const pk = worldRef?.casinoObjs?.find(o => o.userData?.type === 'plinko');
-      pk?.userData?.dropBall?.();
+      worldRef?.casinoObjs?.filter(o => o.userData?.type === 'plinko')
+        .forEach(pk => pk.userData.dropBall?.());
       if (subAction === 'drop') {
         updateCasinoTicker(`🟡 ${player} vừa thả bóng Plinko cược ${op.bet || 25} Xu!`);
         toastRef?.(`⚡ ${player} vừa thả bóng chông Plinko!`);
@@ -2185,8 +2185,8 @@ export function openPlinko() {
 
     // Trigger 3D world plinko ball and broadcast
     broadcastCasinoPlay('plinko', 'drop', { subAction: 'drop', bet: betAmount, xOffset: xOff });
-    const pk = worldRef?.casinoObjs?.find(o => o.userData?.type === 'plinko');
-    pk?.userData?.dropBall?.();
+    worldRef?.casinoObjs?.filter(o => o.userData?.type === 'plinko')
+      .forEach(pk => pk.userData.dropBall?.());
 
     playSfx('plinko_peg', 'casino');
   };

@@ -1,8 +1,8 @@
 // Builds the 3D scene, themed centerpieces, seats, Vampire NPC, fireworks, and tomato projectiles.
 import * as THREE from 'three';
 import { THEMES } from './themes.js';
-import { getThemeFeatures } from './maps.js?v=2026111204';
-import { instantiateReplacement } from './model-library.js?v=2026111204';
+import { getThemeFeatures } from './maps.js?v=2026111217';
+import { instantiateReplacement } from './model-library.js?v=2026111217';
 import {
   buildProp,
   buildTree,
@@ -539,6 +539,13 @@ export class World {
         lf.position.set(h.x * TILE, 0, h.y * TILE);
         addMapModel(h.type, lf);
         this.valentineObjs.push(lf);
+      } else if (h.type === 'clover_fountain') {
+        const cf = new THREE.Group();
+        cf.name = 'CloverFountainAnchor';
+        cf.userData.type = h.type;
+        cf.position.set(h.x * TILE, 0, h.y * TILE);
+        addMapModel(h.type, cf);
+        this.casinoObjs.push(cf);
       } else if (h.type === 'roulette') {
         const rt = buildRouletteTable();
         rt.position.set(h.x * TILE, 0, h.y * TILE);
@@ -563,11 +570,13 @@ export class World {
           this.casinoObjs.push(sm);
         });
       } else if (h.type === 'plinko') {
-        const pk = buildPlinkoBoard();
-        pk.position.set(h.x * TILE, 0, h.y * TILE);
-        pk.rotation.y = Math.PI;
-        addMapModel(h.type, pk);
-        this.casinoObjs.push(pk);
+        [-0.8, 0, 0.8].forEach(ox => {
+          const pk = buildPlinkoBoard();
+          pk.position.set((h.x + ox) * TILE, 0, h.y * TILE);
+          pk.rotation.y = Math.PI;
+          addMapModel(h.type, pk);
+          this.casinoObjs.push(pk);
+        });
       } else if (h.type === 'secret_passage') {
         const sp = buildSecretPassage(themeKey);
         sp.position.set(h.x * TILE, 0, h.y * TILE);
@@ -650,12 +659,47 @@ export class World {
       const template = await this.replacementTemplates.get(key);
       if (!template || !this.group.getObjectById(group.id)) return;
       const hasAnimation = typeof template.userData.update === 'function';
-      const replacement = hasAnimation ? template : template.clone(true);
+      const replacement = hasAnimation
+        ? (template.parent ? await instantiateReplacement(map, target) : template)
+        : template.clone(true);
       if (!replacement || !this.group.getObjectById(group.id)) return;
+      if (map === 'casino' && target === 'roulette') {
+        group.userData.rotor = replacement.userData.rotor;
+        group.userData.ballGroup = replacement.userData.ballGroup;
+        group.userData.customAnimation = true;
+        replacement.userData.casinoState = group.userData;
+      } else if (map === 'casino' && target === 'duck_derby') {
+        group.userData.replacementModel = replacement;
+        replacement.userData.racing = !!group.userData.isRacing;
+        const startRace = group.userData.startRace;
+        group.userData.startRace = function (onFinish) {
+          startRace.call(this, onFinish);
+          replacement.userData.racing = !!this.isRacing;
+        };
+      } else if (map === 'casino' && target === 'clover_fountain') {
+        group.userData.replacementModel = replacement;
+      } else if (map === 'casino' && target === 'slot_machine') {
+        replacement.userData.auto = false;
+        const pullLever = group.userData.pullLever;
+        group.userData.pullLever = function (onResult) {
+          if (this.isSpinning) return;
+          pullLever.call(this, onResult);
+          replacement.userData.pull?.();
+        };
+      } else if (map === 'casino' && target === 'plinko') {
+        const dropBall = group.userData.dropBall;
+        group.userData.dropBall = function (onLand) {
+          dropBall.call(this, onLand);
+          replacement.userData.drop?.();
+        };
+      }
       if (hasAnimation) {
         this.animatedModels = this.animatedModels.filter(({ model: animatedModel }) => animatedModel !== group);
         if (!this.animatedModels.some(({ model }) => model === replacement)) {
-          this.animatedModels.push({ model: replacement, update: template.userData.update });
+          const update = map === 'casino' && target === 'plinko'
+            ? (t, dt) => replacement.userData.update(dt, t)
+            : replacement.userData.update;
+          this.animatedModels.push({ model: replacement, update });
         }
       }
 
@@ -941,7 +985,7 @@ export class World {
 
   update(dt, center, camera) {
     this.t += dt;
-    for (const animation of this.animatedModels) animation.update(this.t, dt);
+    for (const animation of this.animatedModels) animation.update.call(animation.model.userData, this.t, dt);
     const now = performance.now();
 
     // 1. Ambient theme particles
@@ -1070,9 +1114,10 @@ export class World {
             u.onComplete?.();
           }
         } else {
-          u.rotor.rotation.y += 0.25 * dt;
+          if (!u.customAnimation) u.rotor.rotation.y += 0.25 * dt;
         }
       } else if (u.type === 'duck_derby') {
+        if (u.replacementModel) u.replacementModel.userData.racing = !!u.isRacing;
         u.ducks.forEach((d, i) => {
           if (u.isRacing) {
             d.progress += d.speed * dt * 0.12;

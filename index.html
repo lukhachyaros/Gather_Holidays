@@ -5,8 +5,8 @@ git<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gather Holidays 3D 🎄🎃🧧💝</title>
 <link rel="icon" type="image/jpeg" href="assets/logo.jpg">
-<link rel="stylesheet" href="css/style.css">
-<link rel="stylesheet" href="css/casino.css">
+<link rel="stylesheet" href="css/style.css?v=2026111217">
+<link rel="stylesheet" href="css/casino.css?v=2026111211">
 <link rel="stylesheet" href="css/avatar_customizer.css">
 <script type="importmap">
 { "imports": {
@@ -634,6 +634,34 @@ git<!doctype html>
 
     <div class="row" style="margin-top:10px">
       <button id="btnTryAnotherLixi" class="primary hidden">🔄 Thử Hái Lại Lần Nữa</button>
+      <button data-close>Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG: Clover Fountain Coin Toss -->
+<div id="dlgCloverCoinToss" class="overlay hidden">
+  <div class="panel clover-coin-panel">
+    <div class="clover-coin-icon">🍀🪙</div>
+    <h2>Đài Phun Cỏ Bốn Lá</h2>
+    <p class="sub">Chọn mặt xu bạn dự đoán. Đoán đúng sẽ nhận <b>500 Xu</b>!</p>
+    <div class="lixi-event-notice">
+      <span>⏰ Mở 5 phút trong mỗi chu kỳ 15 phút</span>
+      <b id="cloverCoinEventTimer" class="lixi-timer-badge">⏳ Còn 4:59</b>
+    </div>
+    <div class="clover-coin-choices" role="group" aria-label="Chọn mặt đồng xu">
+      <button type="button" class="clover-coin-choice selected" data-coin-side="heads">🌕 Ngửa</button>
+      <button type="button" class="clover-coin-choice" data-coin-side="tails">🌑 Sấp</button>
+    </div>
+    <div class="clover-coin-stage" aria-hidden="true">
+      <div id="cloverCoinVisual" class="clover-coin-visual" data-side="heads">
+        <div class="clover-coin-face clover-coin-front">NGỬA</div>
+        <div class="clover-coin-face clover-coin-back">SẤP</div>
+      </div>
+    </div>
+    <div id="cloverCoinResult" class="clover-coin-result hidden" role="status" aria-live="polite"></div>
+    <div class="row clover-coin-actions">
+      <button id="btnTossCloverCoin" class="primary">🪙 Tung đồng xu</button>
       <button data-close>Đóng</button>
     </div>
   </div>
@@ -1282,6 +1310,6 @@ git<!doctype html>
 </div>
 
 <div id="toast"></div>
-<script type="module" src="js/game.js?v=2026111204"></script>
+<script type="module" src="js/game.js?v=2026111217"></script>
 </body>
 </html>

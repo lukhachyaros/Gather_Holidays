@@ -24,6 +24,8 @@
   justify-content: center;
   z-index: 100;
   padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   animation: casinoFadeIn 0.25s ease-out;
 }
 
@@ -37,10 +39,11 @@
   border: 2px solid var(--gold-primary);
   border-radius: 20px;
   box-shadow: 0 0 35px var(--gold-glow), 0 25px 60px rgba(0, 0, 0, 0.85);
-  width: min(840px, 98vw);
-  max-height: 92vh;
+  width: min(1000px, 98vw);
+  max-height: min(92vh, calc(100dvh - 24px));
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
   color: #f8fafc;
   font-family: system-ui, -apple-system, sans-serif;
@@ -165,8 +168,13 @@
 
 /* Casino Body Container */
 .casino-body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 16px 20px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  scrollbar-width: thin;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -175,10 +183,16 @@
 
 .casino-online-table {
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "heading heading"
+    "controls controls"
+    "status status"
+    "rooms rooms"
+    "players players";
+  gap: 6px 8px;
+  padding: 9px 10px;
   border: 1px solid rgba(6, 182, 212, 0.45);
   border-radius: 12px;
   background: rgba(15, 23, 42, 0.82);
@@ -194,6 +208,12 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+.casino-online-table-heading { grid-area: heading; }
+.casino-online-controls { grid-area: controls; }
+.casino-online-status { grid-area: status; }
+.casino-online-rooms { grid-area: rooms; }
+.casino-online-players { grid-area: players; }
 
 .casino-online-table-heading > div {
   display: flex;
@@ -220,6 +240,11 @@
   border-radius: 8px;
   background: rgba(2, 6, 23, 0.8);
   color: #fff;
+}
+
+.casino-online-controls .casino-action-btn {
+  padding: 8px 14px;
+  white-space: nowrap;
 }
 
 .casino-online-rooms,
@@ -265,10 +290,17 @@
 }
 
 .roulette-wheel-box {
+  flex: 0 0 300px;
+  width: 300px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
+}
+
+#rouletteResult {
+  min-width: 0 !important;
+  max-width: 100%;
 }
 
 #rouletteCanvas {
@@ -409,11 +441,11 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   background: var(--felt-green);
   border: 2px solid var(--gold-primary);
   border-radius: 16px;
-  padding: 16px 20px;
+  padding: 10px 14px;
   box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.6);
 }
 
@@ -480,14 +512,14 @@
 .bj-cards-row {
   display: flex;
   gap: 8px;
-  min-height: 96px;
+  min-height: 76px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .playing-card {
-  width: 65px;
-  height: 92px;
+  width: 56px;
+  height: 80px;
   background: #ffffff;
   border-radius: 7px;
   border: 1px solid #cbd5e1;
@@ -521,9 +553,27 @@
 
 .bj-controls-row {
   display: flex;
-  gap: 10px;
+  gap: 7px;
   justify-content: center;
+  align-items: center;
   flex-wrap: wrap;
+}
+
+.bj-controls-row .casino-chips-row {
+  gap: 6px;
+}
+
+.bj-controls-row .casino-chip-btn {
+  width: 36px;
+  height: 36px;
+  border-width: 2px;
+  font-size: 10px;
+}
+
+.bj-controls-row .casino-action-btn {
+  padding: 8px 11px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* ==========================================================================
@@ -630,6 +680,7 @@
   background: #090e1a;
   border: 2px solid rgba(6, 182, 212, 0.5);
   box-shadow: 0 0 25px rgba(6, 182, 212, 0.3);
+  max-height: min(40vh, 360px);
 }
 
 /* Buttons and Actions */
@@ -769,6 +820,226 @@
 @keyframes tickerSlideIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-height: 820px) {
+  .casino-frame {
+    max-height: calc(100dvh - 12px);
+    border-radius: 14px;
+  }
+
+  .casino-header {
+    padding: 8px 14px;
+  }
+
+  .casino-title {
+    font-size: 17px;
+  }
+
+  .casino-body {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .casino-live-ticker {
+    padding: 5px 12px;
+  }
+
+  .blackjack-arena {
+    gap: 7px;
+    padding: 8px 10px;
+  }
+
+  .bj-cards-row {
+    min-height: 64px;
+  }
+
+  .playing-card {
+    width: 48px;
+    height: 68px;
+    padding: 4px;
+  }
+
+  #duckRaceCanvas {
+    height: clamp(130px, 22vh, 180px);
+  }
+
+  #plinkoCanvas {
+    height: clamp(200px, 34vh, 300px);
+  }
+
+  .duck-derby-arena,
+  .plinko-arena {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 700px) {
+  .casino-modal-overlay {
+    padding: 6px;
+  }
+
+  .casino-frame {
+    width: 100%;
+    max-height: calc(100dvh - 12px);
+  }
+
+  .casino-header {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .casino-title {
+    font-size: 14px;
+  }
+
+  .casino-wallet-badge {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .casino-body {
+    padding: 8px;
+  }
+
+  .casino-online-controls {
+    flex-wrap: nowrap;
+  }
+
+  .casino-online-controls input {
+    min-width: 0;
+  }
+
+  .bj-controls-row {
+    gap: 6px;
+  }
+
+  .bj-controls-row .casino-chips-row {
+    flex: 1 0 100%;
+    justify-content: center;
+  }
+
+  .bj-controls-row .casino-action-btn {
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  .roulette-arena {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .roulette-wheel-box {
+    flex: 0 0 auto;
+    width: 100%;
+    gap: 6px;
+  }
+
+  #rouletteCanvas {
+    width: 180px;
+    height: 180px;
+  }
+
+  #rouletteResult {
+    width: min(100%, 300px);
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .roulette-arena > div:last-child {
+    width: 100%;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .roulette-bet-grid {
+    width: max-content;
+    max-width: 100%;
+    padding: 8px;
+    gap: 3px;
+  }
+
+  .roulette-grid-row {
+    gap: 3px;
+  }
+
+  .roulette-cell {
+    width: 20px;
+    height: 28px;
+    font-size: 10px;
+  }
+
+  .roulette-grid-row:last-child .roulette-cell {
+    min-width: 0;
+    font-size: 9px;
+  }
+
+  .roulette-arena .casino-chips-row {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .roulette-arena .casino-chip-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .roulette-arena > div:last-child > div:last-child {
+    display: flex;
+    gap: 6px !important;
+    margin-top: 0 !important;
+  }
+
+  .roulette-arena > div:last-child > div:last-child .casino-action-btn {
+    flex: 1;
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  #duckRaceCanvas {
+    height: 140px;
+  }
+
+  .duck-cards-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .duck-card {
+    padding: 6px;
+    gap: 4px;
+  }
+
+  .duck-card-icon {
+    font-size: 22px;
+  }
+
+  .slot-machine-arena {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .slot-cabinet {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .slot-reel {
+    width: 58px;
+    height: 76px;
+    font-size: 36px;
+  }
+
+  .slot-reels-window {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .slot-lever-handle {
+    height: 100px;
+  }
 }
 
 /* Peer chip badge on Roulette */

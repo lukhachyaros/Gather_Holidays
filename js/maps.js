@@ -75,8 +75,9 @@ export function buildThemeMap(themeKey = 'christmas') {
     rect(3, 4, 5, 5, '~');
     rect(24, 4, 26, 5, '~');
   } else if (themeKey === 'casino') {
-    // Luxurious velvet carpets for the 5 arcade stations
-    rect(11, 10, 18, 14, 'R'); // Central Duck Derby water canal
+    // Luxurious velvet carpets for the arcade and event plazas
+    rect(19, 4, 25, 9, 'R');   // Northeast Duck Derby raceway
+    rect(11, 10, 18, 14, 'R'); // Central clover fountain plaza
     rect(4, 10, 10, 13, 'R');  // West Roulette Plaza
     rect(19, 10, 25, 13, 'R'); // East Blackjack Plaza
     rect(4, 15, 10, 19, 'R');  // Southwest Slots row
@@ -650,16 +651,27 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
     });
     colliders.push({ x: 7.0, y: 11.5, r: 0.95 });
 
-    // 2. Duck Derby Raceway (Central Plaza, x=14.5, y=12.0)
+    // Clover fountain replaces Duck Derby in the central plaza.
+    hotspots.push({
+      id: 'casino_clover_fountain',
+      type: 'clover_fountain',
+      x: 14.5,
+      y: 12.0,
+      radius: 2.9,
+      prompt: '🍀 Đài phun cỏ bốn lá · [E] Đoán mặt đồng xu, đúng nhận 500 Xu',
+    });
+    colliders.push({ x: 14.5, y: 12.0, r: 1.15 });
+
+    // 2. Duck Derby Raceway moved to the northeast plaza.
     hotspots.push({
       id: 'casino_duck_derby',
       type: 'duck_derby',
-      x: 14.5,
-      y: 12.0,
+      x: 22.0,
+      y: 5.5,
       radius: 3.2,
       prompt: '🦆 Đua Vịt Duck Derby · [E] Bắt đầu chặng đua kịch tính 4 chú vịt',
     });
-    colliders.push({ x: 14.5, y: 12.0, r: 1.15 });
+    colliders.push({ x: 22.0, y: 5.5, r: 1.15 });
 
     // 3. Blackjack Table (East Plaza, x=22.0, y=11.5)
     hotspots.push({

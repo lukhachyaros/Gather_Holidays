@@ -55,6 +55,42 @@
       "name": "ongtho",
       "format": "module",
       "moduleUrl": "../design_model/ongtho.js"
+    },
+    {
+      "id": "design-model-roulette-table",
+      "name": "roulette_table",
+      "format": "module",
+      "moduleUrl": "../design_model/roulette_table.js?v=2026111207"
+    },
+    {
+      "id": "design-model-blackjack-table",
+      "name": "blackjack_table",
+      "format": "module",
+      "moduleUrl": "../design_model/blackjack_table.js?v=2026111208"
+    },
+    {
+      "id": "design-model-duck-derby",
+      "name": "duck_derby",
+      "format": "module",
+      "moduleUrl": "../design_model/duck_derby.js?v=2026111212"
+    },
+    {
+      "id": "design-model-clover-fountain",
+      "name": "clover_fountain",
+      "format": "module",
+      "moduleUrl": "../design_model/clover_fountain.js?v=2026111217"
+    },
+    {
+      "id": "design-model-plinko",
+      "name": "plinko",
+      "format": "module",
+      "moduleUrl": "../design_model/plinko.js?v=2026111214"
+    },
+    {
+      "id": "design-model-slot-machine",
+      "name": "slot_machine",
+      "format": "module",
+      "moduleUrl": "../design_model/slot_machine.js?v=2026111214"
     }
   ],
   "replacements": [
@@ -64,6 +100,12 @@
     { "map": "tet", "target": "map_tree", "assetId": "design-model-kumquat" },
     { "map": "tet", "target": "mai_tree", "assetId": "design-model-mai-tree" },
     { "map": "tet", "target": "dragon_altar", "assetId": "design-model-dragon-altar" },
-    { "map": "tet", "target": "phuc_loc_tho_shrine", "assetId": "design-model-shrine" }
+    { "map": "tet", "target": "phuc_loc_tho_shrine", "assetId": "design-model-shrine" },
+    { "map": "casino", "target": "roulette", "assetId": "design-model-roulette-table" },
+    { "map": "casino", "target": "blackjack", "assetId": "design-model-blackjack-table" },
+    { "map": "casino", "target": "duck_derby", "assetId": "design-model-duck-derby" },
+    { "map": "casino", "target": "clover_fountain", "assetId": "design-model-clover-fountain" },
+    { "map": "casino", "target": "plinko", "assetId": "design-model-plinko" },
+    { "map": "casino", "target": "slot_machine", "assetId": "design-model-slot-machine" }
   ]
 }

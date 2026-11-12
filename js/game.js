@@ -7,7 +7,7 @@ import {
   CARD_STYLES,
   rollLixiReward,
 } from './themes.js';
-import { isSolid, buildThemeMap, validMap } from './maps.js?v=2026111204';
+import { isSolid, buildThemeMap, validMap } from './maps.js?v=2026111217';
 import { connect, connectLobby, hashPass } from './net.js';
 import {
   initPlayer,
@@ -29,8 +29,8 @@ import {
   seekPlayer,
   syncPlayback,
 } from './media.js';
-import { World, TILE } from './world.js?v=2026111204';
-import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=2026111204';
+import { World, TILE } from './world.js?v=2026111217';
+import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=2026111208';
 import { emojiSprite, part, G, mat } from './props.js';
 import { RtcManager } from './rtc.js?v=20261111_trystero';
 import {
@@ -63,7 +63,7 @@ import {
   buyShopItem,
   equipShopItem,
   unequipShopItem,
-} from './casino.js';
+} from './casino.js?v=2026111217';
 import { loadAvatarCustomization, openAvatarStudioModal } from './avatar_customizer.js';
 
 let myAvatarCustom = loadAvatarCustomization();
@@ -3600,6 +3600,115 @@ function getLixiEventStatus() {
   return { inEvent, remainSec, timeStr };
 }
 
+let cloverCoinTimerInterval = null;
+let cloverCoinSelectedSide = 'heads';
+let isCloverCoinTossing = false;
+
+function updateCloverCoinEventStatus() {
+  const dialog = $('dlgCloverCoinToss');
+  if (!dialog || dialog.classList.contains('hidden')) {
+    clearInterval(cloverCoinTimerInterval);
+    cloverCoinTimerInterval = null;
+    return;
+  }
+
+  const status = getLixiEventStatus();
+  $('cloverCoinEventTimer').textContent = status.inEvent
+    ? `⏳ Còn ${status.timeStr}`
+    : `⏰ Mở lại sau ${status.timeStr}`;
+  $('btnTossCloverCoin').disabled = isCloverCoinTossing || !status.inEvent;
+  if (!status.inEvent && !isCloverCoinTossing) {
+    $('cloverCoinResult').textContent = 'Sự kiện đã kết thúc. Hãy quay lại khi mở cửa!';
+    $('cloverCoinResult').classList.remove('hidden');
+  }
+}
+
+function openCloverCoinTossDialog() {
+  const status = getLixiEventStatus();
+  if (!status.inEvent) {
+    toast(`⏳ Sự kiện tung xu chưa mở! Còn ${status.timeStr} nữa. Hãy quay lại sau nhé!`);
+    return;
+  }
+
+  cloverCoinSelectedSide = 'heads';
+  document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
+    button.disabled = isCloverCoinTossing;
+    button.classList.toggle('selected', button.dataset.coinSide === cloverCoinSelectedSide);
+  });
+  if (!isCloverCoinTossing) {
+    $('cloverCoinResult').classList.add('hidden');
+    $('btnTossCloverCoin').textContent = '🪙 Tung đồng xu';
+  }
+  openDialog('dlgCloverCoinToss');
+  updateCloverCoinEventStatus();
+  clearInterval(cloverCoinTimerInterval);
+  cloverCoinTimerInterval = setInterval(updateCloverCoinEventStatus, 1000);
+}
+
+document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
+  button.addEventListener('click', () => {
+    if (isCloverCoinTossing) return;
+    cloverCoinSelectedSide = button.dataset.coinSide;
+    document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(choice => {
+      choice.classList.toggle('selected', choice === button);
+    });
+  });
+});
+
+$('btnTossCloverCoin')?.addEventListener('click', () => {
+  if (isCloverCoinTossing) return;
+  const status = getLixiEventStatus();
+  if (!status.inEvent) {
+    updateCloverCoinEventStatus();
+    toast(`⏳ Sự kiện tung xu chưa mở! Còn ${status.timeStr} nữa.`);
+    return;
+  }
+
+  isCloverCoinTossing = true;
+  updateCloverCoinEventStatus();
+  document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
+    button.disabled = true;
+  });
+  const result = Math.random() < 0.5 ? 'heads' : 'tails';
+  const visual = $('cloverCoinVisual');
+  visual.style.setProperty('--coin-start', visual.dataset.side === 'tails' ? '180deg' : '0deg');
+  visual.style.setProperty('--coin-end', result === 'heads' ? '1800deg' : '1980deg');
+  visual.classList.remove('flipping');
+  void visual.offsetWidth;
+  visual.classList.add('flipping');
+  $('cloverCoinResult').textContent = 'Đồng xu đang được tung...';
+  $('cloverCoinResult').classList.remove('hidden');
+
+  const fountain = world?.casinoObjs?.find(object => object.userData?.type === 'clover_fountain');
+  fountain?.userData?.replacementModel?.userData?.tossCoin?.(result);
+  playSfx('coin', 'casino');
+  me.av?.playEmote('interact');
+
+  setTimeout(() => {
+    visual.classList.remove('flipping');
+    visual.dataset.side = result;
+    const isCorrect = result === cloverCoinSelectedSide;
+    if (isCorrect) {
+      addChips(500);
+      playSfx('plinko_win', 'casino');
+      me.av?.playEmote('cheer');
+      $('cloverCoinResult').textContent = `🎉 Mặt ${result === 'heads' ? 'Ngửa' : 'Sấp'} xuất hiện! Bạn đoán đúng, nhận +500 Xu.`;
+      toast('🍀 Đoán đúng mặt đồng xu! Bạn nhận được +500 Xu!');
+      floaters.push({ e: '🪙 +500 Xu!', who: net?.selfId, t: Date.now() });
+    } else {
+      $('cloverCoinResult').textContent = `Mặt ${result === 'heads' ? 'Ngửa' : 'Sấp'} xuất hiện. Chưa đúng lần này, bạn có thể tung lại!`;
+      toast('🪙 Chưa đúng mặt xu, bạn có thể thử lại trong thời gian sự kiện.');
+    }
+
+    isCloverCoinTossing = false;
+    $('btnTossCloverCoin').textContent = '🔄 Tung lại';
+    document.querySelectorAll('#dlgCloverCoinToss [data-coin-side]').forEach(button => {
+      button.disabled = false;
+    });
+    updateCloverCoinEventStatus();
+  }, 1550);
+});
+
 let rhythmAnimationId = null;
 let rhythmNeedlePos = 50;
 let rhythmTargetMin = 35;
@@ -4196,6 +4305,9 @@ function triggerInteract(target = activeTarget) {
       case 'duck_derby':
         openDuckDerby();
         break;
+      case 'clover_fountain':
+        openCloverCoinTossDialog();
+        break;
       case 'blackjack':
         openBlackjack();
         break;
@@ -4402,7 +4514,7 @@ addEventListener('compositionend', () => {
 addEventListener(
   'wheel',
   e => {
-    if (e.target.closest('#chat, #mediaBox, .overlay:not(.hidden), .dialog:not(.hidden), #dlgCard, #dlgCostume, #dlgMusic, #inboxModal')) {
+    if (e.target.closest('#chat, #mediaBox, .overlay:not(.hidden), .dialog:not(.hidden), #dlgCard, #dlgCostume, #dlgMusic, #inboxModal, .casino-modal-overlay')) {
       return;
     }
     e.preventDefault();

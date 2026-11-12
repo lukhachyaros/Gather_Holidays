@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createCloverFountain } from '../design_model/clover_fountain.js?v=2026111217';
 import { THEMES } from './themes.js';
 import {
   buildCampfire,
@@ -113,6 +114,7 @@ export const MODEL_MAPS = {
       casino_pub: 'Quầy pub',
       roulette: 'Bàn roulette',
       duck_derby: 'Đường đua vịt',
+      clover_fountain: 'Đài phun cỏ bốn lá',
       blackjack: 'Bàn blackjack',
       slot_machine: 'Máy slot',
       plinko: 'Bàn plinko',
@@ -142,7 +144,7 @@ let staticLibraryPromise;
 
 export async function loadModelLibrary() {
   if (!staticLibraryPromise) {
-    staticLibraryPromise = fetch('./design_model/model-library.json?v=2026111204', { cache: 'no-cache' })
+    staticLibraryPromise = fetch('./design_model/model-library.json?v=2026111217', { cache: 'no-cache' })
       .then(response => {
         if (!response.ok) throw new Error(`Không tải được thư viện model (${response.status}).`);
         return response.json();
@@ -294,6 +296,7 @@ export function instantiateDefaultModel(map, target) {
     'casino:casino_pub': buildCasinoPubBar,
     'casino:roulette': buildRouletteTable,
     'casino:duck_derby': buildDuckDerbyTrack,
+    'casino:clover_fountain': () => createCloverFountain(THREE),
     'casino:blackjack': buildBlackjackTable,
     'casino:slot_machine': buildSlotMachine,
     'casino:plinko': buildPlinkoBoard,
