@@ -1,79 +1,11 @@
 // Procedural 3D models for themes, interactive stations, seats, ornaments, pumpkins, and NPCs.
 import * as THREE from 'three';
 import { PUMPKIN_HATS, ORNAMENTS, COSTUMES } from './themes.js';
+import { geo, mat, G, part, labelSprite } from './modelUtils.js';
+export { geo, mat, G, part, labelSprite } from './modelUtils.js';
+export { buildGiantMaiTree } from '../design_model/maiTree.js';
 
-const geoCache = new Map(), matCache = new Map(), texCache = new Map();
-export const geo = (key, make) => { if (!geoCache.has(key)) geoCache.set(key, make()); return geoCache.get(key); };
-export const mat = (color, opts = {}) => {
-  const k = color + JSON.stringify(opts);
-  if (!matCache.has(k)) matCache.set(k, new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05, ...opts }));
-  return matCache.get(k);
-};
-
-export const G = {
-  sph: () => geo('sph', () => new THREE.SphereGeometry(0.5, 16, 12)),
-  cyl: () => geo('cyl', () => new THREE.CylinderGeometry(0.5, 0.5, 1, 14)),
-  cone: () => geo('cone', () => new THREE.ConeGeometry(0.5, 1, 14)),
-  box: () => geo('box', () => new THREE.BoxGeometry(1, 1, 1)),
-  oct: () => geo('oct', () => new THREE.OctahedronGeometry(0.5)),
-  torus: () => geo('torus', () => new THREE.TorusGeometry(0.35, 0.1, 10, 20)),
-};
-
-export function part(parent, g, material, pos = [0, 0, 0], scale = [1, 1, 1], rot) {
-  const o = new THREE.Mesh(g, material);
-  o.position.set(...pos);
-  o.scale.set(...scale);
-  if (rot) o.rotation.set(...rot);
-  const vol = Math.abs(scale[0] * scale[1] * scale[2]);
-  o.castShadow = vol > 0.02;
-  o.receiveShadow = vol > 0.05;
-  parent.add(o);
-  return o;
-}
-
-export function labelSprite(text, bg = 'rgba(15, 20, 35, 0.82)', fg = '#ffffff', worldH = 0.42) {
-  const lines = text.split('\n');
-  const lineCount = lines.length;
-  const c = document.createElement('canvas');
-  c.width = 1024;
-  c.height = lineCount > 1 ? 160 : 96;
-  const x = c.getContext('2d');
-  const fontSize = lineCount > 1 ? 38 : 44;
-  x.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
-
-  // Measure widest line to auto-fit pill width
-  let maxW = 0;
-  for (const ln of lines) maxW = Math.max(maxW, x.measureText(ln).width);
-  const pillW = Math.min(c.width - 32, maxW + 64);
-  const pillH = c.height - 24;
-  const pillX = (c.width - pillW) / 2;
-
-  x.fillStyle = bg;
-  x.beginPath();
-  x.roundRect(pillX, 12, pillW, pillH, 22);
-  x.fill();
-  x.strokeStyle = 'rgba(255,255,255,0.28)';
-  x.lineWidth = 3;
-  x.stroke();
-  x.fillStyle = fg;
-  x.textAlign = 'center';
-  x.textBaseline = 'middle';
-  if (lineCount > 1) {
-    const lineH = pillH / (lineCount + 0.4);
-    for (let i = 0; i < lineCount; i++) {
-      const ly = 12 + lineH * (i + 0.7);
-      x.fillText(lines[i], c.width / 2, ly, pillW - 32);
-    }
-  } else {
-    x.fillText(text, c.width / 2, c.height / 2, pillW - 32);
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false }));
-  s.scale.set(worldH * (c.width / c.height), worldH, 1);
-  s.renderOrder = 8;
-  return s;
-}
+const texCache = new Map();
 
 export function emojiTexture(e) {
   if (!texCache.has(e)) {
@@ -407,65 +339,6 @@ export function buildVampireNPC() {
 // ============================================================================
 // TET CENTERPIECE (GIANT MAI TREE WITH BAO LI XI) & FIREWORKS ZONE
 // ============================================================================
-export function buildGiantMaiTree() {
-  const g = new THREE.Group();
-  // Festive red/gold octagonal pot base
-  part(g, G.cyl(), mat('#9b111e'), [0, 0.4, 0], [2.4, 0.8, 2.4]);
-  part(g, G.cyl(), mat('#ffd166', { metalness: 0.4 }), [0, 0.82, 0], [2.52, 0.1, 2.52]);
-
-  // Gnarled brown trunk & main branches
-  const trunkMat = mat('#5c3a1e');
-  part(g, G.cyl(), trunkMat, [0, 2.1, 0], [0.75, 2.8, 0.75]);
-  const branchCoords = [
-    { pos: [0.9, 3.3, 0.4], rot: [0.2, 0, -0.6], s: [0.35, 2.0, 0.35] },
-    { pos: [-0.9, 3.4, -0.3], rot: [-0.2, 0, 0.6], s: [0.35, 2.0, 0.35] },
-    { pos: [0.3, 3.5, -0.9], rot: [-0.6, 0, -0.2], s: [0.32, 1.9, 0.32] },
-    { pos: [-0.3, 3.4, 0.9], rot: [0.6, 0, 0.2], s: [0.32, 1.9, 0.32] },
-  ];
-  branchCoords.forEach(b => part(g, G.cyl(), trunkMat, b.pos, b.s, b.rot));
-
-  // Golden Apricot Blossom clusters (Hoa Mai Vàng)
-  const yellowMat = mat('#ffd60a', { emissive: '#ffb703', emissiveIntensity: 0.35 });
-  const blossomClusters = [
-    [0, 5.1, 0, 2.2],
-    [1.5, 4.1, 0.7, 1.65],
-    [-1.5, 4.2, -0.6, 1.65],
-    [0.6, 4.3, -1.5, 1.6],
-    [-0.6, 4.1, 1.5, 1.6],
-    [1.2, 4.6, -1.1, 1.4],
-    [-1.2, 4.5, 1.1, 1.4],
-  ];
-  blossomClusters.forEach(([x, y, z, r]) => {
-    part(g, G.sph(), yellowMat, [x, y, z], [r, r * 0.72, r]);
-  });
-
-  // Hanging Red Envelopes (Bao lì xì 🧧) around the canopy
-  const envelopes = [];
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2;
-    const rad = i % 2 === 0 ? 1.85 : 1.35;
-    const y = i % 2 === 0 ? 3.25 : 4.15;
-    const env = new THREE.Group();
-    part(env, G.cyl(), mat('#ffd166'), [0, 0.18, 0], [0.02, 0.2, 0.02]);
-    part(env, G.box(), mat('#d90429', { emissive: '#9b0000', emissiveIntensity: 0.45 }), [0, -0.05, 0], [0.24, 0.36, 0.04]);
-    part(env, G.box(), mat('#ffd166'), [0, -0.04, 0.025], [0.12, 0.12, 0.02]);
-    env.position.set(Math.cos(a) * rad, y, Math.sin(a) * rad);
-    env.rotation.y = -a;
-    g.add(env);
-    envelopes.push(env);
-  }
-  g.userData.envelopes = envelopes;
-
-  const light = new THREE.PointLight('#ffd166', 4.0, 15);
-  light.position.set(0, 4.5, 0);
-  g.add(light);
-
-  const lbl = labelSprite('🌸 Cây Mai Đại Thụ · [E] Hái Bao Lì Xì Đầu Năm 🧧', 'rgba(185,28,28,0.9)', '#fef08a', 0.48);
-  lbl.position.set(0, 6.6, 0);
-  g.add(lbl);
-  return g;
-}
-
 export function buildFireworkLauncher() {
   const g = new THREE.Group();
   // Base platform
@@ -2241,5 +2114,3 @@ export function buildAuraMesh(auraType) {
 
   return g;
 }
-
-
