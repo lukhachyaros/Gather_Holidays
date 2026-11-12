@@ -1203,6 +1203,14 @@ export class Avatar {
   applyCustomization(cfg) {
     if (!cfg) return;
     this.customConfig = cfg;
+    this.shirtMesh.material = mat('#3b82f6');
+    this.leftSleeve.material = mat('#3b82f6');
+    this.rightSleeve.material = mat('#3b82f6');
+    this.pelvisMesh.material = mat('#2b3a4a');
+    this.leftThigh.material = mat('#2b3a4a');
+    this.rightThigh.material = mat('#2b3a4a');
+    this.leftShoe.material = mat('#1f242d');
+    this.rightShoe.material = mat('#1f242d');
 
     // 1. Skin Color
     if (cfg.skin) {
@@ -1284,6 +1292,11 @@ export class Avatar {
 
     // 4. Hairstyles (3D Mesh Hair)
     this.hairGroup.clear();
+    this.hairGroup.scale.set(
+      this.headMesh.scale.x / 0.42,
+      this.headMesh.scale.y / 0.44,
+      this.headMesh.scale.z / 0.42
+    );
     const hStyle = cfg.hairStyle || 'short_classic';
     const hColor = cfg.hairColor || '#3a2314';
     const hm = mat(hColor, { roughness: 0.65 });
@@ -1354,15 +1367,8 @@ export class Avatar {
       hdScale *= 1.4;
     }
 
-    this.hips.position.y = 0.78 * hScale;
-    this.leftThigh.scale.set(0.16 * wScale, 0.56 * hScale, 0.16 * wScale);
-    this.rightThigh.scale.set(0.16 * wScale, 0.56 * hScale, 0.16 * wScale);
-    this.leftThigh.position.y = -0.28 * hScale;
-    this.rightThigh.position.y = -0.28 * hScale;
-    this.leftShoe.position.y = -0.62 * hScale;
-    this.rightShoe.position.y = -0.62 * hScale;
-    this.torso.scale.set(wScale, 1, wScale);
-    this.headGroup.scale.set(hdScale / wScale, hdScale, hdScale / wScale);
+    this.body.scale.set(wScale, hScale, wScale);
+    this.headGroup.scale.set(hdScale / wScale, hdScale / hScale, hdScale / wScale);
 
     // 6. Classic 2D Clothing
     const shirtId = cfg.classicClothing?.shirt;
@@ -1386,48 +1392,57 @@ export class Avatar {
     this.layeredClothingGroup.clear();
     this.layeredLegsClothingGroup.clear();
     const lc = cfg.layeredClothing || {};
+    const jacketLayer = new THREE.Group();
+    jacketLayer.scale.setScalar(1.04);
+    this.layeredClothingGroup.add(jacketLayer);
+    const sweaterLayer = new THREE.Group();
+    sweaterLayer.scale.setScalar(1.02);
+    this.layeredClothingGroup.add(sweaterLayer);
+    const dressLayer = new THREE.Group();
+    dressLayer.scale.setScalar(1.01);
+    this.layeredClothingGroup.add(dressLayer);
 
     if (lc.jacket && lc.jacket !== 'none') {
       if (lc.jacket === 'bomber_jacket') {
         const jMat = mat('#1e293b', { roughness: 0.4 });
-        part(this.layeredClothingGroup, G.box(), jMat, [0, 0.28, 0], [0.5, 0.56, 0.28]);
-        part(this.layeredClothingGroup, G.box(), mat('#ea580c'), [0, 0.48, 0.08], [0.24, 0.1, 0.14]);
+        part(jacketLayer, G.box(), jMat, [0, 0.28, 0], [0.5, 0.56, 0.28]);
+        part(jacketLayer, G.box(), mat('#ea580c'), [0, 0.48, 0.08], [0.24, 0.1, 0.14]);
       } else if (lc.jacket === 'trench_coat') {
         const coatMat = mat('#78350f', { roughness: 0.7 });
-        part(this.layeredClothingGroup, G.box(), coatMat, [0, 0.28, 0], [0.5, 0.56, 0.28]);
-        part(this.layeredClothingGroup, G.box(), coatMat, [0, -0.22, 0], [0.52, 0.48, 0.3]);
-        part(this.layeredClothingGroup, G.box(), coatMat, [-0.15, 0.52, 0.08], [0.14, 0.14, 0.14], [0, 0, 0.3]);
-        part(this.layeredClothingGroup, G.box(), coatMat, [0.15, 0.52, 0.08], [0.14, 0.14, 0.14], [0, 0, -0.3]);
+        part(jacketLayer, G.box(), coatMat, [0, 0.28, 0], [0.5, 0.56, 0.28]);
+        part(jacketLayer, G.box(), coatMat, [0, -0.22, 0], [0.52, 0.48, 0.3]);
+        part(jacketLayer, G.box(), coatMat, [-0.15, 0.52, 0.08], [0.14, 0.14, 0.14], [0, 0, 0.3]);
+        part(jacketLayer, G.box(), coatMat, [0.15, 0.52, 0.08], [0.14, 0.14, 0.14], [0, 0, -0.3]);
       } else if (lc.jacket === 'leather_jacket') {
         const lMat = mat('#0f172a', { roughness: 0.25, metalness: 0.15 });
-        part(this.layeredClothingGroup, G.box(), lMat, [0, 0.28, 0], [0.49, 0.56, 0.27]);
-        part(this.layeredClothingGroup, G.box(), mat('#cbd5e1', { metalness: 0.8 }), [0.03, 0.28, 0.14], [0.02, 0.54, 0.02]);
-        part(this.layeredClothingGroup, G.sph(), mat('#cbd5e1', { metalness: 0.8 }), [-0.12, 0.48, 0.14], [0.03, 0.03, 0.03]);
-        part(this.layeredClothingGroup, G.sph(), mat('#cbd5e1', { metalness: 0.8 }), [0.12, 0.48, 0.14], [0.03, 0.03, 0.03]);
+        part(jacketLayer, G.box(), lMat, [0, 0.28, 0], [0.49, 0.56, 0.27]);
+        part(jacketLayer, G.box(), mat('#cbd5e1', { metalness: 0.8 }), [0.03, 0.28, 0.14], [0.02, 0.54, 0.02]);
+        part(jacketLayer, G.sph(), mat('#cbd5e1', { metalness: 0.8 }), [-0.12, 0.48, 0.14], [0.03, 0.03, 0.03]);
+        part(jacketLayer, G.sph(), mat('#cbd5e1', { metalness: 0.8 }), [0.12, 0.48, 0.14], [0.03, 0.03, 0.03]);
       } else if (lc.jacket === 'varsity_jacket') {
         const vBody = mat('#b91c1c');
         const vSleeve = mat('#f8fafc');
-        part(this.layeredClothingGroup, G.box(), vBody, [0, 0.28, 0], [0.5, 0.56, 0.28]);
-        part(this.layeredClothingGroup, G.box(), vSleeve, [0, 0.02, 0], [0.48, 0.05, 0.27]);
-        part(this.layeredClothingGroup, G.box(), vSleeve, [-0.14, 0.38, 0.145], [0.08, 0.08, 0.02]);
+        part(jacketLayer, G.box(), vBody, [0, 0.28, 0], [0.5, 0.56, 0.28]);
+        part(jacketLayer, G.box(), vSleeve, [0, 0.02, 0], [0.48, 0.05, 0.27]);
+        part(jacketLayer, G.box(), vSleeve, [-0.14, 0.38, 0.145], [0.08, 0.08, 0.02]);
       }
     }
 
     if (lc.sweater && lc.sweater !== 'none') {
       if (lc.sweater === 'cozy_hoodie') {
         const hMat = mat('#334155');
-        part(this.layeredClothingGroup, G.box(), hMat, [0, 0.28, 0], [0.48, 0.55, 0.27]);
-        part(this.layeredClothingGroup, G.sph(), hMat, [0, 0.54, -0.14], [0.3, 0.2, 0.18], [-0.3, 0, 0]);
-        part(this.layeredClothingGroup, G.box(), mat('#1e293b'), [0, 0.14, 0.14], [0.32, 0.16, 0.04]);
+        part(sweaterLayer, G.box(), hMat, [0, 0.28, 0], [0.48, 0.55, 0.27]);
+        part(sweaterLayer, G.sph(), hMat, [0, 0.54, -0.14], [0.3, 0.2, 0.18], [-0.3, 0, 0]);
+        part(sweaterLayer, G.box(), mat('#1e293b'), [0, 0.14, 0.14], [0.32, 0.16, 0.04]);
       } else if (lc.sweater === 'xmas_sweater') {
         const xMat = mat('#047857');
-        part(this.layeredClothingGroup, G.box(), xMat, [0, 0.28, 0], [0.48, 0.55, 0.27]);
-        part(this.layeredClothingGroup, G.box(), mat('#dc2626'), [0, 0.32, 0], [0.49, 0.14, 0.28]);
-        part(this.layeredClothingGroup, G.box(), mat('#ffffff'), [0, 0.32, 0.145], [0.16, 0.1, 0.02]);
+        part(sweaterLayer, G.box(), xMat, [0, 0.28, 0], [0.48, 0.55, 0.27]);
+        part(sweaterLayer, G.box(), mat('#dc2626'), [0, 0.32, 0], [0.49, 0.14, 0.28]);
+        part(sweaterLayer, G.box(), mat('#ffffff'), [0, 0.32, 0.145], [0.16, 0.1, 0.02]);
       } else if (lc.sweater === 'turtleneck') {
         const tMat = mat('#18181b');
-        part(this.layeredClothingGroup, G.box(), tMat, [0, 0.28, 0], [0.47, 0.55, 0.26]);
-        part(this.layeredClothingGroup, G.cyl(), tMat, [0, 0.58, 0], [0.26, 0.16, 0.24]);
+        part(sweaterLayer, G.box(), tMat, [0, 0.28, 0], [0.47, 0.55, 0.26]);
+        part(sweaterLayer, G.cyl(), tMat, [0, 0.58, 0], [0.26, 0.16, 0.24]);
       }
     }
 
@@ -1437,7 +1452,7 @@ export class Avatar {
         part(this.layeredLegsClothingGroup, G.cone(), skirtMat, [0, -0.16, 0], [0.42, 0.38, 0.36], [Math.PI, 0, 0]);
       } else if (lc.dressSkirt === 'party_dress') {
         const dressMat = mat('#7c3aed');
-        part(this.layeredClothingGroup, G.box(), dressMat, [0, 0.24, 0], [0.48, 0.48, 0.26]);
+        part(dressLayer, G.box(), dressMat, [0, 0.24, 0], [0.48, 0.48, 0.26]);
         part(this.layeredLegsClothingGroup, G.cone(), dressMat, [0, -0.22, 0], [0.46, 0.52, 0.4], [Math.PI, 0, 0]);
       }
     }

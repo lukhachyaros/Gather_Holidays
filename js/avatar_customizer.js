@@ -885,11 +885,32 @@ export function updatePreviewAvatar(cfg) {
     name: 'Preview',
     hue: 200,
   });
+  if (previewAvatar.label) previewAvatar.label.visible = false;
 
   previewAvatar.applyCustomization(cfg);
   previewAvatar.root.position.set(0, 0, 0);
   previewAvatar.root.rotation.y = avatarRotY;
   previewScene.add(previewAvatar.root);
+  fitPreviewCamera();
+}
+
+function fitPreviewCamera() {
+  if (!previewAvatar || !previewCamera) return;
+
+  previewAvatar.body.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(previewAvatar.body);
+  if (bounds.isEmpty()) return;
+
+  const size = bounds.getSize(new THREE.Vector3());
+  const center = bounds.getCenter(new THREE.Vector3());
+  const verticalFov = THREE.MathUtils.degToRad(previewCamera.fov);
+  const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * previewCamera.aspect);
+  const heightDistance = size.y / (2 * Math.tan(verticalFov / 2));
+  const widthDistance = size.x / (2 * Math.tan(horizontalFov / 2));
+  const distance = Math.max(heightDistance, widthDistance) * 1.25;
+
+  previewCamera.position.set(center.x, center.y + size.y * 0.04, center.z + distance);
+  previewCamera.lookAt(center);
 }
 
 // ============================================================================
