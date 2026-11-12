@@ -3211,7 +3211,6 @@ function toggleSettingsModal(forceState = null) {
 }
 
 $('btnSettings').onclick = () => toggleSettingsModal();
-$('statPlayers').onclick = () => toggleSettingsModal();
 $('btnRejoinOther').onclick = () => {
   $('dlgKicked').classList.add('hidden');
   openLobbyOverlay();
@@ -4143,7 +4142,7 @@ addEventListener('keydown', e => {
   else if (k === 'm' || code === 'KeyM') toggleMic();
   else if (k === 'p' || code === 'KeyP') toggleScreenShare();
   else if (k === 'h' || code === 'KeyH') $('hud').classList.toggle('hidden');
-  else if (k === 'o' || code === 'KeyO' || k === 'u' || code === 'KeyU') {
+  else if (k === 'o' || code === 'KeyO') {
     toggleSettingsModal();
     e.preventDefault();
   }
