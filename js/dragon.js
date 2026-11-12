@@ -171,7 +171,6 @@ function setBlade(mesh, i, base, flat, dir, len, halfW, thick) {
 /* ───────────────────────── hình dáng thân ───────────────────────── */
 
 const LEN = 14; // chiều dài thân (đầu → đuôi)
-const GROUND = 0.0;
 const PROFILE = [
   [0.0, 0.27],
   [0.06, 0.3],
@@ -720,10 +719,11 @@ export function createDragon(options = {}) {
     for (const leg of legs) {
       frameAt(leg.s, t, P, T, S, U);
       const r = profileRadius(leg.s);
-      _H.copy(P);
-      _H.x += leg.side * r * 0.8;
-      _H.addScaledVector(U, -r * 0.3);
-      _rest.set(P.x + leg.side * 0.8, GROUND, P.z + leg.zBias);
+      _H.copy(P).addScaledVector(S, leg.side * r * 0.8).addScaledVector(U, -r * 0.3);
+      _rest.copy(P)
+        .addScaledVector(S, leg.side * (r * 0.8 + 0.42))
+        .addScaledVector(T, -leg.zBias)
+        .addScaledVector(U, -(r + 0.45));
 
       if (!leg.init) {
         leg.pos.copy(_rest);
@@ -742,7 +742,7 @@ export function createDragon(options = {}) {
       if (leg.stepping) {
         leg.k = Math.min(leg.k + dt / STEP_TIME, 1);
         leg.pos.lerpVectors(leg.from, leg.to, leg.k);
-        leg.pos.y = GROUND + Math.sin(leg.k * Math.PI) * STEP_LIFT;
+        leg.pos.addScaledVector(U, Math.sin(leg.k * Math.PI) * STEP_LIFT);
         if (leg.k >= 1) leg.stepping = false;
       }
 
@@ -753,6 +753,9 @@ export function createDragon(options = {}) {
       const dist = _D.length() || 1e-6;
       const dc = clamp(dist, Math.abs(L1 - L2) + 1e-3, L1 + L2 - 1e-3);
       _D.multiplyScalar(1 / dist);
+      _A.copy(_H).addScaledVector(_D, dc);
+      leg.pos.copy(_A);
+      leg.pos.y -= ANKLE;
       const a = (L1 * L1 - L2 * L2 + dc * dc) / (2 * dc);
       const h = Math.sqrt(Math.max(L1 * L1 - a * a, 0));
       _pole.set(leg.side, 0.7, 0).addScaledVector(T, leg.front ? 0.3 : -0.3);
@@ -760,7 +763,6 @@ export function createDragon(options = {}) {
       if (_PP.lengthSq() < 1e-6) _PP.set(leg.side, 1, 0);
       _PP.normalize();
       _K.copy(_H).addScaledVector(_D, a).addScaledVector(_PP, h);
-      _A.copy(_H).addScaledVector(_D, dc);
 
       leg.hip.position.copy(_H);
       leg.knee.position.copy(_K);

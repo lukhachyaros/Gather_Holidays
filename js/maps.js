@@ -181,8 +181,8 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       y: cs.y,
       rot: Math.PI,
       slots: [
-        { id: `${cs.id}_L`, sofaId: cs.id, x: cs.x - 0.24, y: cs.y + 0.08, rot: Math.PI, lean: -1 },
-        { id: `${cs.id}_R`, sofaId: cs.id, x: cs.x + 0.24, y: cs.y + 0.08, rot: Math.PI, lean: 1 },
+        { id: `${cs.id}_L`, sofaId: cs.id, x: cs.x - 0.24, y: cs.y + 0.08, rot: Math.PI, lean: -1, pose: themeKey === 'valentine' ? 'recline' : null },
+        { id: `${cs.id}_R`, sofaId: cs.id, x: cs.x + 0.24, y: cs.y + 0.08, rot: Math.PI, lean: 1, pose: themeKey === 'valentine' ? 'recline' : null },
       ],
     });
   });
@@ -448,8 +448,18 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       radius: 2.8,
       prompt: '🏮 Điện Thờ Tam Đa Phúc - Lộc - Thọ · [E] Thắp Hương · Lạy Cầu May · Ngồi Đọc Kinh',
     });
-    colliders.push({ x: 6.5, y: 14.5, r: 0.85 });
-
+    const shrineBackY = 13.78;
+    [-1.2, -0.8, -0.4, 0, 0.4, 0.8, 1.2].forEach(dx => {
+      colliders.push({ x: 6.5 + dx, y: shrineBackY, r: 0.42 });
+    });
+    [-1.25, 1.25].forEach(dx => {
+      [14.0, 14.4, 14.8, 15.2].forEach(y => {
+        colliders.push({ x: 6.5 + dx, y, r: 0.42 });
+      });
+    });
+    [-1.25, -0.84, -0.43, 0.43, 0.84, 1.25].forEach(dx => {
+      colliders.push({ x: 6.5 + dx, y: 15.18, r: 0.22 });
+    });
     // Right Fireworks Launcher Machine & surrounding Small Firecracker Tables
     hotspots.push({
       id: 'fw_launcher_right',
@@ -478,7 +488,6 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
 
     // 2 Festive Couple Sofas beside the firework plazas
     [
-      { id: 'tet_sofa_left', x: 6.5, y: 17.5 },
       { id: 'tet_sofa_right', x: 22.5, y: 17.5 },
     ].forEach(cs => {
       seats.push({
@@ -565,7 +574,7 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       colliders.push({ x: ax - 0.78, y: 9.6, r: 0.12 }, { x: ax + 0.78, y: 9.6, r: 0.12 });
     });
 
-    // Couple sofas let visitors sit together beside each fountain.
+    // Couple sofas let visitors recline together beside each fountain.
     [
       { id: 'valentine_sofa_left', x: 8.6, y: 16.9 },
       { id: 'valentine_sofa_right', x: 20.4, y: 16.9 },
@@ -577,8 +586,8 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
         y: cs.y,
         rot: Math.PI,
         slots: [
-          { id: cs.id + '_L', sofaId: cs.id, x: cs.x - 0.24, y: cs.y, rot: Math.PI, lean: -1 },
-          { id: cs.id + '_R', sofaId: cs.id, x: cs.x + 0.24, y: cs.y, rot: Math.PI, lean: 1 },
+          { id: cs.id + '_L', sofaId: cs.id, x: cs.x - 0.24, y: cs.y, rot: Math.PI, lean: -1, pose: 'recline' },
+          { id: cs.id + '_R', sofaId: cs.id, x: cs.x + 0.24, y: cs.y, rot: Math.PI, lean: 1, pose: 'recline' },
         ],
       });
     });

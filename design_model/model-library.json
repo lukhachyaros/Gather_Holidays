@@ -1,6 +1,69 @@
 {
   "format": "gather-model-library",
   "version": 1,
-  "assets": [],
-  "replacements": []
+  "assets": [
+    {
+      "id": "design-model-ong-loc",
+      "name": "ongLoc",
+      "format": "module",
+      "moduleUrl": "../design_model/ongLoc.js"
+    },
+    {
+      "id": "design-model-ngai-vang",
+      "name": "ngaiVang",
+      "format": "module",
+      "moduleUrl": "../design_model/ngaiVang.js"
+    },
+    {
+      "id": "design-model-love-seat",
+      "name": "love_seat",
+      "format": "module",
+      "moduleUrl": "../design_model/love_seat.js"
+    },
+    {
+      "id": "design-model-kumquat",
+      "name": "kumquat",
+      "format": "module",
+      "moduleUrl": "../design_model/kumquat.js"
+    },
+    {
+      "id": "design-model-mai-tree",
+      "name": "maiTree",
+      "format": "module",
+      "moduleUrl": "../design_model/maiTree.js"
+    },
+    {
+      "id": "design-model-dragon-altar",
+      "name": "dragon_altar",
+      "format": "module",
+      "moduleUrl": "../design_model/dragon_altar.js"
+    },
+    {
+      "id": "design-model-shrine",
+      "name": "shrine",
+      "format": "module",
+      "moduleUrl": "../design_model/shrine.js"
+    },
+    {
+      "id": "design-model-ong-phuc",
+      "name": "ongPhuc",
+      "format": "module",
+      "moduleUrl": "../design_model/ongPhuc.js"
+    },
+    {
+      "id": "design-model-ong-tho",
+      "name": "ongtho",
+      "format": "module",
+      "moduleUrl": "../design_model/ongtho.js"
+    }
+  ],
+  "replacements": [
+    { "map": "tet", "target": "single_chair", "assetId": "design-model-ngai-vang" },
+    { "map": "valentine", "target": "couple_sofa", "assetId": "design-model-love-seat" },
+    { "map": "tet", "target": "ong_loc_statue", "assetId": "design-model-ong-loc" },
+    { "map": "tet", "target": "map_tree", "assetId": "design-model-kumquat" },
+    { "map": "tet", "target": "mai_tree", "assetId": "design-model-mai-tree" },
+    { "map": "tet", "target": "dragon_altar", "assetId": "design-model-dragon-altar" },
+    { "map": "tet", "target": "phuc_loc_tho_shrine", "assetId": "design-model-shrine" }
+  ]
 }

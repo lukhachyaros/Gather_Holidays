@@ -395,7 +395,7 @@ try {
     powerPreference: 'high-performance',
     stencil: false,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   scene = new THREE.Scene();
@@ -1257,6 +1257,7 @@ const pubInfo = () => ({
   nametagStyle: me.nametagStyle || null,
   isAdmin: typeof isAdminVerified === 'function' ? isAdminVerified() : false,
   seatId: me.seatSlot?.id || null,
+  pose: me.seatSlot?.pose || null,
   avatarCustom: me.avatarCustom || null,
 });
 
@@ -1427,6 +1428,7 @@ async function addOrUpdatePeer(id, d) {
     pumpkinHat: d.pumpkinHat || null,
     heldItem: d.heldItem || null,
     seatId: d.seatId || null,
+    pose: d.pose || null,
     avatarCustom: d.avatarCustom !== undefined ? d.avatarCustom : p.avatarCustom,
   });
   if (state && id === state.hostId && d.name) {
@@ -1558,6 +1560,7 @@ const handlers = {
       p.th = d.h || 0;
       p.seatId = d.seatId || null;
       p.lean = d.lean || 0;
+      p.pose = d.pose || null;
     }
   },
   state(s) {
@@ -4752,7 +4755,9 @@ function loop(now) {
 
     // Check Couple Sofa Pairing & Campfire Proximity
     let myLean = 0;
+    let myPose = null;
     if (me.seatSlot) {
+      myPose = me.seatSlot.pose || null;
       const partner = findCouplePartner();
       if (partner) {
         myLean = me.seatSlot.lean || 0;
@@ -4786,7 +4791,7 @@ function loop(now) {
       } else {
         av.root.position.set(me.x * TILE, me.h, me.y * TILE);
         av.root.rotation.y = me.r;
-        av.setLocomotion(me.loco, { lean: myLean });
+        av.setLocomotion(me.loco, { lean: myLean, pose: myPose });
       }
       av.update(dt);
     }
@@ -4815,6 +4820,7 @@ function loop(now) {
       h: me.h,
       seatId: me.seatSlot?.id || null,
       lean: myLean,
+      pose: myPose,
     };
     if (
       net &&
@@ -4822,6 +4828,7 @@ function loop(now) {
       (cur.a !== sent.a ||
         cur.seatId !== sent.seatId ||
         cur.lean !== sent.lean ||
+        cur.pose !== sent.pose ||
         Math.abs(cur.x - sent.x) > 0.005 ||
         Math.abs(cur.y - sent.y) > 0.005 ||
         Math.abs(cur.r - sent.r) > 0.02 ||
@@ -4842,7 +4849,7 @@ function loop(now) {
       if (p.av) {
         p.av.root.position.set(p.x * TILE, p.h, p.y * TILE);
         p.av.root.rotation.y = p.r;
-        p.av.setLocomotion(p.a, { lean: p.lean || 0 });
+        p.av.setLocomotion(p.a, { lean: p.lean || 0, pose: p.pose || null });
         p.av.update(dt);
       }
     });
@@ -4856,7 +4863,7 @@ function loop(now) {
       lastWorldSync = now;
       world?.sync(state, roomName);
     }
-    world?.update(dt, { x: me.x * TILE, z: me.y * TILE });
+    world?.update(dt, { x: me.x * TILE, z: me.y * TILE }, camera);
     minigames?.update(dt, yaw);
     updateCamera(dt);
     if (world?.bgColor && renderer) renderer.setClearColor(world.bgColor, 1);
@@ -7573,4 +7580,3 @@ function executeAdminCommand(raw) {
 // Initial UI refresh for top-right wallet and title badges
 updateCasinoChipsUI();
 updateTitleUI();
-

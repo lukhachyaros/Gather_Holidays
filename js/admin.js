@@ -602,12 +602,16 @@ async function importLibraryFile(file) {
   }
   const assetIds = new Set();
   for (const asset of imported.assets) {
+    const isModule = asset.format === 'module' &&
+      typeof asset.moduleUrl === 'string' &&
+      /^\.\.\/design_model\/[A-Za-z0-9_-]+\.js$/.test(asset.moduleUrl);
     if (
       typeof asset.id !== 'string' ||
       typeof asset.name !== 'string' ||
-      !['js', 'json'].includes(asset.format) ||
+      !['js', 'json', 'module'].includes(asset.format) ||
       (asset.format === 'js' && typeof asset.source !== 'string') ||
-      (asset.format === 'json' && !asset.data)
+      (asset.format === 'json' && !asset.data) ||
+      (asset.format === 'module' && !isModule)
     ) {
       throw new Error('Cấu hình chứa model không hợp lệ.');
     }

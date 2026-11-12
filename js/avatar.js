@@ -1942,6 +1942,13 @@ export class Avatar {
       this.rightLeg.rotation.x = -Math.PI / 2 + 0.05;
       this.leftArm.rotation.x = -0.32;
       this.rightArm.rotation.x = -0.32;
+      if (this.sitting?.pose === 'recline') {
+        this.hips.position.y = 0.3;
+        this.torso.rotation.x = -1.05;
+        this.headGroup.rotation.x = 0.65;
+        this.leftArm.rotation.x = -0.9;
+        this.rightArm.rotation.x = -0.9;
+      }
       // Couple Seat Lean!
       if (this.sitting?.lean) {
         this.torso.rotation.z = this.sitting.lean * 0.14;

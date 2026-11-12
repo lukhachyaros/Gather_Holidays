@@ -168,44 +168,56 @@ export async function loadModelLibrary() {
   return mergeLibraries(base, validateModelLibrary(JSON.parse(localValue)));
 }
 
+function getModelFactory(module, asset) {
+  const exports = Object.entries(module);
+  const modelName = asset.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const namedFactories = exports.filter(([name, value]) =>
+    typeof value === 'function' && /^(create|build|make)/i.test(name)
+  );
+  const matchingFactory = namedFactories.find(([name]) =>
+    name.toLowerCase().replace(/^(create|build|make)/, '').replace(/[^a-z0-9]/g, '').startsWith(modelName)
+  );
+  const genericFactories = namedFactories.filter(([name]) =>
+    /^(create|build|make)(model|object|group)$/i.test(name)
+  );
+  const factory = module.createModel ||
+    module.default ||
+    matchingFactory?.[1] ||
+    (genericFactories.length === 1 ? genericFactories[0][1] : null) ||
+    (namedFactories.length === 1 ? namedFactories[0][1] : null) ||
+    (exports.filter(([, value]) => typeof value === 'function').length === 1
+      ? exports.find(([, value]) => typeof value === 'function')[1]
+      : null);
+  if (typeof factory !== 'function') {
+    const exportNames = exports.map(([name]) => name).join(', ') || 'không có export';
+    throw new Error(
+      `Module .js cần export createModel(), export default hoặc hàm tạo theo tên model. Export tìm thấy: ${exportNames}.`
+    );
+  }
+  return factory;
+}
+
 export async function instantiateModelAsset(asset) {
   let object;
   if (asset.format === 'json') {
     object = new THREE.ObjectLoader().parse(asset.data);
     if (!object?.isObject3D) throw new Error('Tệp JSON phải là một Three.js Object JSON.');
+  } else if (
+    asset.format === 'module' &&
+    typeof asset.moduleUrl === 'string' &&
+    /^\.\.\/design_model\/[A-Za-z0-9_-]+\.js$/.test(asset.moduleUrl)
+  ) {
+    const module = await import(new URL(asset.moduleUrl, import.meta.url).href);
+    const factory = getModelFactory(module, asset);
+    object = await factory({ ...THREE, THREE });
   } else if (asset.format !== 'js' || typeof asset.source !== 'string') {
     throw new Error('Model phải là Three.js Object JSON hoặc module JavaScript.');
   } else {
     const url = URL.createObjectURL(new Blob([asset.source], { type: 'text/javascript' }));
     try {
       const module = await import(url);
-      const exports = Object.entries(module);
-      const modelName = asset.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const namedFactories = exports.filter(([name, value]) =>
-        typeof value === 'function' && /^(create|build|make)/i.test(name)
-      );
-      const matchingFactory = namedFactories.find(([name]) =>
-        name.toLowerCase().replace(/^(create|build|make)/, '').replace(/[^a-z0-9]/g, '').startsWith(modelName)
-      );
-      const genericFactories = namedFactories.filter(([name]) =>
-        /^(create|build|make)(model|object|group)$/i.test(name)
-      );
-      const factory = module.createModel ||
-        module.default ||
-        matchingFactory?.[1] ||
-        (genericFactories.length === 1 ? genericFactories[0][1] : null) ||
-        (namedFactories.length === 1 ? namedFactories[0][1] : null) ||
-        (exports.filter(([, value]) => typeof value === 'function').length === 1
-          ? exports.find(([, value]) => typeof value === 'function')[1]
-          : null);
-      if (typeof factory !== 'function') {
-        const exportNames = exports.map(([name]) => name).join(', ') || 'không có export';
-        throw new Error(
-          `Module .js cần export createModel(), export default, hoặc hàm create${asset.name}/build${asset.name}(). Export tìm thấy: ${exportNames}.`
-        );
-      }
-      const modelContext = { ...THREE, THREE };
-      object = await factory(modelContext);
+      const factory = getModelFactory(module, asset);
+      object = await factory({ ...THREE, THREE });
     } finally {
       URL.revokeObjectURL(url);
     }

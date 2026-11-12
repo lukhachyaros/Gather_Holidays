@@ -77,7 +77,7 @@ export class World {
     this.sun = new THREE.DirectionalLight(0xffffff, 1);
     this.sun.position.set(22, 42, 16);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(1024, 1024);
+    this.sun.shadow.mapSize.set(512, 512);
     const sc = this.sun.shadow.camera;
     sc.left = sc.bottom = -34;
     sc.right = sc.top = 34;
@@ -92,6 +92,8 @@ export class World {
     this.ornamentKey = '';
     this.mediaBannerKey = '';
     this.particles = [];
+    this.particleBatches = [];
+    this.particleDummy = new THREE.Object3D();
     this.fireworks = []; // active rockets & bursts
     this.tomatoes = []; // flying tomato projectiles
     this.campfires = [];
@@ -753,42 +755,85 @@ export class World {
   }
 
   initParticles(cfg) {
-    for (const p of this.particles) this.scene.remove(p.s);
+    for (const batch of this.particleBatches) {
+      this.scene.remove(batch.mesh);
+      batch.mesh.geometry.dispose();
+      batch.mesh.material.dispose();
+    }
     this.particles = [];
+    this.particleBatches = [];
     this.pcfg = cfg;
-    cfg.emoji.forEach(e => emojiTexture(e));
+    const batchByEmoji = new Map(cfg.emoji.map(emoji => {
+      const count = Math.ceil(cfg.count / cfg.emoji.length);
+      const mesh = new THREE.InstancedMesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          map: emojiTexture(emoji),
+          transparent: true,
+          opacity: 0.85,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
+        count
+      );
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
+      const batch = { mesh, count: 0 };
+      this.particleBatches.push(batch);
+      return [emoji, batch];
+    }));
     for (let i = 0; i < cfg.count; i++) {
       const e = cfg.emoji[i % cfg.emoji.length];
-      const s = new THREE.Sprite(
-        new THREE.SpriteMaterial({ map: emojiTexture(e), transparent: true, opacity: 0.85, depthWrite: false })
+      const batch = batchByEmoji.get(e);
+      const index = batch.count++;
+      const position = new THREE.Vector3(
+        (Math.random() - 0.5) * 44,
+        Math.random() * 14 + 1,
+        (Math.random() - 0.5) * 44
       );
-      const sc = 0.35 + Math.random() * 0.3;
-      s.scale.set(sc, sc, 1);
-      s.position.set((Math.random() - 0.5) * 44, Math.random() * 14 + 1, (Math.random() - 0.5) * 44);
-      this.scene.add(s);
+      const scale = 0.35 + Math.random() * 0.3;
+      this.particleDummy.position.copy(position);
+      this.particleDummy.scale.set(scale, scale, 1);
+      this.particleDummy.updateMatrix();
+      batch.mesh.setMatrixAt(index, this.particleDummy.matrix);
       this.particles.push({
-        s,
+        position,
+        scale,
+        batch,
+        index,
         vy: cfg.vy[0] + Math.random() * (cfg.vy[1] - cfg.vy[0]),
         vx: cfg.vx[0] + Math.random() * (cfg.vx[1] - cfg.vx[0]),
         phase: Math.random() * 6.28,
       });
     }
+    for (const batch of this.particleBatches) {
+      batch.mesh.count = batch.count;
+      batch.mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
-  update(dt, center) {
+  update(dt, center, camera) {
     this.t += dt;
     const now = performance.now();
 
     // 1. Ambient theme particles
     for (const p of this.particles) {
-      p.s.position.y -= p.vy * dt;
-      p.s.position.x += (p.vx + Math.sin(this.t + p.phase) * 0.25) * dt;
-      if (p.s.position.y < 0.2) {
-        p.s.position.y = 14;
-        p.s.position.x = center.x + (Math.random() - 0.5) * 42;
-        p.s.position.z = center.z + (Math.random() - 0.5) * 42;
+      p.position.y -= p.vy * dt;
+      p.position.x += (p.vx + Math.sin(this.t + p.phase) * 0.25) * dt;
+      if (p.position.y < 0.2) {
+        p.position.y = 14;
+        p.position.x = center.x + (Math.random() - 0.5) * 42;
+        p.position.z = center.z + (Math.random() - 0.5) * 42;
       }
+      this.particleDummy.position.copy(p.position);
+      if (camera) this.particleDummy.quaternion.copy(camera.quaternion);
+      else this.particleDummy.quaternion.identity();
+      this.particleDummy.scale.set(p.scale, p.scale, 1);
+      this.particleDummy.updateMatrix();
+      p.batch.mesh.setMatrixAt(p.index, this.particleDummy.matrix);
     }
+    for (const batch of this.particleBatches) batch.mesh.instanceMatrix.needsUpdate = true;
 
     // 2. Campfire flame flicker
     for (const cf of this.campfires) {
