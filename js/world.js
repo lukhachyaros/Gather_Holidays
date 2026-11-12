@@ -55,8 +55,9 @@ const rnd = seed => {
 };
 
 export class World {
-  constructor(scene) {
+  constructor(scene, onMapLoadProgress = null) {
     this.scene = scene;
+    this.onMapLoadProgress = onMapLoadProgress;
     this.group = new THREE.Group();
     scene.add(this.group);
     this.dynamic = new THREE.Group();
@@ -88,6 +89,13 @@ export class World {
 
     this.mapKey = '';
     this.themeKey = '';
+    this.appliedThemeKey = '';
+    this.pendingMapBuild = null;
+    this.mapBuildPromise = null;
+    this.isLoadingMap = false;
+    this.latestState = null;
+    this.latestRoomSeed = 'lobby';
+    this.modelReplacementPromises = [];
     this.replacementTemplates = new Map();
     this.ornamentKey = '';
     this.mediaBannerKey = '';
@@ -113,16 +121,17 @@ export class World {
 
   /** Reconcile scene with shared room state. */
   sync(state, roomSeed = 'lobby') {
+    this.latestState = state;
+    this.latestRoomSeed = roomSeed;
     const mk = state.map.rows.join('|') + state.map.w + state.theme;
+    let mapBuildPromise = null;
     if (mk !== this.mapKey || state.theme !== this.themeKey) {
       this.mapKey = mk;
-      if (state.theme !== this.themeKey) {
-        this.themeKey = state.theme;
-        this.applyTheme(state.theme);
-      }
-      this.buildMap(state.map, state.theme, roomSeed);
+      this.themeKey = state.theme;
+      mapBuildPromise = this.requestMapBuild(state.map, state.theme, roomSeed);
     }
-    this.setDayNightTime(state.timeOfDay || this.timeOfDay);
+    if (this.appliedThemeKey) this.setDayNightTime(state.timeOfDay || this.timeOfDay);
+    else this.timeOfDay = state.timeOfDay || this.timeOfDay;
 
     // Sync user-placed decorations & ground cards
     this.syncList(state.decor || [], this.decorObjs, d => {
@@ -159,6 +168,49 @@ export class World {
         this.screenObj.userData.updateBanner(cur, q);
       }
     }
+    return mapBuildPromise;
+  }
+
+  requestMapBuild(map, themeKey, roomSeed) {
+    this.pendingMapBuild = { map, themeKey, roomSeed };
+    if (!this.mapBuildPromise) {
+      this.mapBuildPromise = this.processMapBuildQueue()
+        .catch(error => {
+          this.mapKey = '';
+          this.isLoadingMap = true;
+          console.error('Failed to build map:', error);
+          this.onMapLoadProgress?.({ active: true, error, themeKey: this.themeKey });
+        })
+        .finally(() => {
+          this.mapBuildPromise = null;
+        });
+    }
+    return this.mapBuildPromise;
+  }
+
+  async processMapBuildQueue() {
+    this.isLoadingMap = true;
+    try {
+      while (this.pendingMapBuild) {
+        const request = this.pendingMapBuild;
+        this.pendingMapBuild = null;
+        await this.yieldMapBuild(2, 'Chuẩn bị dữ liệu bản đồ...', request.themeKey);
+        await this.buildMap(request.map, request.themeKey, request.roomSeed);
+      }
+      if (this.pendingMapBuild) return this.processMapBuildQueue();
+      if (this.latestState) {
+        this.ornamentKey = '';
+        this.sync(this.latestState, this.latestRoomSeed);
+      }
+      this.onMapLoadProgress?.({ active: false, progress: 100 });
+    } finally {
+      if (!this.pendingMapBuild) this.isLoadingMap = false;
+    }
+  }
+
+  async yieldMapBuild(progress, message, themeKey = this.themeKey) {
+    this.onMapLoadProgress?.({ active: true, progress, message, themeKey });
+    await new Promise(resolve => requestAnimationFrame(resolve));
   }
 
   syncList(list, objs, make) {
@@ -246,12 +298,17 @@ export class World {
     return true;
   }
 
-  buildMap(map, themeKey, roomSeed = 'lobby') {
+  async buildMap(map, themeKey, roomSeed = 'lobby') {
     const th = THEMES[themeKey] || THEMES.christmas;
     this.scene.remove(this.group);
     this.group = new THREE.Group();
     this.scene.add(this.group);
+    if (themeKey !== this.appliedThemeKey) {
+      this.applyTheme(themeKey);
+      this.appliedThemeKey = themeKey;
+    }
     this.replacementTemplates = new Map();
+    this.modelReplacementPromises = [];
 
     this.campfires = [];
     this.animatedModels = [];
@@ -275,19 +332,27 @@ export class World {
           if (c === 'T') cells.tree.push([x, y]);
         }
       }
+      if (y % 4 === 3 && y < map.h - 1) {
+        await this.yieldMapBuild(4 + (y / map.h) * 10, 'Phân tích bố cục bản đồ...', themeKey);
+      }
     }
 
-    const inst = (g, m, list, fn) => {
+    const inst = async (g, m, list, fn, progressStart, progressEnd, message) => {
       if (!list.length) return null;
       const im = new THREE.InstancedMesh(g, m, list.length);
       const d = new THREE.Object3D(),
         col = new THREE.Color();
-      list.forEach(([x, y], i) => {
+      for (let i = 0; i < list.length; i++) {
+        const [x, y] = list[i];
         const r = fn(x, y, d, col);
         d.updateMatrix();
         im.setMatrixAt(i, d.matrix);
         if (r) im.setColorAt(i, r);
-      });
+        if ((i + 1) % 256 === 0 && i + 1 < list.length) {
+          const progress = progressStart + ((progressEnd - progressStart) * (i + 1)) / list.length;
+          await this.yieldMapBuild(progress, message, themeKey);
+        }
+      }
       im.castShadow = im.receiveShadow = true;
       this.group.add(im);
       return im;
@@ -300,49 +365,60 @@ export class World {
       f1 = new THREE.Color(th.floor[1]),
       pCol = new THREE.Color(th.path || th.floor[0]);
 
-    inst(slab, white, cells.floor, (x, y, d, col) => {
+    await inst(slab, white, cells.floor, (x, y, d, col) => {
       d.position.set(x * TILE, -0.1, y * TILE);
       return col.copy((x + y) & 1 ? f1 : f0);
-    });
-    inst(slab, white, cells.path, (x, y, d, col) => {
+    }, 14, 31, 'Dựng mặt nền...');
+    await inst(slab, white, cells.path, (x, y, d, col) => {
       d.position.set(x * TILE, -0.09, y * TILE);
       return col.copy(pCol);
-    });
-    inst(slab, white, cells.rug, (x, y, d, col) => {
+    }, 31, 35, 'Dựng lối đi...');
+    await inst(slab, white, cells.rug, (x, y, d, col) => {
       d.position.set(x * TILE, -0.07, y * TILE);
       return col.set(th.rug);
-    });
-    inst(
+    }, 35, 38, 'Dựng khu vực trang trí...');
+    await inst(
       slab,
       mat('#ffffff', { roughness: 0.2, metalness: 0.2, emissive: th.water, emissiveIntensity: 0.18 }),
       cells.water,
       (x, y, d, col) => {
         d.position.set(x * TILE, -0.22, y * TILE);
         return col.set(th.water);
-      }
+      },
+      38,
+      41,
+      'Dựng khu vực mặt nước...'
     );
-    inst(wallG, white, cells.wall, (x, y, d, col) => {
+    await inst(wallG, white, cells.wall, (x, y, d, col) => {
       d.position.set(x * TILE, WALL_H / 2, y * TILE);
       return col.set(th.wall).multiplyScalar(0.85 + ((x * 7 + y * 13) % 5) * 0.05);
-    });
+    }, 41, 54, 'Dựng tường và công trình...');
 
-    cells.tree.forEach(([x, y]) => {
+    for (let i = 0; i < cells.tree.length; i++) {
+      const [x, y] = cells.tree[i];
       const t = buildTree(themeKey);
       t.position.set(x * TILE, 0, y * TILE);
       t.rotation.y = (x * 31 + y * 17) % 7;
       this.group.add(t);
       this.applyModelReplacement(themeKey, 'map_tree', t);
-    });
+      if ((i + 1) % 4 === 0 && i + 1 < cells.tree.length) {
+        await this.yieldMapBuild(54 + ((i + 1) / cells.tree.length) * 6, 'Đặt cây và cảnh quan...', themeKey);
+      }
+    }
 
     // Roof props on perimeter walls
-    cells.wall.forEach(([x, y]) => {
+    for (let i = 0; i < cells.wall.length; i++) {
+      const [x, y] = cells.wall[i];
       if ((x + y) % 5 === 0) {
         const p = buildProp(th.prop);
         p.position.set(x * TILE, WALL_H, y * TILE);
         this.group.add(p);
         this.applyModelReplacement(themeKey, 'roof_prop', p);
       }
-    });
+      if ((i + 1) % 32 === 0 && i + 1 < cells.wall.length) {
+        await this.yieldMapBuild(60 + ((i + 1) / cells.wall.length) * 7, 'Hoàn thiện cảnh quan...', themeKey);
+      }
+    }
 
     // Ground plane beyond map
     const ground = new THREE.Mesh(
@@ -358,6 +434,7 @@ export class World {
     // BUILD THEMED HOTSPOTS, CINEMA SCREEN, SEATS & CENTERPIECES
     // ========================================================================
     this.features = getThemeFeatures(themeKey, roomSeed);
+    await this.yieldMapBuild(68, 'Dựng các khu vực lễ hội...', themeKey);
 
     // 1. Cinema Screen
     this.screenObj = buildCinemaScreen();
@@ -367,7 +444,8 @@ export class World {
     this.mediaBannerKey = '';
 
     // 2. Seats (Single chairs, Couple sofas, Campfire logs)
-    for (const s of this.features.seats) {
+    for (let i = 0; i < this.features.seats.length; i++) {
+      const s = this.features.seats[i];
       let mesh;
       if (s.kind === 'single') mesh = buildSingleChair();
       else if (s.kind === 'couple') mesh = buildCoupleSofa();
@@ -380,6 +458,9 @@ export class World {
         const target = s.kind === 'single' ? 'single_chair' : s.kind === 'couple' ? 'couple_sofa' : 'log_seat';
         this.applyModelReplacement(themeKey, target, mesh);
       }
+      if ((i + 1) % 8 === 0 && i + 1 < this.features.seats.length) {
+        await this.yieldMapBuild(68 + ((i + 1) / this.features.seats.length) * 8, 'Đặt ghế và điểm nghỉ...', themeKey);
+      }
     }
 
     // 3. Hotspots & Theme Centerpieces
@@ -387,7 +468,8 @@ export class World {
       this.group.add(object);
       this.applyModelReplacement(themeKey, target, object);
     };
-    for (const h of this.features.hotspots) {
+    for (let i = 0; i < this.features.hotspots.length; i++) {
+      const h = this.features.hotspots[i];
       if (h.type === 'xmas_tree') {
         const { group, slots } = buildGiantChristmasTree();
         group.position.set(h.x * TILE, 0, h.y * TILE);
@@ -504,10 +586,14 @@ export class World {
         addMapModel(h.type, pub);
         this.casinoObjs.push(pub);
       }
+      if ((i + 1) % 2 === 0 && i + 1 < this.features.hotspots.length) {
+        await this.yieldMapBuild(76 + ((i + 1) / this.features.hotspots.length) * 16, 'Dựng công trình và điểm tương tác...', themeKey);
+      }
     }
 
     // 4. Extra props (Random Snowmen, Rose Arch, Illusion Walls)
-    for (const ep of this.features.extraProps) {
+    for (let i = 0; i < this.features.extraProps.length; i++) {
+      const ep = this.features.extraProps[i];
       if (ep.type === 'snowman') {
         const sm = buildSnowman(ep.variant);
         sm.position.set(ep.x * TILE, 0, ep.y * TILE);
@@ -525,6 +611,9 @@ export class World {
         iw.rotation.y = ep.rot || 0;
         addMapModel(ep.type, iw);
       }
+      if ((i + 1) % 4 === 0 && i + 1 < this.features.extraProps.length) {
+        await this.yieldMapBuild(92 + ((i + 1) / this.features.extraProps.length) * 4, 'Hoàn thiện chi tiết...', themeKey);
+      }
     }
 
     // 5. Flying Vampire NPC in Halloween
@@ -536,9 +625,23 @@ export class World {
     }
 
     this. sun.target.position.set((map.w * TILE) / 2, 0, (map.h * TILE) / 2);
+    if (this.modelReplacementPromises.length) {
+      await this.yieldMapBuild(94, 'Đang tải mô hình 3D...', themeKey);
+      while (this.modelReplacementPromises.length) {
+        const pending = this.modelReplacementPromises.splice(0);
+        await Promise.all(pending);
+      }
+    }
+    await this.yieldMapBuild(98, 'Hoàn tất bản đồ...', themeKey);
   }
 
-  async applyModelReplacement(map, target, group) {
+  applyModelReplacement(map, target, group) {
+    const operation = this.loadAndApplyModelReplacement(map, target, group);
+    this.modelReplacementPromises.push(operation);
+    return operation;
+  }
+
+  async loadAndApplyModelReplacement(map, target, group) {
     try {
       const key = `${map}:${target}`;
       if (!this.replacementTemplates.has(key)) {

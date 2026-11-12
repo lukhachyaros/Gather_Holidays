@@ -484,7 +484,7 @@ try {
   renderer.shadowMap.type = THREE.PCFShadowMap;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, 1, 0.1, 300);
-  world = new World(scene);
+  world = new World(scene, updateMapLoadingScreen);
   world.setGraphicsQuality(initialGraphicsProfile);
   updateGraphicsQualityHint();
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
@@ -539,6 +539,56 @@ function initGameSplashScreen() {
     }
   }, 90);
 }
+
+function updateMapLoadingScreen({ active, progress = 0, message = '', themeKey, error } = {}) {
+  const screen = $('mapLoadingScreen');
+  if (!screen) return;
+  const title = $('mapLoadingTitle');
+  const status = $('mapLoadingStatus');
+  const bar = $('mapLoadingProgress');
+  const percent = $('mapLoadingPercent');
+  const retry = $('btnRetryMapLoad');
+
+  if (error) {
+    screen.classList.remove('hidden');
+    screen.classList.add('error');
+    if (title) title.textContent = 'Không thể tải bản đồ';
+    if (status) status.textContent = 'Đã xảy ra lỗi khi dựng cảnh. Bạn có thể thử tải lại.';
+    if (retry) {
+      retry.disabled = false;
+      retry.classList.remove('hidden');
+    }
+    return;
+  }
+  if (!active) {
+    screen.classList.add('hidden');
+    screen.classList.remove('error');
+    if (retry) retry.classList.add('hidden');
+    return;
+  }
+
+  const value = Math.max(0, Math.min(100, Math.round(progress)));
+  screen.classList.remove('hidden');
+  screen.classList.remove('error');
+  if (title) title.textContent = `Đang tải ${THEMES[themeKey]?.name || 'bản đồ'}`;
+  if (status) status.textContent = message || 'Đang dựng cảnh...';
+  if (bar) {
+    bar.style.width = `${value}%`;
+    bar.setAttribute('aria-valuenow', String(value));
+  }
+  if (percent) percent.textContent = `${value}%`;
+  if (retry) retry.classList.add('hidden');
+}
+
+function retryMapLoading() {
+  if (!world || !state) return;
+  const retry = $('btnRetryMapLoad');
+  if (retry) retry.disabled = true;
+  world.mapKey = '';
+  world.sync(state, roomName);
+}
+
+$('btnRetryMapLoad')?.addEventListener('click', retryMapLoading);
 
 function initMobileControls() {
   const isMobile =
@@ -1313,7 +1363,7 @@ async function start() {
   scene.add(me.av.root);
 
   // Immediately synchronize 3D world before starting animation loop
-  world.sync(state, roomName);
+  await world.sync(state, roomName);
 
   $('topTheme').value = state.theme;
   $('topTheme').classList.toggle('hidden', roomName === SECRET_CASINO_ROOM);
@@ -4723,6 +4773,11 @@ function loop(now) {
       cancelAnimationFrame(rafId);
       rafId = null;
     }
+    return;
+  }
+  if (world?.isLoadingMap) {
+    last = now;
+    rafId = requestAnimationFrame(loop);
     return;
   }
 

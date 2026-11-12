@@ -43,6 +43,19 @@ git<!doctype html>
   })();
 </script>
 
+<div id="mapLoadingScreen" class="map-loading-screen hidden" role="status" aria-live="polite">
+  <div class="map-loading-card">
+    <div class="map-loading-spinner" aria-hidden="true"></div>
+    <h2 id="mapLoadingTitle">Đang tải bản đồ</h2>
+    <p id="mapLoadingStatus">Đang chuẩn bị dữ liệu bản đồ...</p>
+    <div class="map-loading-track">
+      <div id="mapLoadingProgress" class="map-loading-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+    </div>
+    <span id="mapLoadingPercent">0%</span>
+    <button id="btnRetryMapLoad" class="primary hidden" type="button">Thử tải lại</button>
+  </div>
+</div>
+
 <!-- Builder Tools HUD -->
 <div id="btoolsHud" class="btools-hud hidden">🧱 BUILDER MODE: Click để ĐẶT khối 3D | Alt+Click khối để XÓA</div>
 

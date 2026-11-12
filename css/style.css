@@ -998,6 +998,58 @@ body.matrix-active::after {
   font-family: monospace;
 }
 
+.map-loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(5, 8, 20, 0.88);
+  backdrop-filter: blur(8px);
+  cursor: wait;
+}
+.map-loading-screen.hidden { display: none; }
+.map-loading-screen.error .map-loading-spinner { display: none; }
+.map-loading-card {
+  width: min(390px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(56,189,248,0.28);
+  border-radius: 18px;
+  background: rgba(25,23,41,0.96);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+  text-align: center;
+}
+.map-loading-spinner {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 18px;
+  border: 4px solid rgba(56,189,248,0.18);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: mapLoadingSpin 0.8s linear infinite;
+}
+@keyframes mapLoadingSpin { to { transform: rotate(360deg); } }
+.map-loading-card h2 { margin: 0 0 8px; font-size: 18px; color: #f8fafc; }
+.map-loading-card p { min-height: 20px; margin: 0 0 16px; color: #cbd5e1; font-size: 13px; }
+.map-loading-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255,255,255,0.1);
+}
+.map-loading-progress {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0ea5e9, #38bdf8, #a5f3fc);
+  box-shadow: 0 0 14px rgba(56,189,248,0.45);
+  transition: width 0.2s ease;
+}
+.map-loading-percent { display: block; margin-top: 8px; color: #94a3b8; font: 12px monospace; }
+.map-loading-card button { margin-top: 18px; cursor: pointer; }
+
 /* ==========================================================================
    TITLES SYSTEM & SEARCH & 24/7 RAINBOW RGB
    ========================================================================== */
