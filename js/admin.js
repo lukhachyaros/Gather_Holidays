@@ -1,1052 +1,534 @@
-// Gather Holidays 3D — Admin Studio & Builder Script
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Avatar } from './avatar.js';
-import { G, part, mat } from './props.js';
-
-/* =========================================================================
-   1. BẢO MẬT & XÁC THỰC TÀI KHOẢN ADMIN ĐƯỢC CẤP RIÊNG
-   ========================================================================= */
+import {
+  emptyModelLibrary,
+  instantiateModelAsset,
+  instantiateDefaultModel,
+  loadModelLibrary,
+  MODEL_LIBRARY_FORMAT,
+  MODEL_LIBRARY_STORAGE_KEY,
+  MODEL_MAPS,
+} from './model-library.js';
 
 const ADMIN_ACCOUNTS = [
-  {
-    user: 'admin',
-    // SHA-256 của 'GatherAdmin2026@'
-    hash: '5865b7b99b036a851472e1e1e085fa22239cd64c70d67974febfbff2eaabfd83',
-    role: 'SuperAdmin'
-  },
-  {
-    user: 'builder',
-    // SHA-256 của 'Builder3D!Pro'
-    hash: '01ae2a73cca8695cfbf7f930ca38d7984aed9fa1ff296d1a9ae6996b26600ee6',
-    role: '3DModeler'
-  }
+  { user: 'admin', hash: '5865b7b99b036a851472e1e1e085fa22239cd64c70d67974febfbff2eaabfd83' },
+  { user: 'builder', hash: '01ae2a73cca8695cfbf7f930ca38d7984aed9fa1ff296d1a9ae6996b26600ee6' },
 ];
 
-async function sha256(message) {
-  const msgBuffer = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+let library;
+let scene;
+let camera;
+let renderer;
+let controls;
+let previewModel;
+let selectedAssetId = null;
+let previewRequest = 0;
+
+const $ = id => document.getElementById(id);
+
+async function sha256(value) {
+  const bytes = new TextEncoder().encode(value);
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function showToast(message) {
+  const toast = $('adminToast');
+  toast.textContent = message;
+  toast.classList.remove('hidden');
+  window.setTimeout(() => toast.classList.add('hidden'), 3500);
+}
+
+function setAuthenticated() {
+  $('adminAuthOverlay').classList.add('hidden');
+  $('adminApp').classList.remove('hidden');
+  setupStudio();
+}
+
+function setupStudio() {
+  if (renderer) return;
+  const container = $('viewport3D');
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0f1d);
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.set(0, 2.2, 5);
+  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.appendChild(renderer.domElement);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x444455, 1.6));
+  const light = new THREE.DirectionalLight(0xffffff, 2);
+  light.position.set(4, 8, 5);
+  scene.add(light);
+  const grid = new THREE.GridHelper(12, 24, 0x38bdf8, 0x263244);
+  scene.add(grid);
+  controls = createOrbitControls(renderer.domElement);
+  resizeViewport();
+  window.addEventListener('resize', resizeViewport);
+  renderer.setAnimationLoop(() => {
+    controls.update();
+    renderer.render(scene, camera);
+  });
+}
+
+function createOrbitControls(element) {
+  const target = new THREE.Vector3(0, 1, 0);
+  const spherical = { radius: 5, theta: 0, phi: Math.PI / 2.5 };
+  let dragging = false;
+  let previousX = 0;
+  let previousY = 0;
+  const update = () => {
+    spherical.phi = THREE.MathUtils.clamp(spherical.phi, 0.1, Math.PI - 0.1);
+    spherical.radius = THREE.MathUtils.clamp(spherical.radius, 1.2, 20);
+    camera.position.set(
+      target.x + spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta),
+      target.y + spherical.radius * Math.cos(spherical.phi),
+      target.z + spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta)
+    );
+    camera.lookAt(target);
+  };
+  element.addEventListener('pointerdown', event => {
+    dragging = true;
+    previousX = event.clientX;
+    previousY = event.clientY;
+    element.setPointerCapture(event.pointerId);
+  });
+  element.addEventListener('pointerup', () => { dragging = false; });
+  element.addEventListener('pointermove', event => {
+    if (!dragging) return;
+    spherical.theta -= (event.clientX - previousX) * 0.008;
+    spherical.phi -= (event.clientY - previousY) * 0.008;
+    previousX = event.clientX;
+    previousY = event.clientY;
+    update();
+  });
+  element.addEventListener('wheel', event => {
+    event.preventDefault();
+    spherical.radius += event.deltaY * 0.005;
+    update();
+  }, { passive: false });
+  update();
+  return { target, update, spherical };
+}
+
+function resizeViewport() {
+  if (!renderer) return;
+  const container = $('viewport3D');
+  const width = Math.max(1, container.clientWidth);
+  const height = Math.max(1, container.clientHeight);
+  renderer.setSize(width, height);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+}
+
+function mapTargetKey(map, target) {
+  return `${map}:${target}`;
+}
+
+function getReplacement(map, target) {
+  return library.replacements.find(item => item.map === map && item.target === target);
+}
+
+function getAsset(id) {
+  return library.assets.find(asset => asset.id === id);
+}
+
+function saveLocalLibrary() {
+  localStorage.setItem(MODEL_LIBRARY_STORAGE_KEY, JSON.stringify(library));
+}
+
+function populateMaps() {
+  const select = $('mapSelector');
+  select.replaceChildren();
+  for (const [key, map] of Object.entries(MODEL_MAPS)) {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = map.label;
+    select.append(option);
+  }
+  populateTargets();
+}
+
+function populateTargets() {
+  const map = $('mapSelector').value;
+  const select = $('targetSelector');
+  select.replaceChildren();
+  for (const [key, label] of Object.entries(MODEL_MAPS[map].targets)) {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = label;
+    select.append(option);
+  }
+  updateCurrentReplacement();
+  renderLibraryList();
+}
+
+function updateCurrentReplacement() {
+  const map = $('mapSelector').value;
+  const target = $('targetSelector').value;
+  const replacement = getReplacement(map, target);
+  const asset = replacement && getAsset(replacement.assetId);
+  $('currentReplacement').textContent = asset
+    ? `Đang dùng: ${asset.name}`
+    : 'Đang dùng model mặc định của game.';
+  $('btnClearReplacement').disabled = !replacement;
+  previewCurrentTarget();
+}
+
+function renderLibraryList() {
+  const list = $('libraryList');
+  list.replaceChildren();
+  let count = 0;
+  for (const [mapKey, map] of Object.entries(MODEL_MAPS)) {
+    const replacements = library.replacements.filter(item => item.map === mapKey);
+    if (!replacements.length) continue;
+    const heading = document.createElement('div');
+    heading.className = 'library-map-heading';
+    heading.textContent = map.label;
+    list.append(heading);
+    for (const replacement of replacements) {
+      const asset = getAsset(replacement.assetId);
+      if (!asset) continue;
+      const button = document.createElement('button');
+      button.className = 'library-item';
+      button.type = 'button';
+      button.classList.toggle('active', asset.id === selectedAssetId);
+      button.textContent = `${MODEL_MAPS[mapKey].targets[replacement.target] || replacement.target} · ${asset.name}`;
+      button.addEventListener('click', () => selectAsset(asset.id));
+      list.append(button);
+      count++;
+    }
+  }
+  const unassigned = library.assets.filter(asset =>
+    !library.replacements.some(replacement => replacement.assetId === asset.id)
+  );
+  if (unassigned.length) {
+    const heading = document.createElement('div');
+    heading.className = 'library-map-heading';
+    heading.textContent = 'Chưa gán bản đồ';
+    list.append(heading);
+    for (const asset of unassigned) {
+      const button = document.createElement('button');
+      button.className = 'library-item';
+      button.type = 'button';
+      button.classList.toggle('active', asset.id === selectedAssetId);
+      button.textContent = asset.name;
+      button.addEventListener('click', () => selectAsset(asset.id));
+      list.append(button);
+      count++;
+    }
+  }
+  if (!count) {
+    const empty = document.createElement('div');
+    empty.className = 'library-empty';
+    empty.textContent = 'Chưa có model. Thả tệp .js hoặc .json vào khu vực phía trên.';
+    list.append(empty);
+  }
+}
+
+async function selectAsset(assetId, preparedModel = null) {
+  selectedAssetId = assetId;
+  const asset = getAsset(assetId);
+  if (!asset) return;
+  $('selectedModelName').textContent = asset.name;
+  $('selectedModelInfo').textContent = `Định dạng ${asset.format.toUpperCase()} · Tải lên thư viện model`;
+  $('btnAssignModel').disabled = false;
+  $('btnRemoveModel').disabled = false;
+  renderLibraryList();
+  await previewAsset(asset, preparedModel);
+}
+
+async function previewAsset(asset, preparedModel = null) {
+  const requestId = ++previewRequest;
+  $('emptyPreview').classList.add('hidden');
+  try {
+    const model = preparedModel || await instantiateModelAsset(asset);
+    showPreviewModel(model, `Thư viện: ${asset.name}`, requestId);
+  } catch (error) {
+    $('emptyPreview').textContent = `Không xem trước được model: ${error.message}`;
+    $('emptyPreview').classList.remove('hidden');
+    console.error('Could not preview model:', error);
+  }
+}
+
+function showPreviewModel(model, label, requestId) {
+  if (requestId !== previewRequest) return;
+  if (previewModel) scene.remove(previewModel);
+  previewModel = model;
+  const bounds = new THREE.Box3().setFromObject(previewModel);
+  const size = bounds.getSize(new THREE.Vector3());
+  const maxSize = Math.max(size.x, size.y, size.z);
+  if (maxSize > 0) previewModel.scale.multiplyScalar(2.4 / maxSize);
+  bounds.setFromObject(previewModel);
+  const previewSize = bounds.getSize(new THREE.Vector3());
+  const center = bounds.getCenter(new THREE.Vector3());
+  previewModel.position.x -= center.x;
+  previewModel.position.y -= bounds.min.y;
+  previewModel.position.z -= center.z;
+  scene.add(previewModel);
+  controls.target.set(0, Math.max(0.5, previewSize.y * 0.35), 0);
+  controls.update();
+  $('previewLabel').textContent = label;
+  $('emptyPreview').classList.add('hidden');
+}
+
+async function previewCurrentTarget(showDefault = false) {
+  const requestId = ++previewRequest;
+  const map = $('mapSelector').value;
+  const target = $('targetSelector').value;
+  if (!map || !target || !scene) return;
+
+  try {
+    const replacement = !showDefault && getReplacement(map, target);
+    const asset = replacement && getAsset(replacement.assetId);
+    const model = asset
+      ? await instantiateModelAsset(asset)
+      : instantiateDefaultModel(map, target);
+    const mapName = MODEL_MAPS[map].label;
+    const targetName = MODEL_MAPS[map].targets[target];
+    const label = asset && !showDefault
+      ? `${mapName} · ${targetName} · Model thay thế: ${asset.name}`
+      : `${mapName} · ${targetName} · Model gốc`;
+    showPreviewModel(model, label, requestId);
+  } catch (error) {
+    if (requestId !== previewRequest) return;
+    $('emptyPreview').textContent = `Không xem trước được model gốc: ${error.message}`;
+    $('emptyPreview').classList.remove('hidden');
+    console.error(`Could not preview default model for ${map}/${target}:`, error);
+  }
+}
+
+async function addModelFile(file) {
+  const extension = file.name.split('.').pop().toLowerCase();
+  if (!['js', 'json'].includes(extension)) throw new Error('Chỉ nhận tệp .js hoặc .json.');
+  const baseName = file.name.replace(/\.[^.]+$/, '');
+  const asset = {
+    id: crypto.randomUUID(),
+    name: baseName,
+    format: extension,
+  };
+  const content = await file.text();
+  if (extension === 'js') {
+    asset.source = content;
+  } else {
+    asset.data = JSON.parse(content);
+  }
+  const model = await instantiateModelAsset(asset);
+  library.assets.push(asset);
+  selectedAssetId = asset.id;
+  const replacement = {
+    map: $('mapSelector').value,
+    target: $('targetSelector').value,
+    assetId: asset.id,
+  };
+  library.replacements = library.replacements.filter(
+    item => mapTargetKey(item.map, item.target) !== mapTargetKey(replacement.map, replacement.target)
+  );
+  library.replacements.push(replacement);
+  saveLocalLibrary();
+  renderLibraryList();
+  updateCurrentReplacement();
+  await selectAsset(asset.id, model);
+  showToast(`Đã thêm và gán model "${asset.name}".`);
+}
+
+async function handleModelFiles(files) {
+  for (const file of files) {
+    try {
+      await addModelFile(file);
+    } catch (error) {
+      console.error(`Could not import ${file.name}:`, error);
+      showToast(`Không nạp được ${file.name}: ${error.message}`);
+    }
+  }
+}
+
+function assignSelectedAsset() {
+  if (!selectedAssetId || !getAsset(selectedAssetId)) return;
+  const replacement = {
+    map: $('mapSelector').value,
+    target: $('targetSelector').value,
+    assetId: selectedAssetId,
+  };
+  library.replacements = library.replacements.filter(
+    item => mapTargetKey(item.map, item.target) !== mapTargetKey(replacement.map, replacement.target)
+  );
+  library.replacements.push(replacement);
+  saveLocalLibrary();
+  renderLibraryList();
+  updateCurrentReplacement();
+  showToast('Đã thay model cho bản đồ này.');
+}
+
+function removeSelectedAsset() {
+  if (!selectedAssetId) return;
+  const asset = getAsset(selectedAssetId);
+  library.assets = library.assets.filter(item => item.id !== selectedAssetId);
+  library.replacements = library.replacements.filter(item => item.assetId !== selectedAssetId);
+  selectedAssetId = null;
+  if (previewModel) scene.remove(previewModel);
+  previewModel = null;
+  $('selectedModelName').textContent = 'Chưa chọn model';
+  $('selectedModelInfo').textContent = 'Model đã được xóa khỏi thư viện.';
+  $('btnAssignModel').disabled = true;
+  $('btnRemoveModel').disabled = true;
+  saveLocalLibrary();
+  renderLibraryList();
+  updateCurrentReplacement();
+  showToast(`Đã xóa model "${asset.name}".`);
+}
+
+function clearCurrentReplacement() {
+  const map = $('mapSelector').value;
+  const target = $('targetSelector').value;
+  library.replacements = library.replacements.filter(
+    item => mapTargetKey(item.map, item.target) !== mapTargetKey(map, target)
+  );
+  saveLocalLibrary();
+  renderLibraryList();
+  updateCurrentReplacement();
+  showToast('Đã khôi phục model mặc định.');
+}
+
+function downloadLibrary() {
+  const blob = new Blob([JSON.stringify(library, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'model-library.json';
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast('Đã xuất model-library.json. Hãy lưu tệp này vào design_model/ rồi push repo.');
+}
+
+async function importLibraryFile(file) {
+  const imported = JSON.parse(await file.text());
+  if (
+    imported?.format !== MODEL_LIBRARY_FORMAT ||
+    imported.version !== 1 ||
+    !Array.isArray(imported.assets) ||
+    !Array.isArray(imported.replacements)
+  ) {
+    throw new Error('Tệp không phải cấu hình Gather Model Library hợp lệ.');
+  }
+  const assetIds = new Set();
+  for (const asset of imported.assets) {
+    if (
+      typeof asset.id !== 'string' ||
+      typeof asset.name !== 'string' ||
+      !['js', 'json'].includes(asset.format) ||
+      (asset.format === 'js' && typeof asset.source !== 'string') ||
+      (asset.format === 'json' && !asset.data)
+    ) {
+      throw new Error('Cấu hình chứa model không hợp lệ.');
+    }
+    if (assetIds.has(asset.id)) throw new Error(`ID model bị trùng: ${asset.id}.`);
+    assetIds.add(asset.id);
+  }
+  for (const replacement of imported.replacements) {
+    if (
+      !MODEL_MAPS[replacement.map]?.targets[replacement.target] ||
+      !assetIds.has(replacement.assetId)
+    ) {
+      throw new Error('Cấu hình chứa gán model không hợp lệ.');
+    }
+  }
+  library = imported;
+  saveLocalLibrary();
+  selectedAssetId = null;
+  renderLibraryList();
+  updateCurrentReplacement();
+  showToast('Đã nạp cấu hình thư viện model.');
+}
+
+function bindUI() {
+  $('mapSelector').addEventListener('change', populateTargets);
+  $('targetSelector').addEventListener('change', updateCurrentReplacement);
+  $('btnAssignModel').addEventListener('click', assignSelectedAsset);
+  $('btnRemoveModel').addEventListener('click', removeSelectedAsset);
+  $('btnClearReplacement').addEventListener('click', clearCurrentReplacement);
+  $('btnPreviewDefault').addEventListener('click', () => previewCurrentTarget(true));
+  $('btnPreviewActive').addEventListener('click', () => previewCurrentTarget());
+  $('btnResetCamera').addEventListener('click', () => {
+    controls.spherical.radius = 5;
+    controls.spherical.theta = 0;
+    controls.spherical.phi = Math.PI / 2.5;
+    controls.target.set(0, 1, 0);
+    controls.update();
+  });
+  $('btnSaveLibrary').addEventListener('click', () => {
+    try {
+      saveLocalLibrary();
+      showToast('Đã lưu thư viện trên trình duyệt này.');
+    } catch (error) {
+      console.error('Could not save model library:', error);
+      showToast(`Không lưu được thư viện: ${error.message}`);
+    }
+  });
+  $('btnExportLibrary').addEventListener('click', downloadLibrary);
+  $('btnImportLibrary').addEventListener('click', () => $('libraryConfigInput').click());
+  $('libraryConfigInput').addEventListener('change', async event => {
+    const [file] = event.target.files;
+    event.target.value = '';
+    if (!file) return;
+    try {
+      await importLibraryFile(file);
+    } catch (error) {
+      console.error('Could not import model library:', error);
+      showToast(`Không nạp được cấu hình: ${error.message}`);
+    }
+  });
+  $('modelFileInput').addEventListener('change', event => {
+    const files = [...event.target.files];
+    event.target.value = '';
+    handleModelFiles(files);
+  });
+  const dropZone = $('modelDropZone');
+  dropZone.addEventListener('dragover', event => {
+    event.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', event => {
+    event.preventDefault();
+    dropZone.classList.remove('drag-over');
+    handleModelFiles([...event.dataTransfer.files]);
+  });
+}
+
+async function startStudio() {
+  setAuthenticated();
+  library = emptyModelLibrary();
+  populateMaps();
+  bindUI();
+  try {
+    library = await loadModelLibrary();
+    renderLibraryList();
+    updateCurrentReplacement();
+  } catch (error) {
+    console.error('Could not load model library:', error);
+    showToast(`Không tải được cấu hình mẫu: ${error.message}. Bạn vẫn có thể chọn bản đồ và nạp model.`);
+  }
 }
 
 function initAuth() {
-  const overlay = document.getElementById('adminAuthOverlay');
-  const app = document.getElementById('adminApp');
-  const userIn = document.getElementById('adminUsername');
-  const passIn = document.getElementById('adminPassword');
-  const errBox = document.getElementById('authErrorMsg');
-  const btnLogin = document.getElementById('btnLogin');
-  const btnLogout = document.getElementById('btnAdminLogout');
-
-  // Kiểm tra phiên đăng nhập đã lưu trong sessionStorage
-  const savedToken = sessionStorage.getItem('gather_admin_auth');
-  if (savedToken) {
-    overlay.classList.add('hidden');
-    app.classList.remove('hidden');
-    setupStudio();
-  }
-
-  async function handleLogin() {
-    const username = userIn.value.trim();
-    const password = passIn.value.trim();
-    errBox.classList.add('hidden');
-
-    if (!username || !password) {
-      errBox.textContent = 'Vui lòng nhập đầy đủ tài khoản và mật khẩu admin.';
-      errBox.classList.remove('hidden');
+  $('adminLoginForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const username = $('adminUsername').value.trim();
+    const password = $('adminPassword').value;
+    const passHash = await sha256(password);
+    const found = ADMIN_ACCOUNTS.find(item => item.user === username && item.hash === passHash);
+    if (!found) {
+      $('authErrorMsg').textContent = 'Tài khoản hoặc mật khẩu không chính xác.';
+      $('authErrorMsg').classList.remove('hidden');
       return;
     }
-
-    const passHash = await sha256(password);
-    const found = ADMIN_ACCOUNTS.find(acc => acc.user === username && acc.hash === passHash);
-
-    if (found) {
-      sessionStorage.setItem('gather_admin_auth', JSON.stringify({ user: found.user, role: found.role, time: Date.now() }));
-      overlay.classList.add('hidden');
-      app.classList.remove('hidden');
-      setupStudio();
-    } else {
-      errBox.textContent = 'Tài khoản hoặc mật khẩu không chính xác hoặc chưa được cấp quyền.';
-      errBox.classList.remove('hidden');
-    }
-  }
-
-  btnLogin.addEventListener('click', handleLogin);
-  passIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleLogin(); });
-
-  btnLogout.addEventListener('click', () => {
+    sessionStorage.setItem('gather_admin_auth', JSON.stringify({ user: found.user, time: Date.now() }));
+    startStudio();
+  });
+  $('btnAdminLogout').addEventListener('click', () => {
     sessionStorage.removeItem('gather_admin_auth');
     location.reload();
   });
+  if (sessionStorage.getItem('gather_admin_auth')) startStudio();
 }
 
-function showToast(msg) {
-  const t = document.getElementById('adminToast');
-  if (!t) return;
-  t.textContent = msg;
-  t.classList.remove('hidden');
-  setTimeout(() => { t.classList.add('hidden'); }, 3000);
-}
-
-/* =========================================================================
-   2. KHỞI TẠO 3D VIEWPORT & CAMERA ORBIT CONTROLS
-   ========================================================================= */
-
-let scene, camera, renderer, gridHelper;
-let targetModel = null;
-let currentPresetKey = 'human_rig';
-let currentMode = 'avatar'; // 'avatar' | 'props'
-let selectedObject = null;
-let activeAnimations = [];
-let mixer = null;
-let isPlaying = false;
-let animClock = new THREE.Clock();
-let recordedKeyframes = [];
-let avatarInstance = null;
-
-function setupStudio() {
-  const container = document.getElementById('viewport3D');
-  if (scene) return; // Đã khởi tạo
-
-  const w = container.clientWidth || window.innerWidth - 700;
-  const h = container.clientHeight || window.innerHeight - 100;
-
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0f1d);
-
-  camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
-  camera.position.set(0, 1.8, 3.8);
-
-  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-  renderer.setSize(w, h);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
-  container.appendChild(renderer.domElement);
-
-  // Ánh sáng Studio
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x444455, 1.2);
-  scene.add(hemi);
-
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-  dirLight.position.set(5, 8, 5);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.set(1024, 1024);
-  scene.add(dirLight);
-
-  const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.6);
-  fillLight.position.set(-5, 3, -4);
-  scene.add(fillLight);
-
-  // Lưới sàn Studio (Grid & Floor)
-  gridHelper = new THREE.GridHelper(10, 20, 0x38bdf8, 0x1f2937);
-  gridHelper.position.y = 0;
-  scene.add(gridHelper);
-
-  const floorGeo = new THREE.PlaneGeometry(20, 20);
-  const floorMat = new THREE.MeshStandardMaterial({ color: 0x070b14, roughness: 0.9, metalness: 0.1 });
-  const floorMesh = new THREE.Mesh(floorGeo, floorMat);
-  floorMesh.rotation.x = -Math.PI / 2;
-  floorMesh.receiveShadow = true;
-  scene.add(floorMesh);
-
-  // Orbit controls đơn giản bằng chuột
-  setupMouseOrbit(container);
-
-  // Load Model mặc định
-  loadModelPreset('human_rig');
-
-  // Gắn các sự kiện UI
-  bindUIEvents();
-
-  // Vòng lặp Render
-  function animate() {
-    requestAnimationFrame(animate);
-    const delta = animClock.getDelta();
-
-    if (avatarInstance && isPlaying) {
-      avatarInstance.update(delta);
-    } else if (mixer && isPlaying) {
-      mixer.update(delta);
-      updateScrubberUI();
-    }
-
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  window.addEventListener('resize', () => {
-    const nw = container.clientWidth;
-    const nh = container.clientHeight;
-    camera.aspect = nw / nh;
-    camera.updateProjectionMatrix();
-    renderer.setSize(nw, nh);
-  });
-}
-
-function setupMouseOrbit(domElement) {
-  let isDragging = false;
-  let isPanning = false;
-  let prevX = 0, prevY = 0;
-  let spherical = { radius: 3.8, theta: 0, phi: Math.PI / 2.3 };
-  const target = new THREE.Vector3(0, 0.9, 0);
-
-  function updateCam() {
-    spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
-    spherical.radius = Math.max(0.5, Math.min(15, spherical.radius));
-    camera.position.x = target.x + spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
-    camera.position.y = target.y + spherical.radius * Math.cos(spherical.phi);
-    camera.position.z = target.z + spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
-    camera.lookAt(target);
-  }
-  updateCam();
-
-  domElement.addEventListener('mousedown', (e) => {
-    if (e.button === 0) isDragging = true;
-    if (e.button === 2) isPanning = true;
-    prevX = e.clientX;
-    prevY = e.clientY;
-  });
-
-  window.addEventListener('mouseup', () => { isDragging = false; isPanning = false; });
-  domElement.addEventListener('contextmenu', e => e.preventDefault());
-
-  window.addEventListener('mousemove', (e) => {
-    const dx = e.clientX - prevX;
-    const dy = e.clientY - prevY;
-    prevX = e.clientX;
-    prevY = e.clientY;
-
-    if (isDragging) {
-      spherical.theta -= dx * 0.008;
-      spherical.phi -= dy * 0.008;
-      updateCam();
-    } else if (isPanning) {
-      target.y += dy * 0.005;
-      updateCam();
-    }
-  });
-
-  domElement.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    spherical.radius += e.deltaY * 0.003;
-    updateCam();
-  }, { passive: false });
-
-  document.getElementById('btnResetCamera').addEventListener('click', () => {
-    spherical = { radius: 3.8, theta: 0, phi: Math.PI / 2.3 };
-    target.set(0, 0.9, 0);
-    updateCam();
-  });
-}
-
-/* =========================================================================
-   3. NẠP VÀ BUILD CÁC MODEL (HUMAN RIG, GLB, PROPS)
-   ========================================================================= */
-
-function clearTargetModel() {
-  if (targetModel) {
-    scene.remove(targetModel);
-    targetModel = null;
-  }
-  selectedObject = null;
-  mixer = null;
-  avatarInstance = null;
-  isPlaying = false;
-  recordedKeyframes = [];
-  updateKeyframeListUI();
-  updateHierarchyUI([]);
-  updateInspectorUI();
-}
-
-async function loadModelPreset(type) {
-  clearTargetModel();
-  currentPresetKey = type;
-  const nameInput = document.getElementById('modelCustomName');
-
-  if (type === 'human_rig') {
-    currentMode = 'avatar';
-    nameInput.value = 'HumanRig_Character';
-    document.getElementById('avatarOptionsGroup').style.display = 'block';
-    document.getElementById('boneQuickPoses').style.display = 'block';
-
-    avatarInstance = new Avatar(null, { name: 'AdminRig', hue: 200, costume: 'default' });
-    targetModel = avatarInstance.root;
-    targetModel.name = 'HumanRig_Root';
-    scene.add(targetModel);
-
-    setupRigHierarchy(avatarInstance);
-    populateClips(['Idle', 'wave', 'handshake', 'hug', 'trickOrTreat', 'cheer_jump', 'flex', 'dab', 'starfish', 'head_heart', 'kneel']);
-  }
-  else if (type === 'robot_expressive') {
-    currentMode = 'avatar';
-    nameInput.value = 'RobotExpressive_Model';
-    document.getElementById('avatarOptionsGroup').style.display = 'none';
-    document.getElementById('boneQuickPoses').style.display = 'none';
-
-    const loader = new GLTFLoader();
-    loader.load('./assets/models/RobotExpressive.glb', (gltf) => {
-      targetModel = gltf.scene;
-      targetModel.name = 'RobotExpressive_Root';
-      targetModel.scale.set(0.65, 0.65, 0.65);
-      scene.add(targetModel);
-
-      if (gltf.animations && gltf.animations.length) {
-        mixer = new THREE.AnimationMixer(targetModel);
-        activeAnimations = gltf.animations;
-        populateClips(gltf.animations.map(a => a.name));
-        playClip(gltf.animations[0].name);
-      }
-      setupGenericHierarchy(targetModel);
-    });
-  }
-  else if (type === 'pumpkin_hat') {
-    currentMode = 'props';
-    nameInput.value = 'Pumpkin_Hat_Prop';
-    document.getElementById('avatarOptionsGroup').style.display = 'none';
-    document.getElementById('boneQuickPoses').style.display = 'none';
-
-    targetModel = new THREE.Group();
-    targetModel.name = 'Pumpkin_Hat_Root';
-
-    const pumpkinMat = new THREE.MeshStandardMaterial({ color: 0xff6600, roughness: 0.6 });
-    const stemMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.9 });
-    const baseP = part(targetModel, G.sph(), pumpkinMat, [0, 0.5, 0], [1, 0.75, 1]);
-    baseP.name = 'Pumpkin_Body';
-    const stem = part(targetModel, G.cyl(), stemMat, [0, 0.95, 0], [0.15, 0.4, 0.15]);
-    stem.name = 'Pumpkin_Stem';
-
-    scene.add(targetModel);
-    setupGenericHierarchy(targetModel);
-    populateClips([]);
-  }
-  else if (type === 'gift_box') {
-    currentMode = 'props';
-    nameInput.value = 'Christmas_GiftBox_Prop';
-    document.getElementById('avatarOptionsGroup').style.display = 'none';
-    document.getElementById('boneQuickPoses').style.display = 'none';
-
-    targetModel = new THREE.Group();
-    targetModel.name = 'GiftBox_Root';
-
-    const boxMat = new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.4 });
-    const ribbonMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.3, roughness: 0.3 });
-    const b = part(targetModel, G.box(), boxMat, [0, 0.5, 0], [0.8, 0.8, 0.8]);
-    b.name = 'Gift_Box_Base';
-    const r1 = part(targetModel, G.box(), ribbonMat, [0, 0.5, 0], [0.85, 0.82, 0.2]);
-    r1.name = 'Ribbon_Horizontal';
-    const r2 = part(targetModel, G.box(), ribbonMat, [0, 0.5, 0], [0.2, 0.82, 0.85]);
-    r2.name = 'Ribbon_Vertical';
-
-    scene.add(targetModel);
-    setupGenericHierarchy(targetModel);
-    populateClips([]);
-  }
-  else if (type === 'pine_tree') {
-    currentMode = 'props';
-    nameInput.value = 'Christmas_PineTree_Prop';
-    document.getElementById('avatarOptionsGroup').style.display = 'none';
-    document.getElementById('boneQuickPoses').style.display = 'none';
-
-    targetModel = new THREE.Group();
-    targetModel.name = 'PineTree_Root';
-
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 });
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0x1b5e20, roughness: 0.7 });
-
-    const trunk = part(targetModel, G.cyl(), trunkMat, [0, 0.35, 0], [0.25, 0.7, 0.25]);
-    trunk.name = 'Trunk';
-    const leaf1 = part(targetModel, G.cone(), leafMat, [0, 0.9, 0], [1.4, 0.9, 1.4]);
-    leaf1.name = 'Pine_Leaves_Layer1';
-    const leaf2 = part(targetModel, G.cone(), leafMat, [0, 1.4, 0], [1.1, 0.8, 1.1]);
-    leaf2.name = 'Pine_Leaves_Layer2';
-    const leaf3 = part(targetModel, G.cone(), leafMat, [0, 1.85, 0], [0.75, 0.7, 0.75]);
-    leaf3.name = 'Pine_Leaves_Top';
-
-    scene.add(targetModel);
-    setupGenericHierarchy(targetModel);
-    populateClips([]);
-  }
-  else if (type === 'custom_prop') {
-    currentMode = 'props';
-    nameInput.value = 'Custom_NewModel_Prop';
-    document.getElementById('avatarOptionsGroup').style.display = 'none';
-    document.getElementById('boneQuickPoses').style.display = 'none';
-
-    targetModel = new THREE.Group();
-    targetModel.name = 'Custom_Object_Root';
-    scene.add(targetModel);
-    setupGenericHierarchy(targetModel);
-    populateClips([]);
-  }
-
-  document.getElementById('targetTypeTag').textContent = currentMode === 'avatar' ? 'Nhân vật (Rig)' : 'Vật thể (Prop)';
-}
-
-/* =========================================================================
-   4. QUẢN LÝ CÂY PHÂN CẤP (HIERARCHY TREE) & INSPECTOR
-   ========================================================================= */
-
-function setupRigHierarchy(av) {
-  const parts = [
-    { name: 'Hips (Khớp háng/Gốc)', obj: av.hips },
-    { name: 'Spine (Cột sống)', obj: av.spine },
-    { name: 'Chest (Ngực)', obj: av.chest },
-    { name: 'Head (Đầu)', obj: av.head },
-    { name: 'Left Shoulder (Vai trái)', obj: av.lShoulder },
-    { name: 'Right Shoulder (Vai phải)', obj: av.rShoulder },
-    { name: 'Left Arm (Cánh tay trái)', obj: av.lArm },
-    { name: 'Right Arm (Cánh tay phải)', obj: av.rArm },
-    { name: 'Left Hand (Bàn tay trái)', obj: av.lHand },
-    { name: 'Right Hand (Bàn tay phải)', obj: av.rHand },
-    { name: 'Left UpLeg (Đùi trái)', obj: av.lUpLeg },
-    { name: 'Right UpLeg (Đùi phải)', obj: av.rUpLeg },
-    { name: 'Left Leg (Cẳng chân trái)', obj: av.lLeg },
-    { name: 'Right Leg (Cẳng chân phải)', obj: av.rLeg }
-  ];
-  updateHierarchyUI(parts);
-}
-
-function setupGenericHierarchy(root) {
-  const list = [];
-  root.traverse((node) => {
-    if (node.isMesh || (node.isGroup && node !== root)) {
-      list.push({ name: node.name || `Node_${node.id}`, obj: node });
-    }
-  });
-  updateHierarchyUI(list);
-}
-
-function updateHierarchyUI(list) {
-  const container = document.getElementById('hierarchyTree');
-  container.innerHTML = '';
-
-  if (!list.length) {
-    container.innerHTML = '<span class="empty-hint" style="padding:10px;">Chưa có bộ phận nào. Hãy bấm "Thêm khối" ở trên.</span>';
-    return;
-  }
-
-  list.forEach(item => {
-    const el = document.createElement('div');
-    el.className = 'tree-node';
-    el.innerHTML = `<span>🔹 ${item.name}</span>`;
-    el.addEventListener('click', () => {
-      document.querySelectorAll('.tree-node').forEach(n => n.classList.remove('active'));
-      el.classList.add('active');
-      selectPart(item.obj, item.name);
-    });
-    container.appendChild(el);
-  });
-}
-
-function selectPart(obj, displayName) {
-  selectedObject = obj;
-  document.getElementById('selectedPartLabel').textContent = displayName || obj.name || 'Đã chọn';
-  updateInspectorUI();
-}
-
-function updateInspectorUI() {
-  if (!selectedObject) {
-    document.getElementById('selectedPartLabel').textContent = 'Chưa chọn';
-    return;
-  }
-
-  // Tọa độ
-  document.getElementById('posX').value = selectedObject.position.x.toFixed(2);
-  document.getElementById('posY').value = selectedObject.position.y.toFixed(2);
-  document.getElementById('posZ').value = selectedObject.position.z.toFixed(2);
-
-  // Góc quay (đổi sang độ)
-  const degX = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.x));
-  const degY = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.y));
-  const degZ = Math.round(THREE.MathUtils.radToDeg(selectedObject.rotation.z));
-
-  document.getElementById('rotX').value = degX;
-  document.getElementById('rotY').value = degY;
-  document.getElementById('rotZ').value = degZ;
-
-  document.getElementById('rotSliderX').value = degX;
-  document.getElementById('rotSliderY').value = degY;
-  document.getElementById('rotSliderZ').value = degZ;
-
-  // Tỉ lệ scale
-  document.getElementById('scaleX').value = selectedObject.scale.x.toFixed(2);
-  document.getElementById('scaleY').value = selectedObject.scale.y.toFixed(2);
-  document.getElementById('scaleZ').value = selectedObject.scale.z.toFixed(2);
-
-  // Màu sắc & Material nếu là mesh
-  if (selectedObject.material) {
-    const col = selectedObject.material.color;
-    if (col) {
-      document.getElementById('partColor').value = `#${col.getHexString()}`;
-    }
-    if (selectedObject.material.roughness !== undefined) {
-      document.getElementById('partRoughness').value = selectedObject.material.roughness;
-    }
-    if (selectedObject.material.metalness !== undefined) {
-      document.getElementById('partMetalness').value = selectedObject.material.metalness;
-    }
-  }
-}
-
-/* =========================================================================
-   5. XÂY DỰNG & ĐIỀU KHIỂN ANIMATION
-   ========================================================================= */
-
-let currentAction = null;
-
-function populateClips(names) {
-  const sel = document.getElementById('clipSelector');
-  sel.innerHTML = '';
-  if (!names.length) {
-    sel.innerHTML = '<option value="">(Không có animation)</option>';
-    return;
-  }
-  names.forEach(name => {
-    const opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = name;
-    sel.appendChild(opt);
-  });
-}
-
-function playClip(name) {
-  if (avatarInstance) {
-    avatarInstance.playEmote(name, true);
-    isPlaying = true;
-    document.getElementById('btnAnimPlayPause').textContent = '⏸ Tạm Dừng';
-    document.getElementById('timeDuration').textContent = 'Looping';
-    return;
-  }
-
-  if (!mixer || !activeAnimations.length) return;
-  const clip = THREE.AnimationClip.findByName(activeAnimations, name);
-  if (clip) {
-    if (currentAction) currentAction.stop();
-    currentAction = mixer.clipAction(clip);
-    currentAction.play();
-    isPlaying = true;
-    document.getElementById('btnAnimPlayPause').textContent = '⏸ Tạm Dừng';
-    document.getElementById('timeDuration').textContent = clip.duration.toFixed(2) + 's';
-  }
-}
-
-function updateScrubberUI() {
-  if (!currentAction || !currentAction.getClip()) return;
-  const dur = currentAction.getClip().duration;
-  const time = currentAction.time % dur;
-  document.getElementById('timeCurrent').textContent = time.toFixed(2) + 's';
-  document.getElementById('animScrubber').value = ((time / dur) * 100).toFixed(1);
-}
-
-function resetHumanPose() {
-  if (!avatarInstance) return;
-  avatarInstance.emote = null;
-  avatarInstance.animTime = 0;
-  // Reset các khớp xương về 0
-  const bones = [
-    avatarInstance.hips, avatarInstance.spine, avatarInstance.chest, avatarInstance.head,
-    avatarInstance.lShoulder, avatarInstance.rShoulder, avatarInstance.lArm, avatarInstance.rArm,
-    avatarInstance.lHand, avatarInstance.rHand, avatarInstance.lUpLeg, avatarInstance.rUpLeg,
-    avatarInstance.lLeg, avatarInstance.rLeg
-  ];
-  bones.forEach(b => {
-    if (b) {
-      b.rotation.set(0, 0, 0);
-    }
-  });
-  if (avatarInstance.hips) avatarInstance.hips.position.set(0, 0.78, 0);
-  isPlaying = false;
-  document.getElementById('btnAnimPlayPause').textContent = '▶ Xem Diễn Hoạt';
-  updateInspectorUI();
-  showToast('Đã đưa nhân vật về tư thế gốc (T-Pose)!');
-}
-
-function applyQuickPose(poseKey) {
-  if (!avatarInstance) return;
-  resetHumanPose();
-
-  if (poseKey === 'wave_arm') {
-    avatarInstance.rShoulder.rotation.z = THREE.MathUtils.degToRad(-140);
-    avatarInstance.rArm.rotation.z = THREE.MathUtils.degToRad(-40);
-  } else if (poseKey === 'sit_down') {
-    avatarInstance.hips.position.y = 0.42;
-    avatarInstance.lUpLeg.rotation.x = THREE.MathUtils.degToRad(85);
-    avatarInstance.rUpLeg.rotation.x = THREE.MathUtils.degToRad(85);
-    avatarInstance.lLeg.rotation.x = THREE.MathUtils.degToRad(-85);
-    avatarInstance.rLeg.rotation.x = THREE.MathUtils.degToRad(-85);
-  } else if (poseKey === 'salute') {
-    avatarInstance.rShoulder.rotation.z = THREE.MathUtils.degToRad(-100);
-    avatarInstance.rArm.rotation.z = THREE.MathUtils.degToRad(-80);
-    avatarInstance.rHand.rotation.y = THREE.MathUtils.degToRad(45);
-  }
-  updateInspectorUI();
-  showToast(`Đã áp dụng tư thế [${poseKey}]!`);
-}
-
-function bindUIEvents() {
-  // Preset selector
-  document.getElementById('presetSelector').addEventListener('change', (e) => {
-    loadModelPreset(e.target.value);
-  });
-
-  // Costume selector
-  document.getElementById('costumeSelector').addEventListener('change', (e) => {
-    if (avatarInstance) {
-      avatarInstance.applyCostume(e.target.value);
-      showToast(`Đã đổi trang phục: ${e.target.value}`);
-    }
-  });
-
-  // Reset Pose button
-  document.getElementById('btnResetPose').addEventListener('click', resetHumanPose);
-
-  // Quick Poses
-  document.querySelectorAll('.btn-pose').forEach(btn => {
-    btn.addEventListener('click', () => {
-      applyQuickPose(btn.dataset.pose);
-    });
-  });
-
-  // Thêm khối hình mới
-  document.querySelectorAll('.btn-geo').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const shape = btn.dataset.shape;
-      if (!targetModel) loadModelPreset('custom_prop');
-
-      let g;
-      if (shape === 'box') g = G.box();
-      else if (shape === 'sph') g = G.sph();
-      else if (shape === 'cyl') g = G.cyl();
-      else if (shape === 'cone') g = G.cone();
-      else if (shape === 'torus') g = G.torus();
-      else if (shape === 'oct') g = G.oct();
-
-      const m = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.5, metalness: 0.1 });
-      const newPart = part(targetModel, g, m, [0, 0.5, 0], [0.5, 0.5, 0.5]);
-      newPart.name = `Part_${shape}_${Date.now().toString().slice(-4)}`;
-
-      setupGenericHierarchy(targetModel);
-      selectPart(newPart, newPart.name);
-      showToast(`Đã thêm khối ${shape}!`);
-    });
-  });
-
-  // Xóa phần đang chọn
-  document.getElementById('btnDeleteSelectedPart').addEventListener('click', () => {
-    if (selectedObject && targetModel && selectedObject !== targetModel) {
-      if (confirm(`Bạn có chắc muốn xóa "${selectedObject.name}" khỏi mô hình?`)) {
-        selectedObject.parent.remove(selectedObject);
-        setupGenericHierarchy(targetModel);
-        selectedObject = null;
-        updateInspectorUI();
-        showToast('Đã xóa bộ phận được chọn.');
-      }
-    }
-  });
-
-  // Đồng bộ Rotation giữa Slider và Number Input
-  const bindRotSync = (axis) => {
-    const slider = document.getElementById(`rotSlider${axis}`);
-    const num = document.getElementById(`rot${axis}`);
-
-    const applyRot = (deg) => {
-      if (!selectedObject) return;
-      selectedObject.rotation[axis.toLowerCase()] = THREE.MathUtils.degToRad(deg);
-    };
-
-    slider.addEventListener('input', () => {
-      num.value = slider.value;
-      applyRot(parseFloat(slider.value));
-    });
-
-    num.addEventListener('input', () => {
-      slider.value = num.value;
-      applyRot(parseFloat(num.value));
-    });
-  };
-  ['X', 'Y', 'Z'].forEach(bindRotSync);
-
-  // Position & Scale Inputs
-  const updateTransformFromInputs = () => {
-    if (!selectedObject) return;
-    selectedObject.position.set(
-      parseFloat(document.getElementById('posX').value) || 0,
-      parseFloat(document.getElementById('posY').value) || 0,
-      parseFloat(document.getElementById('posZ').value) || 0
-    );
-    selectedObject.scale.set(
-      parseFloat(document.getElementById('scaleX').value) || 1,
-      parseFloat(document.getElementById('scaleY').value) || 1,
-      parseFloat(document.getElementById('scaleZ').value) || 1
-    );
-  };
-  ['posX', 'posY', 'posZ', 'scaleX', 'scaleY', 'scaleZ'].forEach(id => {
-    document.getElementById(id).addEventListener('input', updateTransformFromInputs);
-  });
-
-  // Color & Material
-  document.getElementById('partColor').addEventListener('input', (e) => {
-    if (selectedObject && selectedObject.material && selectedObject.material.color) {
-      selectedObject.material.color.set(e.target.value);
-    }
-  });
-
-  document.getElementById('partRoughness').addEventListener('input', (e) => {
-    if (selectedObject && selectedObject.material) {
-      selectedObject.material.roughness = parseFloat(e.target.value);
-    }
-  });
-
-  document.getElementById('partMetalness').addEventListener('input', (e) => {
-    if (selectedObject && selectedObject.material) {
-      selectedObject.material.metalness = parseFloat(e.target.value);
-    }
-  });
-
-  // Animation Play/Pause
-  const btnPlay = document.getElementById('btnAnimPlayPause');
-  btnPlay.addEventListener('click', () => {
-    const clipName = document.getElementById('clipSelector').value;
-    if (isPlaying) {
-      if (avatarInstance) {
-        avatarInstance.emote = null;
-      } else if (currentAction) {
-        currentAction.pause();
-      }
-      isPlaying = false;
-      btnPlay.textContent = '▶ Xem Diễn Hoạt';
-    } else {
-      playClip(clipName);
-    }
-  });
-
-  document.getElementById('btnAnimStop').addEventListener('click', () => {
-    if (avatarInstance) {
-      resetHumanPose();
-    } else if (currentAction) {
-      currentAction.stop();
-    }
-    isPlaying = false;
-    btnPlay.textContent = '▶ Xem Diễn Hoạt';
-    document.getElementById('animScrubber').value = 0;
-    document.getElementById('timeCurrent').textContent = '0.00s';
-  });
-
-  document.getElementById('clipSelector').addEventListener('change', (e) => {
-    playClip(e.target.value);
-  });
-
-  document.getElementById('animSpeed').addEventListener('input', (e) => {
-    const val = parseFloat(e.target.value);
-    document.getElementById('speedVal').textContent = val.toFixed(1) + 'x';
-    if (mixer) mixer.timeScale = val;
-  });
-
-  // Viewport Toggle buttons
-  document.getElementById('btnToggleGrid').addEventListener('click', function() {
-    gridHelper.visible = !gridHelper.visible;
-    this.classList.toggle('active', gridHelper.visible);
-  });
-
-  document.getElementById('btnToggleWireframe').addEventListener('click', function() {
-    const active = this.classList.toggle('active');
-    if (targetModel) {
-      targetModel.traverse(node => {
-        if (node.isMesh && node.material) {
-          node.material.wireframe = active;
-        }
-      });
-    }
-  });
-
-  // Chụp Keyframe & Tạo Animation mới
-  document.getElementById('btnCaptureKeyframe').addEventListener('click', () => {
-    if (!selectedObject) {
-      alert('Vui lòng chọn một bộ phận hoặc khớp xương cần lưu khung hình.');
-      return;
-    }
-    const frameData = {
-      targetName: selectedObject.name,
-      pos: selectedObject.position.toArray(),
-      rot: [selectedObject.rotation.x, selectedObject.rotation.y, selectedObject.rotation.z],
-      scale: selectedObject.scale.toArray(),
-      time: recordedKeyframes.length * 0.5
-    };
-    recordedKeyframes.push(frameData);
-    updateKeyframeListUI();
-    showToast(`Đã chụp Frame ${recordedKeyframes.length} (${frameData.targetName})`);
-  });
-
-  document.getElementById('btnClearKeyframes').addEventListener('click', () => {
-    recordedKeyframes = [];
-    updateKeyframeListUI();
-    showToast('Đã xóa tất cả keyframes đã lưu.');
-  });
-
-  // Thử chạy Animation tự tạo
-  document.getElementById('btnTestAnimation').addEventListener('click', () => {
-    if (recordedKeyframes.length < 2) {
-      alert('Cần ít nhất 2 Keyframe để chạy thử chuyển động.');
-      return;
-    }
-    let curIdx = 0;
-    const interval = setInterval(() => {
-      if (curIdx >= recordedKeyframes.length) {
-        clearInterval(interval);
-        showToast('Hoàn thành chạy thử animation!');
-        return;
-      }
-      const kf = recordedKeyframes[curIdx];
-      if (selectedObject) {
-        selectedObject.rotation.set(...kf.rot);
-        selectedObject.position.set(...kf.pos);
-        updateInspectorUI();
-      }
-      curIdx++;
-    }, 450);
-  });
-
-  // Xuất file Animation đặt tên theo model/animation
-  document.getElementById('btnSaveNewAnimation').addEventListener('click', () => {
-    const modelName = document.getElementById('modelCustomName').value.trim() || 'Model';
-    const animName = document.getElementById('newAnimName').value.trim() || 'CustomMotion';
-
-    if (recordedKeyframes.length < 2) {
-      alert('Cần chụp ít nhất 2 Keyframe để tạo file animation hoàn chỉnh.');
-      return;
-    }
-
-    const animConfig = {
-      modelName,
-      animationName: animName,
-      fps: 30,
-      totalDuration: recordedKeyframes[recordedKeyframes.length - 1].time,
-      keyframes: recordedKeyframes,
-      createdAt: new Date().toISOString()
-    };
-
-    const fileName = `${modelName}_${animName}.anim.json`;
-    downloadJSON(animConfig, fileName);
-    showToast(`Đã xuất Animation [${fileName}] thành công!`);
-  });
-
-  // 1. Lưu chỉnh sửa vào kho trình duyệt (LocalStorage)
-  document.getElementById('btnSaveToStorage').addEventListener('click', () => {
-    if (!targetModel) return;
-    const modelName = document.getElementById('modelCustomName').value.trim() || 'Custom_Model';
-
-    let exportData = null;
-    if (avatarInstance) {
-      // Lưu toàn bộ cấu hình nhân vật (Costume, Hue, Pos/Rot từng khớp)
-      exportData = exportAvatarConfig(avatarInstance, modelName);
-    } else {
-      exportData = targetModel.toJSON();
-    }
-
-    try {
-      localStorage.setItem(`gather_model_${modelName}`, JSON.stringify(exportData));
-      showToast(`Đã lưu "${modelName}" vào kho dữ liệu game!`);
-    } catch (e) {
-      alert('Không đủ dung lượng bộ nhớ: ' + e.message);
-    }
-  });
-
-  // 2. Xuất toàn bộ Model ra file JSON đặt tên cụ thể theo Model
-  document.getElementById('btnExportJSON').addEventListener('click', () => {
-    if (!targetModel) return;
-    const modelName = document.getElementById('modelCustomName').value.trim() || 'Gather_Model';
-
-    let exportData = null;
-    if (avatarInstance) {
-      exportData = exportAvatarConfig(avatarInstance, modelName);
-    } else {
-      exportData = targetModel.toJSON();
-    }
-
-    const fileName = `${modelName}.model.json`;
-    downloadJSON(exportData, fileName);
-    showToast(`Đã xuất file [${fileName}] thành công!`);
-  });
-
-  // 3. Nạp Model (Hỗ trợ file .json, .glb, .gltf)
-  const fileIn = document.getElementById('fileImporter');
-  document.getElementById('btnImportJSON').addEventListener('click', () => {
-    fileIn.value = ''; // Reset input để cho phép chọn lại cùng 1 file
-    fileIn.click();
-  });
-
-  fileIn.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    // Tự động lấy tên file làm tên model
-    const baseName = file.name.replace(/\.[^/.]+$/, "");
-    const ext = file.name.split('.').pop().toLowerCase();
-    document.getElementById('modelCustomName').value = baseName;
-
-    // Xử lý nạp file GLB / GLTF (Binary 3D)
-    if (ext === 'glb' || ext === 'gltf') {
-      const url = URL.createObjectURL(file);
-      const loader = new GLTFLoader();
-      loader.load(url, (gltf) => {
-        clearTargetModel();
-        currentMode = 'avatar';
-        targetModel = gltf.scene;
-        targetModel.name = baseName;
-        scene.add(targetModel);
-
-        if (gltf.animations && gltf.animations.length) {
-          mixer = new THREE.AnimationMixer(targetModel);
-          activeAnimations = gltf.animations;
-          populateClips(gltf.animations.map(a => a.name));
-          playClip(gltf.animations[0].name);
-        }
-        setupGenericHierarchy(targetModel);
-        URL.revokeObjectURL(url);
-        showToast(`Đã nạp file 3D [${file.name}] thành công!`);
-      }, undefined, (err) => {
-        alert('Lỗi nạp file GLB/GLTF: ' + (err.message || 'File không hợp lệ'));
-        URL.revokeObjectURL(url);
-      });
-      return;
-    }
-
-    // Xử lý nạp file JSON / Model Config
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = (event.target.result || '').trim();
-      if (!content) {
-        alert('File được chọn hoàn toàn rỗng hoặc chưa có dữ liệu!');
-        return;
-      }
-
-      try {
-        const json = JSON.parse(content);
-
-        if (json.type === 'AvatarRigConfig') {
-          // Nạp cấu hình avatar rig
-          loadModelPreset('human_rig');
-          setTimeout(() => {
-            applyAvatarConfig(avatarInstance, json);
-            showToast(`Đã nạp nhân vật [${baseName}] thành công!`);
-          }, 120);
-        } else if (json.metadata && json.metadata.type === 'Object') {
-          // Nạp Three.js Object JSON thông thường
-          const loader = new THREE.ObjectLoader();
-          const obj = loader.parse(json);
-          clearTargetModel();
-          targetModel = obj;
-          scene.add(targetModel);
-          setupGenericHierarchy(targetModel);
-          showToast(`Đã nạp mô hình [${baseName}] thành công!`);
-        } else if (json.keyframes) {
-          // File Animation Keyframes
-          recordedKeyframes = json.keyframes || [];
-          document.getElementById('newAnimName').value = json.animationName || baseName;
-          updateKeyframeListUI();
-          showToast(`Đã nạp Animation [${baseName}] với ${recordedKeyframes.length} keyframes!`);
-        } else {
-          // Thử nạp với ObjectLoader
-          const loader = new THREE.ObjectLoader();
-          const obj = loader.parse(json);
-          clearTargetModel();
-          targetModel = obj;
-          scene.add(targetModel);
-          setupGenericHierarchy(targetModel);
-          showToast(`Đã nạp mô hình [${baseName}] thành công!`);
-        }
-      } catch (err) {
-        alert('Lỗi định dạng file: File được chọn không phải định dạng JSON hợp lệ (' + err.message + '). Nếu bạn muốn nạp mô hình 3D nguyên bản, hãy chọn file có đuôi .glb hoặc .gltf!');
-      }
-    };
-    reader.onerror = () => {
-      alert('Không thể đọc file từ thiết bị của bạn.');
-    };
-    reader.readAsText(file);
-  });
-}
-
-function exportAvatarConfig(av, modelName) {
-  const bonesData = {};
-  const bones = [
-    { k: 'hips', obj: av.hips },
-    { k: 'spine', obj: av.spine },
-    { k: 'chest', obj: av.chest },
-    { k: 'head', obj: av.head },
-    { k: 'lShoulder', obj: av.lShoulder },
-    { k: 'rShoulder', obj: av.rShoulder },
-    { k: 'lArm', obj: av.lArm },
-    { k: 'rArm', obj: av.rArm },
-    { k: 'lHand', obj: av.lHand },
-    { k: 'rHand', obj: av.rHand },
-    { k: 'lUpLeg', obj: av.lUpLeg },
-    { k: 'rUpLeg', obj: av.rUpLeg },
-    { k: 'lLeg', obj: av.lLeg },
-    { k: 'rLeg', obj: av.rLeg }
-  ];
-
-  bones.forEach(b => {
-    if (b.obj) {
-      bonesData[b.k] = {
-        pos: b.obj.position.toArray(),
-        rot: [b.obj.rotation.x, b.obj.rotation.y, b.obj.rotation.z],
-        scale: b.obj.scale.toArray()
-      };
-    }
-  });
-
-  return {
-    type: 'AvatarRigConfig',
-    modelName: modelName,
-    costume: av.costumeKey || 'default',
-    hue: av.hue || 200,
-    bones: bonesData,
-    exportedAt: new Date().toISOString()
-  };
-}
-
-function applyAvatarConfig(av, config) {
-  if (!av || !config.bones) return;
-  if (config.costume) av.applyCostume(config.costume);
-
-  for (const [key, data] of Object.entries(config.bones)) {
-    if (av[key]) {
-      if (data.pos) av[key].position.fromArray(data.pos);
-      if (data.rot) av[key].rotation.set(...data.rot);
-      if (data.scale) av[key].scale.fromArray(data.scale);
-    }
-  }
-  updateInspectorUI();
-}
-
-function downloadJSON(data, filename) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function updateKeyframeListUI() {
-  const container = document.getElementById('keyframesList');
-  container.innerHTML = '';
-  if (!recordedKeyframes.length) {
-    container.innerHTML = '<span class="empty-hint">Chưa có keyframe nào được ghi lại.</span>';
-    return;
-  }
-  recordedKeyframes.forEach((kf, idx) => {
-    const pill = document.createElement('div');
-    pill.className = 'frame-pill';
-    pill.textContent = `F${idx + 1}: ${kf.targetName} (${kf.time.toFixed(1)}s)`;
-    container.appendChild(pill);
-  });
-}
-
-// Khởi động Auth ban đầu
 window.addEventListener('DOMContentLoaded', initAuth);

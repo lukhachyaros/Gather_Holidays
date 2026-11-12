@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { THEMES } from './themes.js';
 import { getThemeFeatures } from './maps.js';
+import { instantiateReplacement } from './model-library.js';
 import {
   buildProp,
   buildTree,
@@ -87,6 +88,7 @@ export class World {
 
     this.mapKey = '';
     this.themeKey = '';
+    this.replacementTemplates = new Map();
     this.ornamentKey = '';
     this.mediaBannerKey = '';
     this.particles = [];
@@ -237,6 +239,7 @@ export class World {
     this.scene.remove(this.group);
     this.group = new THREE.Group();
     this.scene.add(this.group);
+    this.replacementTemplates = new Map();
 
     this.campfires = [];
     this.maiEnvelopes = [];
@@ -315,6 +318,7 @@ export class World {
       t.position.set(x * TILE, 0, y * TILE);
       t.rotation.y = (x * 31 + y * 17) % 7;
       this.group.add(t);
+      this.applyModelReplacement(themeKey, 'map_tree', t);
     });
 
     // Roof props on perimeter walls
@@ -323,6 +327,7 @@ export class World {
         const p = buildProp(th.prop);
         p.position.set(x * TILE, WALL_H, y * TILE);
         this.group.add(p);
+        this.applyModelReplacement(themeKey, 'roof_prop', p);
       }
     });
 
@@ -345,6 +350,7 @@ export class World {
     this.screenObj = buildCinemaScreen();
     this.screenObj.position.set(14.5 * TILE, 0, 2.0 * TILE);
     this.group.add(this.screenObj);
+    this.applyModelReplacement(themeKey, 'cinema_screen', this.screenObj);
     this.mediaBannerKey = '';
 
     // 2. Seats (Single chairs, Couple sofas, Campfire logs)
@@ -358,114 +364,120 @@ export class World {
         if (s.kind !== 'log') mesh.rotation.y = 0; // faces North (-Z)
         this.group.add(mesh);
         s.mesh = mesh;
+        const target = s.kind === 'single' ? 'single_chair' : s.kind === 'couple' ? 'couple_sofa' : 'log_seat';
+        this.applyModelReplacement(themeKey, target, mesh);
       }
     }
 
     // 3. Hotspots & Theme Centerpieces
+    const addMapModel = (target, object) => {
+      this.group.add(object);
+      this.applyModelReplacement(themeKey, target, object);
+    };
     for (const h of this.features.hotspots) {
       if (h.type === 'xmas_tree') {
         const { group, slots } = buildGiantChristmasTree();
         group.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(group);
+        addMapModel(h.type, group);
         this.treeSlots = slots;
       } else if (h.type === 'ornament_table') {
         const tb = buildOrnamentTable();
         tb.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(tb);
+        addMapModel(h.type, tb);
       } else if (h.type === 'campfire') {
         const cf = buildCampfire();
         cf.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(cf);
+        addMapModel(h.type, cf);
         this.campfires.push(cf);
       } else if (h.type === 'giant_pumpkin') {
         const gp = buildGiantPumpkin();
         gp.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(gp);
+        addMapModel(h.type, gp);
       } else if (h.type === 'small_pumpkin') {
         const sp = buildCarvedPumpkin(h.styleKey, 1.15);
         sp.position.set(h.x * TILE, 0, h.y * TILE);
         sp.rotation.y = h.rot || 0;
-        this.group.add(sp);
+        addMapModel(h.type, sp);
       } else if (h.type === 'costume_booth') {
         const cb = buildCostumeBooth(h.costumeKey);
         cb.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(cb);
+        addMapModel(h.type, cb);
       } else if (h.type === 'mai_tree') {
         const mt = buildGiantMaiTree();
         mt.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(mt);
+        addMapModel(h.type, mt);
         this.maiEnvelopes = mt.userData.envelopes || [];
       } else if (h.type === 'phuc_loc_tho_shrine') {
         const pls = buildPhucLocThoShrine();
         pls.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(pls);
+        addMapModel(h.type, pls);
       } else if (h.type === 'dragon_altar') {
         const da = buildDragonAltar();
         da.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(da);
+        addMapModel(h.type, da);
       } else if (h.type === 'firework_launcher') {
         const fl = buildFireworkLauncher();
         fl.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(fl);
+        addMapModel(h.type, fl);
       } else if (h.type === 'firecracker_table') {
         const ft = buildFirecrackerTable();
         ft.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(ft);
+        addMapModel(h.type, ft);
       } else if (h.type === 'heart_tree') {
         const ht = buildValentineHeartTree();
         ht.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(ht);
+        addMapModel(h.type, ht);
         this.valentineObjs.push(ht);
       } else if (h.type === 'love_fountain') {
         const lf = buildLoveFountain();
         lf.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(lf);
+        addMapModel(h.type, lf);
         this.valentineObjs.push(lf);
       } else if (h.type === 'roulette') {
         const rt = buildRouletteTable();
         rt.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(rt);
+        addMapModel(h.type, rt);
         this.casinoObjs.push(rt);
       } else if (h.type === 'duck_derby') {
         const dd = buildDuckDerbyTrack();
         dd.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(dd);
+        addMapModel(h.type, dd);
         this.casinoObjs.push(dd);
       } else if (h.type === 'blackjack') {
         const bj = buildBlackjackTable();
         bj.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(bj);
+        addMapModel(h.type, bj);
         this.casinoObjs.push(bj);
       } else if (h.type === 'slot_machine') {
         [-0.85, 0, 0.85].forEach(ox => {
           const sm = buildSlotMachine();
           sm.position.set((h.x + ox) * TILE, 0, h.y * TILE);
           sm.rotation.y = Math.PI;
-          this.group.add(sm);
+          addMapModel(h.type, sm);
           this.casinoObjs.push(sm);
         });
       } else if (h.type === 'plinko') {
         const pk = buildPlinkoBoard();
         pk.position.set(h.x * TILE, 0, h.y * TILE);
         pk.rotation.y = Math.PI;
-        this.group.add(pk);
+        addMapModel(h.type, pk);
         this.casinoObjs.push(pk);
       } else if (h.type === 'secret_passage') {
         const sp = buildSecretPassage(themeKey);
         sp.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(sp);
+        addMapModel(h.type, sp);
       } else if (h.type === 'secret_note') {
         const sn = buildSecretPaperNote(h.code);
         sn.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(sn);
+        addMapModel(h.type, sn);
       } else if (h.type === 'casino_exit') {
         const ce = buildCasinoExitPortal();
         ce.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(ce);
+        addMapModel(h.type, ce);
       } else if (h.type === 'casino_pub') {
         const pub = buildCasinoPubBar();
         pub.position.set(h.x * TILE, 0, h.y * TILE);
-        this.group.add(pub);
+        addMapModel(h.type, pub);
         this.casinoObjs.push(pub);
       }
     }
@@ -476,18 +488,18 @@ export class World {
         const sm = buildSnowman(ep.variant);
         sm.position.set(ep.x * TILE, 0, ep.y * TILE);
         sm.rotation.y = ep.rot || 0;
-        this.group.add(sm);
+        addMapModel(ep.type, sm);
       } else if (ep.type === 'rose_arch') {
         const arch = buildRoseArch();
         arch.position.set(ep.x * TILE, 0, ep.y * TILE);
         arch.rotation.y = ep.rot || 0;
-        this.group.add(arch);
+        addMapModel(ep.type, arch);
         this.valentineObjs.push(arch);
       } else if (ep.type === 'illusion_wall') {
         const iw = buildIllusionWall(themeKey);
         iw.position.set(ep.x * TILE, 0, ep.y * TILE);
         iw.rotation.y = ep.rot || 0;
-        this.group.add(iw);
+        addMapModel(ep.type, iw);
       }
     }
 
@@ -496,9 +508,42 @@ export class World {
       this.vampireNPC = buildVampireNPC();
       this.vampireNPC.position.set(14.5 * TILE, 3.8, 11.5 * TILE);
       this.group.add(this.vampireNPC);
+      this.applyModelReplacement(themeKey, 'vampire_npc', this.vampireNPC);
     }
 
     this. sun.target.position.set((map.w * TILE) / 2, 0, (map.h * TILE) / 2);
+  }
+
+  async applyModelReplacement(map, target, group) {
+    try {
+      const key = `${map}:${target}`;
+      if (!this.replacementTemplates.has(key)) {
+        this.replacementTemplates.set(key, instantiateReplacement(map, target));
+      }
+      const template = await this.replacementTemplates.get(key);
+      const replacement = template?.clone(true);
+      if (!replacement || group.parent !== this.group) return;
+
+      group.updateWorldMatrix(true, true);
+      const originalBounds = new THREE.Box3().setFromObject(group);
+      const originalSize = originalBounds.getSize(new THREE.Vector3());
+      const replacementBounds = new THREE.Box3().setFromObject(replacement);
+      const replacementSize = replacementBounds.getSize(new THREE.Vector3());
+      const hasOriginalBounds = !originalBounds.isEmpty();
+      const targetSize = hasOriginalBounds ? Math.max(originalSize.x, originalSize.y, originalSize.z) : 0;
+      const sourceSize = Math.max(replacementSize.x, replacementSize.y, replacementSize.z);
+      const fitScale = targetSize > 0 && sourceSize > 0 ? targetSize / sourceSize : 1;
+      replacement.scale.multiplyScalar(fitScale);
+      replacement.position.y = hasOriginalBounds
+        ? originalBounds.min.y - group.getWorldPosition(new THREE.Vector3()).y - replacementBounds.min.y * fitScale
+        : -replacementBounds.min.y * fitScale;
+
+      const preservedObjects = new Set(group.userData.envelopes || []);
+      for (const child of group.children) child.visible = preservedObjects.has(child);
+      group.add(replacement);
+    } catch (error) {
+      console.error(`Could not apply model replacement for ${map}/${target}:`, error);
+    }
   }
 
   // ==========================================================================
