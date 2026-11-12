@@ -580,6 +580,69 @@ body.admin-body {
   overflow-wrap: anywhere;
 }
 
+.design-title {
+  margin-top: 16px;
+}
+
+.design-components {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 34vh;
+  overflow: auto;
+}
+
+.design-component {
+  padding: 8px;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: #0d131f;
+}
+
+.design-component-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  color: #e5e7eb;
+  font-size: 12px;
+}
+
+.design-component-controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.design-component-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.design-component-controls input,
+.design-scale-control input {
+  width: 100%;
+  min-width: 0;
+  padding: 5px;
+  border: 1px solid var(--admin-border);
+  border-radius: 4px;
+  background: #111827;
+  color: #f9fafb;
+}
+
+.design-scale-control {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  align-items: center;
+  gap: 8px;
+  color: var(--admin-muted);
+  font-size: 11px;
+}
+
 .empty-preview {
   position: absolute;
   inset: 0;

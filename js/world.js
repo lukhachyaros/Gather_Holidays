@@ -540,7 +540,9 @@ export class World {
       const hasOriginalBounds = !originalBounds.isEmpty();
       const targetSize = hasOriginalBounds ? Math.max(originalSize.x, originalSize.y, originalSize.z) : 0;
       const sourceSize = Math.max(replacementSize.x, replacementSize.y, replacementSize.z);
-      const fitScale = targetSize > 0 && sourceSize > 0 ? targetSize / sourceSize : 1;
+      const requestedScale = Number(replacement.userData.replacementScale);
+      const scaleMultiplier = Number.isFinite(requestedScale) && requestedScale > 0 ? requestedScale : 1;
+      const fitScale = (targetSize > 0 && sourceSize > 0 ? targetSize / sourceSize : 1) * scaleMultiplier;
       replacement.scale.multiplyScalar(fitScale);
       replacement.position.y = hasOriginalBounds
         ? originalBounds.min.y - group.getWorldPosition(new THREE.Vector3()).y - replacementBounds.min.y * fitScale

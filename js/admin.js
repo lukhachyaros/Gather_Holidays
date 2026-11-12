@@ -22,6 +22,7 @@ let controls;
 let previewModel;
 let selectedAssetId = null;
 let previewRequest = 0;
+let designComponents = [];
 
 const $ = id => document.getElementById(id);
 
@@ -232,6 +233,7 @@ async function selectAsset(assetId, preparedModel = null) {
   $('selectedModelInfo').textContent = `Định dạng ${asset.format.toUpperCase()} · Tải lên thư viện model`;
   $('btnAssignModel').disabled = false;
   $('btnRemoveModel').disabled = false;
+  $('btnAddDesignComponent').disabled = false;
   renderLibraryList();
   await previewAsset(asset, preparedModel);
 }
@@ -241,7 +243,13 @@ async function previewAsset(asset, preparedModel = null) {
   $('emptyPreview').classList.add('hidden');
   try {
     const model = preparedModel || await instantiateModelAsset(asset);
-    showPreviewModel(model, `Thư viện: ${asset.name}`, requestId);
+    showPreviewModel(
+      model,
+      `Thư viện: ${asset.name}`,
+      requestId,
+      model.userData.replacementScale || 1,
+      model.userData.designPreviewFitScale
+    );
   } catch (error) {
     $('emptyPreview').textContent = `Không xem trước được model: ${error.message}`;
     $('emptyPreview').classList.remove('hidden');
@@ -249,14 +257,17 @@ async function previewAsset(asset, preparedModel = null) {
   }
 }
 
-function showPreviewModel(model, label, requestId) {
+function showPreviewModel(model, label, requestId, displayScale = 1, normalizationScale = null) {
   if (requestId !== previewRequest) return;
   if (previewModel) scene.remove(previewModel);
   previewModel = model;
   const bounds = new THREE.Box3().setFromObject(previewModel);
   const size = bounds.getSize(new THREE.Vector3());
   const maxSize = Math.max(size.x, size.y, size.z);
-  if (maxSize > 0) previewModel.scale.multiplyScalar(2.4 / maxSize);
+  const fitScale = Number.isFinite(normalizationScale) && normalizationScale > 0
+    ? normalizationScale
+    : maxSize > 0 ? 2.4 / maxSize : 1;
+  previewModel.scale.multiplyScalar(fitScale * displayScale);
   bounds.setFromObject(previewModel);
   const previewSize = bounds.getSize(new THREE.Vector3());
   const center = bounds.getCenter(new THREE.Vector3());
@@ -287,7 +298,13 @@ async function previewCurrentTarget(showDefault = false) {
     const label = asset && !showDefault
       ? `${mapName} · ${targetName} · Model thay thế: ${asset.name}`
       : `${mapName} · ${targetName} · Model gốc`;
-    showPreviewModel(model, label, requestId);
+    showPreviewModel(
+      model,
+      label,
+      requestId,
+      model.userData.replacementScale || 1,
+      model.userData.designPreviewFitScale
+    );
   } catch (error) {
     if (requestId !== previewRequest) return;
     $('emptyPreview').textContent = `Không xem trước được model gốc: ${error.message}`;
@@ -330,6 +347,173 @@ async function addModelFile(file) {
   showToast(`Đã thêm "${asset.name}" trên máy này. Xuất cấu hình và cập nhật repo để mọi người cùng thấy.`);
 }
 
+function renderDesignComponents() {
+  const list = $('designComponents');
+  list.replaceChildren();
+  $('btnSaveDesign').disabled = designComponents.length === 0;
+  if (!designComponents.length) {
+    const empty = document.createElement('div');
+    empty.className = 'library-empty';
+    empty.textContent = 'Chưa có thành phần trong thiết kế.';
+    list.append(empty);
+    return;
+  }
+
+  for (const component of designComponents) {
+    const asset = getAsset(component.assetId);
+    if (!asset) continue;
+    const row = document.createElement('div');
+    row.className = 'design-component';
+    row.dataset.componentId = component.id;
+
+    const header = document.createElement('div');
+    header.className = 'design-component-header';
+    const name = document.createElement('span');
+    name.textContent = asset.name;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn-small-danger';
+    remove.textContent = 'Xóa';
+    remove.addEventListener('click', () => {
+      designComponents = designComponents.filter(item => item.id !== component.id);
+      renderDesignComponents();
+      if (designComponents.length) previewDesign();
+      else previewCurrentTarget();
+    });
+    header.append(name, remove);
+
+    const controls = document.createElement('div');
+    controls.className = 'design-component-controls';
+    for (const [key, label] of [['scale', 'Kích thước'], ['x', 'Trái / phải'], ['y', 'Lên / xuống'], ['z', 'Trước / sau']]) {
+      const field = document.createElement('label');
+      field.textContent = label;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = '0.1';
+      input.min = key === 'scale' ? '0.05' : '-100';
+      input.max = key === 'scale' ? '20' : '100';
+      input.value = String(component[key]);
+      input.dataset.transform = key;
+      const updateTransform = () => {
+        const value = Number(input.value);
+        if (!Number.isFinite(value) || (key === 'scale' && value <= 0)) {
+          input.value = String(component[key]);
+          return;
+        }
+        component[key] = value;
+        previewDesign();
+      };
+      input.addEventListener('input', updateTransform);
+      input.addEventListener('change', updateTransform);
+      field.append(input);
+      controls.append(field);
+    }
+
+    row.append(header, controls);
+    list.append(row);
+  }
+}
+
+async function buildDesignModel() {
+  const group = new THREE.Group();
+  const baseBounds = new THREE.Box3();
+  const rows = [...$('designComponents').children];
+  for (const component of designComponents) {
+    const asset = getAsset(component.assetId);
+    if (!asset) throw new Error('Một model trong thiết kế đã bị xóa khỏi thư viện.');
+    const row = rows.find(item => item.dataset.componentId === component.id);
+    if (row) {
+      for (const key of ['scale', 'x', 'y', 'z']) {
+        const value = Number(row.querySelector(`[data-transform="${key}"]`)?.value);
+        if (Number.isFinite(value) && (key !== 'scale' || value > 0)) component[key] = value;
+      }
+    }
+    const object = await instantiateModelAsset(asset);
+    object.position.set(component.x, component.y, component.z);
+    object.updateMatrixWorld(true);
+    baseBounds.union(new THREE.Box3().setFromObject(object));
+    object.scale.multiplyScalar(component.scale);
+    group.add(object);
+  }
+  const baseSize = baseBounds.getSize(new THREE.Vector3());
+  const baseMaxSize = Math.max(baseSize.x, baseSize.y, baseSize.z);
+  group.userData.designPreviewFitScale = baseMaxSize > 0 ? 2.4 / baseMaxSize : 1;
+  group.userData.replacementScale = Number($('designOverallScale').value) || 1;
+  return group;
+}
+
+function bakeTubeGeometries(group) {
+  const bakedGeometries = new Map();
+  group.traverse(object => {
+    if (!object.isMesh || object.geometry.type !== 'TubeGeometry') return;
+    let geometry = bakedGeometries.get(object.geometry);
+    if (!geometry) {
+      geometry = new THREE.BufferGeometry().copy(object.geometry);
+      bakedGeometries.set(object.geometry, geometry);
+    }
+    object.geometry = geometry;
+  });
+}
+
+async function previewDesign() {
+  if (!designComponents.length) return;
+  const requestId = ++previewRequest;
+  try {
+    const group = await buildDesignModel();
+    showPreviewModel(
+      group,
+      `Bản thiết kế · ${designComponents.length} thành phần`,
+      requestId,
+      group.userData.replacementScale,
+      group.userData.designPreviewFitScale
+    );
+  } catch (error) {
+    if (requestId !== previewRequest) return;
+    $('emptyPreview').textContent = `Không xem trước được thiết kế: ${error.message}`;
+    $('emptyPreview').classList.remove('hidden');
+    console.error('Could not preview model design:', error);
+  }
+}
+
+function addSelectedModelToDesign() {
+  const asset = getAsset(selectedAssetId);
+  if (!asset) return;
+  designComponents.push({
+    id: crypto.randomUUID(),
+    assetId: asset.id,
+    scale: 1,
+    x: 0,
+    y: 0,
+    z: 0,
+  });
+  renderDesignComponents();
+  previewDesign();
+}
+
+async function saveDesign() {
+  if (!designComponents.length) return;
+  const group = await buildDesignModel();
+  group.updateMatrixWorld(true);
+  bakeTubeGeometries(group);
+  const name = $('designName').value.trim() || 'Model tổng hợp';
+  const asset = {
+    id: crypto.randomUUID(),
+    name,
+    format: 'json',
+    data: group.toJSON(),
+  };
+  const model = await instantiateModelAsset(asset);
+  library.assets.push(asset);
+  selectedAssetId = asset.id;
+  assignAssetToCurrentTarget(asset.id);
+  saveLocalLibrary();
+  renderLibraryList();
+  renderDesignComponents();
+  updateCurrentReplacement();
+  await selectAsset(asset.id, model);
+  showToast(`Đã lưu "${name}" trên máy này. Xuất cấu hình rồi cập nhật repo để chia sẻ.`);
+}
+
 async function handleModelFiles(files) {
   for (const file of files) {
     try {
@@ -341,12 +525,11 @@ async function handleModelFiles(files) {
   }
 }
 
-function assignSelectedAsset() {
-  if (!selectedAssetId || !getAsset(selectedAssetId)) return;
+function assignAssetToCurrentTarget(assetId) {
   const replacement = {
     map: $('mapSelector').value,
     target: $('targetSelector').value,
-    assetId: selectedAssetId,
+    assetId,
   };
   library.replacements = library.replacements.filter(
     item => mapTargetKey(item.map, item.target) !== mapTargetKey(replacement.map, replacement.target)
@@ -355,6 +538,11 @@ function assignSelectedAsset() {
   saveLocalLibrary();
   renderLibraryList();
   updateCurrentReplacement();
+}
+
+function assignSelectedAsset() {
+  if (!selectedAssetId || !getAsset(selectedAssetId)) return;
+  assignAssetToCurrentTarget(selectedAssetId);
   showToast('Đã thay model trên máy này. Xuất cấu hình và cập nhật repo để mọi người cùng thấy.');
 }
 
@@ -370,6 +558,9 @@ function removeSelectedAsset() {
   $('selectedModelInfo').textContent = 'Model đã được xóa khỏi thư viện.';
   $('btnAssignModel').disabled = true;
   $('btnRemoveModel').disabled = true;
+  $('btnAddDesignComponent').disabled = true;
+  designComponents = designComponents.filter(component => component.assetId !== asset.id);
+  renderDesignComponents();
   saveLocalLibrary();
   renderLibraryList();
   updateCurrentReplacement();
@@ -434,6 +625,8 @@ async function importLibraryFile(file) {
   library = imported;
   saveLocalLibrary();
   selectedAssetId = null;
+  designComponents = [];
+  renderDesignComponents();
   renderLibraryList();
   updateCurrentReplacement();
   showToast('Đã nạp cấu hình thư viện model.');
@@ -444,6 +637,28 @@ function bindUI() {
   $('targetSelector').addEventListener('change', updateCurrentReplacement);
   $('btnAssignModel').addEventListener('click', assignSelectedAsset);
   $('btnRemoveModel').addEventListener('click', removeSelectedAsset);
+  $('btnAddDesignComponent').addEventListener('click', addSelectedModelToDesign);
+  $('btnSaveDesign').addEventListener('click', () => {
+    saveDesign().catch(error => {
+      console.error('Could not save model design:', error);
+      showToast(`Không lưu được thiết kế: ${error.message}`);
+    });
+  });
+  const updateOverallScalePreview = () => {
+    const input = $('designOverallScale');
+    const value = Number(input.value);
+    if (!Number.isFinite(value) || value <= 0) return;
+    if (designComponents.length) previewDesign();
+  };
+  $('designOverallScale').addEventListener('input', updateOverallScalePreview);
+  $('designOverallScale').addEventListener('change', () => {
+    const input = $('designOverallScale');
+    const value = Number(input.value);
+    if (!Number.isFinite(value) || value <= 0) {
+      input.value = '1';
+      updateOverallScalePreview();
+    }
+  });
   $('btnClearReplacement').addEventListener('click', clearCurrentReplacement);
   $('btnPreviewDefault').addEventListener('click', () => previewCurrentTarget(true));
   $('btnPreviewActive').addEventListener('click', () => previewCurrentTarget());

@@ -104,9 +104,22 @@
           <div id="selectedModelInfo" class="library-hint">Tải model vào thư viện rồi chọn model muốn dùng cho bản đồ.</div>
           <button id="btnAssignModel" class="btn-admin-primary" disabled>Thay model đang chọn</button>
           <button id="btnRemoveModel" class="btn-danger" disabled>Xóa model khỏi thư viện</button>
+          <div class="section-title design-title"><span>🧩 Ghép và chỉnh kích thước</span></div>
+          <p class="library-hint">Chọn model trong thư viện rồi thêm vào bản thiết kế. Chỉnh vị trí và tỷ lệ từng phần, sau đó lưu thành một model thay thế.</p>
+          <button id="btnAddDesignComponent" class="btn-sub" disabled>＋ Thêm model đang chọn</button>
+          <div id="designComponents" class="design-components">
+            <div class="library-empty">Chưa có thành phần trong thiết kế.</div>
+          </div>
+          <label class="group-label" for="designOverallScale">Kích thước tổng thể</label>
+          <div class="design-scale-control">
+            <input id="designOverallScale" type="number" min="0.1" max="5" step="0.1" value="1">
+            <span>× kích thước model gốc</span>
+          </div>
+          <label class="group-label" for="designName">Tên thiết kế</label>
+          <input id="designName" class="admin-input" type="text" maxlength="80" value="Model tổng hợp">
+          <button id="btnSaveDesign" class="btn-admin-primary" disabled>Lưu thiết kế và thay model</button>
           <div class="library-note">
-            <b>Để mọi người cùng thấy model:</b> web game không có máy chủ lưu tệp tải lên. Model mới hiện chỉ lưu trên trình duyệt này.
-            Chọn <b>Xuất để chia sẻ</b>, thay tệp <code>design_model/model-library.json</code> trong repo bằng tệp xuất ra, rồi push repo để cập nhật cho tất cả người chơi.
+            <b>Để mọi người cùng thấy:</b> thư viện tải lên đang lưu trên máy này. Sau khi hoàn tất, chọn <b>Xuất để chia sẻ</b>, đưa tệp xuất vào <code>design_model/model-library.json</code> trong repo rồi push và deploy. Khi đó mọi người mới tải được cùng cấu hình và model.
           </div>
         </section>
       </aside>
