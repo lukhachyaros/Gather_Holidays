@@ -198,7 +198,8 @@ export async function instantiateModelAsset(asset) {
           `Module .js cần export createModel(), export default, hoặc hàm create${asset.name}/build${asset.name}(). Export tìm thấy: ${exportNames}.`
         );
       }
-      object = await factory();
+      const modelContext = { ...THREE, THREE };
+      object = await factory(modelContext);
     } finally {
       URL.revokeObjectURL(url);
     }

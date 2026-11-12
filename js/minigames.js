@@ -136,6 +136,8 @@ export class MinigameManager {
     this.particles = []; // firework spark particles
     this.scores = new Map(); // name -> { name, score }
     this.lastActionTime = 0;
+    this.lastTetFirecrackerTime = null;
+    this.tetCooldownNotified = false;
 
     // PvP Health State for Local Player
     this.hp = 100;
@@ -402,6 +404,18 @@ export class MinigameManager {
     if (this.isDead || this.isBeingJumpscared) return;
 
     const now = performance.now();
+    if (
+      this.theme === 'tet' &&
+      this.lastTetFirecrackerTime !== null &&
+      now - this.lastTetFirecrackerTime < 3000
+    ) {
+      if (!this.tetCooldownNotified) {
+        this.toast('🧨 Pháo tép đang hồi chiêu, hãy chờ 3 giây giữa mỗi lần ném.');
+        this.tetCooldownNotified = true;
+      }
+      return;
+    }
+
     // Fast responsive firing rate (0.28s cooldown)
     if (now - this.lastActionTime < 280) return;
     this.lastActionTime = now;
@@ -473,8 +487,11 @@ export class MinigameManager {
 
   actionTetFirecracker() {
     const me = this.getMe();
+    if (!me) return;
     const aim = this.getAimTarget();
 
+    this.lastTetFirecrackerTime = performance.now();
+    this.tetCooldownNotified = false;
     me.av?.playEmote('interact');
     playSfx('firecracker', 'tet');
 
