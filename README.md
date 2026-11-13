@@ -296,13 +296,12 @@ Các hạng mục dưới đây là kế hoạch phát triển, chưa được t
 - [ ] Rà soát private-room verification: hash hiện tại là FNV-1a không có salt, không phù hợp lưu mật khẩu.
 - [ ] Rà soát token server / cấu hình LiveKit và giới hạn quyền publish/subscribe theo phòng.
 
-### Định hướng hoạt động theo mùa
-- **Không dùng Daily Quest / streak đăng nhập.** Ưu tiên hoạt động tự do và mục tiêu cộng đồng không ép thời gian online.
-- **Noel:** Cây Thông Cộng Đồng và đua xe trượt tuyết.
-- **Halloween:** Dinh Thự Bí Ẩn và sàn diễn hóa trang có bình chọn.
-- **Valentine:** Photo Scavenger Hunt và sàn nhảy theo nhịp.
-- **Tết:** giữ bố cục và gameplay; chỉ đánh bóng ánh sáng, hình ảnh và hiệu năng.
-- Phần thưởng tương lai nên là cosmetic / vật phẩm trang trí; không gắn tiến độ sự kiện với tiền cược hay quyền lực gameplay.
+### Tính năng giữ chân người chơi
+1. **Daily & Weekly Discovery Quests** — nhiệm vụ khám phá, chụp ảnh, ghé địa điểm mới và tương tác tích cực; phần thưởng chỉ là XP/cosmetic, không gắn với cược.
+2. **Personal Room** — không gian riêng có thể trang trí và mời bạn bè.
+3. **Seasonal Community Events** — mục tiêu cộng đồng theo mùa với tiến độ minh bạch.
+4. **Photo Mode & Album** — chụp ảnh, pose avatar và album chia sẻ có quyền riêng tư.
+5. **Pet Companions** — thú đồng hành cosmetic, không tăng sức mạnh PvP.
 
 ### Nguyên tắc triển khai
 - Ưu tiên tính năng xã hội và khám phá, không dùng streak phạt người chơi khi nghỉ.

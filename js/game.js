@@ -495,6 +495,7 @@ try {
     getPlayerName: id => id === net?.selfId ? me?.name : peers.get(id)?.name || 'Người chơi',
     emitOp,
     toast,
+    onCostumeSubmit: costumeKey => equipCostume(costumeKey),
   });
   initAudio();
   initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId);

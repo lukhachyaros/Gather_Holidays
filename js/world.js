@@ -193,6 +193,9 @@ export class World {
     this.replacementTemplates = new Map();
     this.ornamentKey = '';
     this.mediaBannerKey = '';
+    this.communityTreeGroup = null;
+    this.communityTreeDecorationMesh = null;
+    this.seasonalVisualKey = '';
     this.particles = [];
     this.particleBatches = [];
     this.particleScale = 1;
@@ -208,6 +211,9 @@ export class World {
     this.vampireSwoop = null; // { tx, tz, until }
     this.screenObj = null;
     this.casinoObjs = [];
+    this.communityTreeGroup = null;
+    this.communityTreeDecorationMesh = null;
+    this.seasonalVisualKey = '';
     this.features = { hotspots: [], seats: [], colliders: [], extraProps: [] };
     this.t = 0;
     this.timeOfDay = 'day';
@@ -252,6 +258,8 @@ export class World {
       }
     }
 
+    this.syncSeasonalEventVisuals(state.seasonalEvents || {}, state.theme);
+
     // Sync Cinema Screen Banner
     if (this.screenObj?.userData?.updateBanner) {
       const q = state.mediaQueue || [];
@@ -263,6 +271,57 @@ export class World {
       }
     }
     return mapBuildPromise;
+  }
+
+  syncSeasonalEventVisuals(events, themeKey) {
+    const contributors = themeKey === 'christmas'
+      ? events?.christmas?.tree?.contributors || []
+      : [];
+    const count = Math.min(24, contributors.length);
+    const key = themeKey + ':' + count;
+    if (key === this.seasonalVisualKey) return;
+    this.seasonalVisualKey = key;
+
+    if (this.communityTreeDecorationMesh) {
+      this.communityTreeGroup?.remove(this.communityTreeDecorationMesh);
+      this.communityTreeDecorationMesh.geometry.dispose();
+      this.communityTreeDecorationMesh.material.dispose();
+      this.communityTreeDecorationMesh = null;
+    }
+    if (!count || !this.communityTreeGroup) return;
+
+    const geometry = new THREE.SphereGeometry(0.105, 10, 8);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.28,
+      metalness: 0.18,
+      emissive: 0x332211,
+      emissiveIntensity: 0.28,
+    });
+    const bulbs = new THREE.InstancedMesh(geometry, material, count);
+    const transform = new THREE.Object3D();
+    const palette = ['#fbbf24', '#fb7185', '#38bdf8', '#a3e635', '#c084fc', '#f8fafc'];
+    for (let i = 0; i < count; i++) {
+      const tier = Math.floor(i / 8);
+      const slot = i % 8;
+      const angle = (slot / 8) * Math.PI * 2 + tier * 0.27;
+      const radius = 0.42 + tier * 0.07;
+      transform.position.set(
+        Math.cos(angle) * radius,
+        0.72 + tier * 0.54 + (slot % 2) * 0.14,
+        Math.sin(angle) * radius
+      );
+      transform.scale.setScalar(0.88 + (slot % 3) * 0.12);
+      transform.updateMatrix();
+      bulbs.setMatrixAt(i, transform.matrix);
+      bulbs.setColorAt(i, new THREE.Color(palette[i % palette.length]));
+    }
+    bulbs.instanceMatrix.needsUpdate = true;
+    if (bulbs.instanceColor) bulbs.instanceColor.needsUpdate = true;
+    bulbs.castShadow = false;
+    bulbs.receiveShadow = false;
+    this.communityTreeGroup.add(bulbs);
+    this.communityTreeDecorationMesh = bulbs;
   }
 
   requestMapBuild(map, themeKey, roomSeed) {
@@ -397,6 +456,9 @@ export class World {
     this.scene.remove(this.group);
     this.group = new THREE.Group();
     this.scene.add(this.group);
+    this.communityTreeGroup = null;
+    this.communityTreeDecorationMesh = null;
+    this.seasonalVisualKey = '';
     if (themeKey !== this.appliedThemeKey) {
       this.applyTheme(themeKey);
       this.appliedThemeKey = themeKey;
@@ -693,6 +755,7 @@ export class World {
         const landmark = buildSeasonalLandmark(h.type);
         landmark.position.set(h.x * TILE, 0, h.y * TILE);
         this.group.add(landmark);
+        if (h.type === 'community_tree') this.communityTreeGroup = landmark;
       }
       if ((i + 1) % 2 === 0 && i + 1 < this.features.hotspots.length) {
         await this.yieldMapBuild(76 + ((i + 1) / this.features.hotspots.length) * 16, 'Dựng công trình và điểm tương tác...', themeKey);

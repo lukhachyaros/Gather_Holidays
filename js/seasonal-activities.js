@@ -150,12 +150,13 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
 }
 
 export class SeasonalActivities {
-  constructor({ getState, getSelfId, getPlayerName, emitOp, toast }) {
+  constructor({ getState, getSelfId, getPlayerName, emitOp, toast, onCostumeSubmit }) {
     this.getState = getState;
     this.getSelfId = getSelfId;
     this.getPlayerName = getPlayerName;
     this.emitOp = emitOp;
     this.toast = toast;
+    this.onCostumeSubmit = onCostumeSubmit;
     this.theme = null;
     this.active = null;
     this.race = null;
@@ -440,7 +441,6 @@ export class SeasonalActivities {
     label.appendChild(select);
     this.body.appendChild(label);
     const submit = this.button(mine ? '↻ Cập nhật trang phục' : '✨ Gửi bài dự thi', 'costume-submit');
-    submit.dataset.costumeSelect = 'true';
     this.body.appendChild(submit);
     this.body.appendChild(this.el('p', entries.length + ' bài dự thi · ' + votes.length + ' lượt bình chọn', 'seasonal-stat'));
     this.heading('Sân khấu & bình chọn');
@@ -565,9 +565,10 @@ export class SeasonalActivities {
     else if (action === 'race-choice') this.chooseRace(data.lane);
     else if (action === 'mansion-choice') this.chooseMansion(data.symbol);
     else if (action === 'costume-submit') {
-      const select = this.body.querySelector('[data-costume-select]')?.previousElementSibling?.querySelector('select');
-      this.submit('costume_entry', { costumeKey: select?.value || 'default' });
-      this.toast?.('🎭 Đã gửi bài dự thi hóa trang!');
+      const costumeKey = this.body.querySelector('.seasonal-select')?.value || 'default';
+      this.onCostumeSubmit?.(costumeKey);
+      this.submit('costume_entry', { costumeKey });
+      this.toast?.('🎭 Đã đổi trang phục và gửi bài dự thi!');
     } else if (action === 'costume-vote') {
       this.submit('costume_vote', { targetId: data.targetId });
       this.toast?.('⭐ Đã gửi bình chọn của bạn!');
