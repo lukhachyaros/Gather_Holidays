@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS } from '../js/seasonal-activities.js';
+import { applySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_RIDDLE_SEQUENCE } from '../js/seasonal-activities.js';
 import { buildThemeMap, getThemeFeatures, validMap, migrateLegacyThemeMap } from '../js/maps.js';
 
 function room(theme) {
@@ -36,8 +36,10 @@ test('mansion requires all three hidden keys before unlocking; votes cannot repe
     assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'halloween', action: 'mansion_key', data: { keyId } }, 'p1', 'An'), true);
   }
   assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'halloween', action: 'mansion_key', data: { keyId: 'candle' } }, 'p1', 'An'), false);
-  assert.equal(applySeasonalEventOperation(state, unlock, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, unlock, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(state, { ...unlock, data: { code: 'moon-star-flame' } }, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(state, { ...unlock, data: { code: MANSION_RIDDLE_SEQUENCE.join('-') } }, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(state, { ...unlock, data: { code: MANSION_RIDDLE_SEQUENCE.join('-') } }, 'p1', 'An'), false);
   const entry = { k: 'seasonal_event', season: 'halloween', action: 'costume_entry', data: { costumeKey: 'witch' } };
   assert.equal(applySeasonalEventOperation(state, entry, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, entry, 'p2', 'Bình'), true);
