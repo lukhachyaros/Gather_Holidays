@@ -18,6 +18,9 @@ export class RtcManager {
     selfId,
     roomId,
     participantName,
+    sendSignal = () => {},
+    getPeerIds = () => [],
+    onFallbackActivated = () => {},
     onRemoteScreenTrack,
     onPeerSpeakingChange,
     onLocalSpeakingChange,
@@ -28,6 +31,9 @@ export class RtcManager {
     this.selfId = selfId;
     this.roomId = roomId || this.parseRoomId();
     this.participantName = participantName || selfId;
+    this.sendSignal = sendSignal;
+    this.getPeerIds = getPeerIds;
+    this.onFallbackActivated = onFallbackActivated;
     this.onRemoteScreenTrack = onRemoteScreenTrack;
     this.onPeerSpeakingChange = onPeerSpeakingChange;
     this.onLocalSpeakingChange = onLocalSpeakingChange;
@@ -37,11 +43,19 @@ export class RtcManager {
 
     // Streams & State
     this.localScreenStream = null;
+    this.localVoiceStream = null;
     this.isMicMuted = true;
     this.isMicRequested = false;
     this.isSharingScreen = false;
 
     this.isLocalSpeaking = false;
+    this.voiceMode = 'livekit';
+    this.voiceConnections = new Map();
+    this.seenVoiceSignals = new Set();
+    this.audioCtx = null;
+    this.localAnalyser = null;
+    this.localVoiceSource = null;
+    this.vadInterval = null;
     this.audioUnlockHandler = null;
 
     // Settings
@@ -132,6 +146,7 @@ export class RtcManager {
       room.on(RoomEvent.Reconnected, () => console.log('[RTC] LiveKit reconnected.'));
       room.on(RoomEvent.Disconnected, reason => {
         console.warn('[RTC] LiveKit voice room disconnected:', reason || 'no reason provided');
+        if (!this.destroyed) this.activateP2PFallback('LiveKit room disconnected.');
       });
 
       await room.connect(serverUrl || LIVEKIT_URL, participantToken);
@@ -145,6 +160,7 @@ export class RtcManager {
       try { this.voiceRoom?.disconnect(); } catch {}
       this.voiceRoom = null;
       console.error('[RTC] Could not connect to LiveKit:', error);
+      if (!this.destroyed) this.activateP2PFallback('LiveKit token or connection failed.');
       return false;
     }
   }
@@ -156,6 +172,123 @@ export class RtcManager {
       window.addEventListener('keydown', this.audioUnlockHandler, { passive: true });
       window.addEventListener('click', this.audioUnlockHandler, { passive: true });
       window.addEventListener('touchstart', this.audioUnlockHandler, { passive: true });
+    }
+  }
+
+  activateP2PFallback(reason, announce = true) {
+    if (this.destroyed || this.voiceMode === 'p2p') return;
+    this.voiceMode = 'p2p';
+    console.warn(`[RTC] Switching voice to peer-to-peer fallback: ${reason}`);
+    const room = this.voiceRoom;
+    this.voiceRoom = null;
+    try { room?.disconnect(); } catch {}
+    for (const peer of this.remotePeers.values()) {
+      if (!peer.audioTrack) continue;
+      try { peer.audioTrack.detach(peer.audioEl); } catch {}
+      try { peer.audioEl?.pause(); peer.audioEl.srcObject = null; peer.audioEl.remove(); } catch {}
+      peer.audioEl = null;
+      peer.audioTrack = null;
+    }
+    this.toast('⚠️ LiveKit không khả dụng; đang chuyển voice chat dự phòng P2P.');
+    if (announce) this.onFallbackActivated?.();
+    if (this.localVoiceStream) {
+      for (const id of this.getPeerIds()) this.connectPeer(id);
+    } else if (this.isMicRequested && !this.isMicMuted) {
+      this.startFallbackMicrophone().catch(error => {
+        console.error('[RTC] Could not start fallback microphone after switching:', error);
+        this.isMicRequested = false;
+        this.isMicMuted = true;
+        this.onMicStateChange?.(false);
+      });
+    }
+  }
+
+  connectPeer(peerId) {
+    if (!peerId || peerId === this.selfId || typeof RTCPeerConnection === 'undefined') return null;
+    let connection = this.voiceConnections.get(peerId);
+    if (connection && connection.pc.signalingState !== 'closed') {
+      if (this.localVoiceStream) {
+        for (const track of this.localVoiceStream.getAudioTracks()) {
+          if (!connection.pc.getSenders().some(sender => sender.track === track)) {
+            connection.pc.addTrack(track, this.localVoiceStream);
+          }
+        }
+      }
+      return connection;
+    }
+    const pc = new RTCPeerConnection({ iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ] });
+    connection = { pc, makingOffer: false, ignoreOffer: false, isSettingRemoteAnswerPending: false, pendingCandidates: [], polite: String(this.selfId) > String(peerId) };
+    this.voiceConnections.set(peerId, connection);
+    if (this.localVoiceStream) this.localVoiceStream.getAudioTracks().forEach(track => pc.addTrack(track, this.localVoiceStream));
+    pc.onicecandidate = event => {
+      if (event.candidate) this.sendSignal(peerId, { type: 'ice-candidate', candidate: event.candidate.toJSON() });
+    };
+    pc.ontrack = event => {
+      let stream = event.streams?.[0];
+      if (!stream) {
+        stream = this.remotePeers.get(peerId)?.stream || new MediaStream();
+        if (!stream.getTracks().some(track => track.id === event.track.id)) stream.addTrack(event.track);
+      }
+      if (event.track.kind === 'audio') {
+        console.log(`[RTC] Native WebRTC received audio from ${peerId}.`);
+        this.attachRemoteAudio(peerId, peerId, stream);
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      console.log(`[RTC] Peer connection ${peerId}: ${pc.connectionState}.`);
+      if (pc.connectionState === 'failed') console.error(`[RTC] P2P connection to ${peerId} failed; this network pair may require TURN.`);
+    };
+    pc.onnegotiationneeded = async () => {
+      try {
+        connection.makingOffer = true;
+        await pc.setLocalDescription(await pc.createOffer());
+        this.sendSignal(peerId, { type: 'description', description: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
+      } catch (error) { console.error(`[RTC] Could not create voice offer for ${peerId}:`, error); }
+      finally { connection.makingOffer = false; }
+    };
+    console.log(`[RTC] Created P2P voice connection to ${peerId}.`);
+    return connection;
+  }
+
+  async handleSignal(fromPeerId, signal) {
+    if (!signal || !fromPeerId) return;
+    if (this.voiceMode !== 'p2p') this.activateP2PFallback('received P2P signaling from another player', false);
+    if (signal._rtcSignalId) {
+      const key = `${fromPeerId}:${signal._rtcSignalId}`;
+      if (this.seenVoiceSignals.has(key)) return;
+      this.seenVoiceSignals.add(key);
+      if (this.seenVoiceSignals.size > 2000) this.seenVoiceSignals.delete(this.seenVoiceSignals.values().next().value);
+    }
+    const connection = this.connectPeer(fromPeerId);
+    if (!connection) return;
+    const { pc } = connection;
+    try {
+      if (signal.type === 'ice-candidate') {
+        if (connection.ignoreOffer) return;
+        const candidate = new RTCIceCandidate(signal.candidate);
+        if (pc.remoteDescription) await pc.addIceCandidate(candidate); else connection.pendingCandidates.push(candidate);
+        return;
+      }
+      if (signal.type !== 'description' || !signal.description) return;
+      const description = new RTCSessionDescription(signal.description);
+      const ready = !connection.makingOffer && (pc.signalingState === 'stable' || connection.isSettingRemoteAnswerPending);
+      const collision = description.type === 'offer' && !ready;
+      connection.ignoreOffer = !connection.polite && collision;
+      if (connection.ignoreOffer) return;
+      connection.isSettingRemoteAnswerPending = description.type === 'answer';
+      await pc.setRemoteDescription(description);
+      connection.isSettingRemoteAnswerPending = false;
+      for (const candidate of connection.pendingCandidates.splice(0)) await pc.addIceCandidate(candidate);
+      if (description.type === 'offer') {
+        await pc.setLocalDescription(await pc.createAnswer());
+        this.sendSignal(fromPeerId, { type: 'description', description: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
+      }
+    } catch (error) {
+      connection.isSettingRemoteAnswerPending = false;
+      if (!connection.ignoreOffer) console.error(`[RTC] Voice signaling failed for ${fromPeerId}:`, error);
     }
   }
 
@@ -276,7 +409,7 @@ export class RtcManager {
       await this.applyMicMuteState();
     } catch (error) {
       this.isMicMuted = !this.isMicMuted;
-      console.error('[RTC] Could not change LiveKit microphone state:', error);
+      console.error('[RTC] Could not change microphone state:', error);
       return !this.isMicMuted;
     }
     this.onMicStateChange?.(!this.isMicMuted);
@@ -286,10 +419,18 @@ export class RtcManager {
   async startMicrophone() {
     try {
       await this.liveKitReady;
-      if (!this.voiceRoom) {
-        this.toast('⚠️ Không kết nối được LiveKit voice room. Xem Console để biết chi tiết.');
-        return false;
+      if (this.voiceMode === 'p2p') {
+        try { return await this.startFallbackMicrophone(); }
+        catch (fallbackError) {
+          console.error('[RTC] Could not start fallback microphone:', fallbackError);
+          this.toast('⚠️ Không thể bật Micro: Vui lòng cho phép quyền truy cập Micro trên trình duyệt!');
+          this.isMicMuted = true;
+          this.isMicRequested = false;
+          this.onMicStateChange?.(false);
+          return false;
+        }
       }
+      if (!this.voiceRoom) throw new Error('LiveKit voice room is unavailable.');
       await this.voiceRoom.localParticipant.setMicrophoneEnabled(true, {
         echoCancellation: true,
         noiseSuppression: true,
@@ -302,6 +443,18 @@ export class RtcManager {
       return true;
     } catch (err) {
       console.error('[RTC] Could not publish microphone to LiveKit:', err);
+      if (this.voiceMode !== 'p2p') this.activateP2PFallback('LiveKit microphone publish failed.');
+      if (this.voiceMode === 'p2p') {
+        try { return await this.startFallbackMicrophone(); }
+        catch (fallbackError) {
+          console.error('[RTC] Could not start fallback microphone:', fallbackError);
+          this.toast('⚠️ Không thể bật Micro: Vui lòng cho phép quyền truy cập Micro trên trình duyệt!');
+          this.isMicMuted = true;
+          this.isMicRequested = false;
+          this.onMicStateChange?.(false);
+          return false;
+        }
+      }
       this.toast('⚠️ Không thể bật Micro: Vui lòng cho phép quyền truy cập Micro trên trình duyệt!');
       this.isMicMuted = true;
       this.isMicRequested = false;
@@ -311,7 +464,9 @@ export class RtcManager {
   }
 
   async applyMicMuteState() {
-    if (this.voiceRoom?.localParticipant && this.isMicRequested) {
+    if (this.voiceMode === 'p2p' && this.localVoiceStream) {
+      this.localVoiceStream.getAudioTracks().forEach(track => { track.enabled = !this.isMicMuted; });
+    } else if (this.voiceRoom?.localParticipant && this.isMicRequested) {
       await this.voiceRoom.localParticipant.setMicrophoneEnabled(!this.isMicMuted);
     }
     if (this.isMicMuted && this.isLocalSpeaking) {
@@ -326,11 +481,65 @@ export class RtcManager {
         console.warn('[RTC] Could not stop the LiveKit microphone cleanly:', error);
       });
     }
+    if (this.localVoiceStream) {
+      this.localVoiceStream.getTracks().forEach(track => track.stop());
+      this.localVoiceStream = null;
+    }
+    if (this.vadInterval) clearInterval(this.vadInterval);
+    this.vadInterval = null;
+    try { this.localVoiceSource?.disconnect(); } catch {}
+    this.localVoiceSource = null;
+    this.localAnalyser = null;
     this.isMicRequested = false;
     this.isMicMuted = true;
     this.isLocalSpeaking = false;
     this.onLocalSpeakingChange?.(false);
     this.onMicStateChange?.(false);
+  }
+
+  async startFallbackMicrophone() {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone capture is not supported.');
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { sampleRate: { ideal: 48000 }, channelCount: { ideal: 1 }, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false,
+    });
+    this.localVoiceStream?.getTracks().forEach(track => track.stop());
+    this.localVoiceStream = stream;
+    this.isMicRequested = true;
+    this.isMicMuted = false;
+    for (const id of this.getPeerIds()) this.connectPeer(id);
+    try {
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextCtor) {
+        this.audioCtx ||= new AudioContextCtor();
+        if (this.audioCtx.state !== 'running') await this.audioCtx.resume();
+        this.localVoiceSource = this.audioCtx.createMediaStreamSource(stream);
+        this.localAnalyser = this.audioCtx.createAnalyser();
+        this.localAnalyser.fftSize = 256;
+        this.localAnalyser.smoothingTimeConstant = 0.4;
+        this.localVoiceSource.connect(this.localAnalyser);
+      }
+    } catch (error) { console.warn('[RTC] Local audio meter could not initialize:', error); }
+    this.startVadLoop();
+    this.onMicStateChange?.(true);
+    this.toast('🎙️ Đã bật Microphone bằng voice dự phòng P2P.');
+    return true;
+  }
+
+  startVadLoop() {
+    if (this.vadInterval) return;
+    const buffer = new Uint8Array(128);
+    this.vadInterval = setInterval(() => {
+      let speaking = false;
+      if (this.localAnalyser && !this.isMicMuted && this.localVoiceStream) {
+        this.localAnalyser.getByteFrequencyData(buffer);
+        speaking = buffer.reduce((sum, value) => sum + value, 0) / buffer.length > 14;
+      }
+      if (speaking !== this.isLocalSpeaking) {
+        this.isLocalSpeaking = speaking;
+        this.onLocalSpeakingChange?.(speaking);
+      }
+    }, 120);
   }
 
   // -------------------------------------------------------------
@@ -561,6 +770,15 @@ export class RtcManager {
   }
 
   removePeer(peerId) {
+    console.log(`[RTC] Cleaning up voice resources for peer ${peerId}.`);
+    const voiceConnection = this.voiceConnections.get(peerId);
+    if (voiceConnection) {
+      voiceConnection.pc.ontrack = null;
+      voiceConnection.pc.onicecandidate = null;
+      voiceConnection.pc.onnegotiationneeded = null;
+      voiceConnection.pc.close();
+      this.voiceConnections.delete(peerId);
+    }
     const peer = this.remotePeers.get(peerId);
     this.remoteSpeakingState.delete(peerId);
     if (!peer) return;
@@ -586,6 +804,11 @@ export class RtcManager {
     for (const peerId of Array.from(this.remotePeers.keys())) {
       this.removePeer(peerId);
     }
+    for (const peerId of Array.from(this.voiceConnections.keys())) this.removePeer(peerId);
+    if (this.vadInterval) clearInterval(this.vadInterval);
+    this.vadInterval = null;
+    try { this.audioCtx?.close(); } catch {}
+    this.audioCtx = null;
     if (this.room) {
       try {
         this.room.leave();

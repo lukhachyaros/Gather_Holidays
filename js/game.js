@@ -71,8 +71,11 @@ let myAvatarCustom = loadAvatarCustomization();
 let rtc = null;
 let minigames = null;
 let seasonalActivities = null;
+const voiceFallbackPeers = new Set();
+let rtcSignalSequence = 0;
 
 function initRtc(selfId, roomId) {
+  voiceFallbackPeers.clear();
   if (rtc) {
     try {
       rtc.destroy();
@@ -82,6 +85,15 @@ function initRtc(selfId, roomId) {
     selfId,
     roomId: roomId || state?.room || 'quang-truong-noel',
     participantName: me?.name || selfId,
+    sendSignal: (targetId, signal) => net?.send('rtc_signal', {
+      ...signal,
+      _rtcSignalId: `${selfId}:${++rtcSignalSequence}`,
+    }, targetId),
+    getPeerIds: () => [...peers.keys()],
+    onFallbackActivated: () => {
+      voiceFallbackPeers.add(selfId);
+      net?.send('voice_fallback', { fallback: true });
+    },
     onRemoteScreenTrack: (peerId, stream) => {
       updateScreenShareOnTv();
     },
@@ -360,7 +372,7 @@ const GRAPHICS_QUALITY_KEY = 'gh_graphics_quality';
 const GRAPHICS_PROFILES = {
   low: { pixelRatio: 0.65, shadows: false, shadowMapSize: 512, particleScale: 0.3 },
   medium: { pixelRatio: 1, shadows: true, shadowMapSize: 512, particleScale: 0.65 },
-  // Higher native resolution + sharper shadows; the existing adaptive tier steps down when FPS drops.
+  // Sharper native resolution and shadows; Auto quality can step down on slower devices.
   high: { pixelRatio: Math.min(window.devicePixelRatio || 1, 1.75), shadows: true, shadowMapSize: 2048, particleScale: 1 },
 };
 const GRAPHICS_QUALITY_ORDER = ['low', 'medium', 'high'];
@@ -498,7 +510,7 @@ try {
     onCostumeSubmit: costumeKey => equipCostume(costumeKey),
   });
   initAudio();
-  initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId);
+  initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId, logChat);
   initMobileControls();
   setupBuilderToolsInteraction();
   setupAdminCommandAutocomplete();
@@ -1636,6 +1648,8 @@ async function addOrUpdatePeer(id, d) {
 const handlers = {
   join(id) {
     rtc?.getOrCreatePeer(id);
+    if (rtc?.voiceMode === 'p2p' && rtc.localVoiceStream) rtc.connectPeer(id);
+    if (voiceFallbackPeers.size) net?.send('voice_fallback', { fallback: true }, id);
     if (me?.started && !isKicked) {
       if (state?.kickedIds?.includes(id)) {
         net.send('op', { k: 'kick', targetId: id, byHost: state.hostId, v: Date.now() }, id);
@@ -1654,6 +1668,7 @@ const handlers = {
     }
   },
   leave(id) {
+    voiceFallbackPeers.delete(id);
     rtc?.removePeer(id);
     if (state?.mediaCurrent?.kind === 'screen' && state.mediaCurrent.addedBy === id) {
       state.mediaCurrent = null;
@@ -1703,6 +1718,15 @@ const handlers = {
   voice_speaking(d, id) {
     const p = peers.get(id);
     if (p?.av) p.av.setSpeaking(!!d?.speaking);
+  },
+  voice_fallback(d, id) {
+    if (!d?.fallback || !id) return;
+    voiceFallbackPeers.add(id);
+    rtc?.activateP2PFallback('another room member switched to P2P', false);
+    if (rtc?.localVoiceStream) rtc.connectPeer(id);
+  },
+  rtc_signal(d, id) {
+    rtc?.handleSignal(id, d);
   },
   pos(d, id) {
     if (state?.kickedIds?.includes(id)) return;
@@ -1759,7 +1783,6 @@ const handlers = {
       $('topTheme').classList.toggle('hidden', roomName === SECRET_CASINO_ROOM);
       playBgm(state.theme);
       minigames?.setTheme(state.theme);
-      seasonalActivities?.setTheme(state.theme);
       applyMedia(state.mediaCurrent);
       updateScreenShareOnTv();
       updateHostUI();
@@ -1825,6 +1848,7 @@ const handlers = {
 function applyOp(op, senderId = null) {
   switch (op.k) {
     case 'theme': {
+      if (!state?.hostId || senderId !== state.hostId) return;
       if (THEMES[op.theme]) {
         state.theme = op.theme;
         state.map = buildThemeMap(op.theme);
@@ -5398,48 +5422,33 @@ function updateCamera(dt = 0.016) {
 let lastRoomBeforeCasino = null;
 
 function enterSecretCasino() {
-  leaveSeat();
+  if (!net || !me?.started || roomName === SECRET_CASINO_ROOM) return;
   lastRoomBeforeCasino = {
     id: roomName,
     title: roomTitle,
     theme: state?.theme || 'christmas',
+    passHash: state?.passHash || '',
   };
-  state.theme = 'casino';
-  state.map = buildThemeMap('casino');
-  state.decor = [];
-  world.sync(state, roomName);
-  me.x = 14.5;
-  me.y = 17.5;
-  me.h = 0;
-  me.vy = 0;
-  yaw = Math.PI;
-  pitch = 0.15;
-  if (me.av?.root) {
-    me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
-  }
-  playBgm('casino');
-  minigames?.setTheme('casino');
-  emitOp({ k: 'theme', theme: 'casino', isSecretChamber: true, byHost: state?.hostId || net?.selfId });
-  toast('🎰 Đã bước vào Mật Thất Casino & Pub Hoàng Gia!');
+  toast('🎰 Đang chuyển riêng bạn tới Mật Thất Casino!');
+  joinRoomConfig({
+    id: SECRET_CASINO_ROOM,
+    title: 'Mật Thất Casino & Pub Hoàng Gia',
+    theme: 'casino',
+    passHash: '',
+  });
 }
 
 function exitSecretCasino() {
-  const returnTheme = lastRoomBeforeCasino?.theme || 'christmas';
+  const returnRoom = lastRoomBeforeCasino || {
+    id: OFFICIAL_ROOMS[0].id,
+    title: OFFICIAL_ROOMS[0].title,
+    theme: OFFICIAL_ROOMS[0].theme,
+    passHash: '',
+  };
+  lastRoomBeforeCasino = null;
+  verifiedPassHash = returnRoom.passHash || '';
   toast('🚪 Bạn đã bước qua cánh cửa cổ kính trở về thế giới bên trên!');
-  leaveSeat();
-  state.theme = returnTheme;
-  state.map = buildThemeMap(returnTheme);
-  world.sync(state, roomName);
-  me.x = 14.5;
-  me.y = 18.5;
-  me.h = 0;
-  me.vy = 0;
-  if (me.av?.root) {
-    me.av.root.position.set(me.x * TILE, 0, me.y * TILE);
-  }
-  playBgm(returnTheme);
-  minigames?.setTheme(returnTheme);
-  emitOp({ k: 'theme', theme: returnTheme, byHost: state?.hostId || net?.selfId });
+  joinRoomConfig(returnRoom);
 }
 
 let activeFoundNoteCode = '';
@@ -6593,6 +6602,7 @@ function showTruongGiangImpact(targetId) {
   me.vx = (Math.random() - 0.5) * 6;
   me.vy = 4;
   me.av?.showTomatoSplat?.();
+  playSfx('truonggiang_catch', 'casino');
   toast('Bạn đã bị DÊ !');
 
   const flash = document.createElement('div');
@@ -6774,7 +6784,6 @@ export function spawnTruongGiangSlime(targetName = null, byAdmin = 'Admin', opti
             pesterCooldown = 3.0;
             const randomQuote = funnyQuotes[Math.floor(Math.random() * funnyQuotes.length)];
             showSpeech(randomQuote, 2500);
-            playSfx('slap', 'casino');
             impactId += 1;
             active.impactId = impactId;
             showTruongGiangImpact(targetId);

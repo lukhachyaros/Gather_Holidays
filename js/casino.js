@@ -15,6 +15,7 @@ let emitOpRef = null;
 let getMeRef = null;
 let getPeersRef = null;
 let getSelfIdRef = null;
+let logChatRef = null;
 let activeCasinoTable = null;
 let casinoTableHeartbeat = null;
 let casinoTableUi = null;
@@ -22,12 +23,22 @@ const casinoTables = new Map();
 const seenCasinoEvents = new Set();
 const CASINO_TABLE_TTL_MS = 20000;
 const CASINO_TABLE_GAMES = new Set(['roulette', 'duck_derby', 'blackjack', 'plinko']);
+const MAX_CASINO_PAYOUT = 2000;
+const MAX_ACTIVE_PLINKO_BALLS = 24;
+const MAX_PLINKO_BALLS_PER_PLAYER = 5;
+const PLINKO_DROP_COOLDOWN_MS = 500;
+const lastPeerPlinkoDropAt = new Map();
 const CASINO_GAME_LABELS = {
   roulette: 'Roulette',
   duck_derby: 'Duck Derby',
   blackjack: 'Blackjack',
   plinko: 'Plinko',
 };
+
+function capCasinoPayout(amount) {
+  const value = Number(amount);
+  return Number.isFinite(value) ? Math.max(0, Math.min(MAX_CASINO_PAYOUT, Math.floor(value))) : 0;
+}
 
 // ---------- Coin Wallet Management (Starts strictly at 0) ----------
 let coins = parseInt(localStorage.getItem('gh_player_coins') ?? localStorage.getItem('gh_casino_chips') ?? '0', 10);
@@ -81,13 +92,12 @@ export function redeemCode(rawCode) {
   };
 }
 
-export function recordJackpotWin(gameType, amount = 5000) {
+export function recordJackpotWin(gameType, amount = MAX_CASINO_PAYOUT) {
   try {
+    const jackpotAmount = capCasinoPayout(amount);
     const won = new Set(JSON.parse(localStorage.getItem('gh_jackpots_won') || '[]'));
     won.add(gameType);
     localStorage.setItem('gh_jackpots_won', JSON.stringify([...won]));
-
-    playSfx('jackpot_voice', 'casino');
 
     const me = getMeRef?.();
     if (emitOpRef && me) {
@@ -95,7 +105,7 @@ export function recordJackpotWin(gameType, amount = 5000) {
         k: 'casino_broadcast',
         game: gameType,
         player: me.name,
-        detail: amount,
+        detail: jackpotAmount,
         isJackpot: true,
         casinoEventId: `${getSelfIdRef?.() || me.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       });
@@ -107,9 +117,9 @@ export function recordJackpotWin(gameType, amount = 5000) {
     if (remaining.length === 0) {
       localStorage.setItem('gh_unlocked_vuadoden', '1');
       toastRef?.('👑 HUYỀN THOẠI! Bạn đã thắng Jackpot ở cả 5 trò và mở khóa danh hiệu độc quyền: [👑 Vua Đỏ Đen]!');
-      worldRef?.spawnFireworksShow?.(14.5, 11.5);
-    } else {
-      toastRef?.(`💥 JACKPOT! Bạn đã thắng lớn ${amount.toLocaleString()} Xu ở trò ${gameType}! (Còn ${remaining.length} trò nữa để đạt danh hiệu [👑 Vua Đỏ Đen])`);
+      if (!emitOpRef || !me) worldRef?.spawnFireworksShow?.(14.5, 11.5);
+    } else if (!emitOpRef || !me) {
+      toastRef?.(`💥 JACKPOT! Bạn đã thắng lớn ${jackpotAmount.toLocaleString()} Xu ở trò ${gameType}! (Còn ${remaining.length} trò nữa để đạt danh hiệu [👑 Vua Đỏ Đen])`);
     }
   } catch (err) {
     console.warn(err);
@@ -165,13 +175,14 @@ function updateAllWalletBadges() {
   }
 }
 
-export function initCasino(world, toast, emitOp = null, getMe = null, getPeers = null, getSelfId = null) {
+export function initCasino(world, toast, emitOp = null, getMe = null, getPeers = null, getSelfId = null, logChat = null) {
   worldRef = world;
   toastRef = toast;
   emitOpRef = emitOp;
   getMeRef = getMe;
   getPeersRef = getPeers;
   getSelfIdRef = getSelfId;
+  logChatRef = logChat;
 }
 
 export let activePlinkoInstance = null;
@@ -532,8 +543,11 @@ export function handleCasinoBroadcast(op, senderId = null) {
   const { game, player, detail, isJackpot, subAction } = op;
   if (senderId === getSelfIdRef?.() && !isJackpot) return;
   if (isJackpot) {
-    toastRef?.(`💥 JACKPOT! ${player} vừa trúng độc đắc ${Number(detail).toLocaleString()} Xu ở trò ${game.toUpperCase()}! 🎉`);
-    updateCasinoTicker(`💥 JACKPOT! ${player} vừa trúng độc đắc ${Number(detail).toLocaleString()} Xu ở ${game.toUpperCase()}! 🎉`);
+    const jackpotAmount = capCasinoPayout(detail);
+    logChatRef?.('💛 JACKPOT', `${player} vừa trúng độc đắc ${jackpotAmount.toLocaleString()} Xu ở trò ${String(game || 'casino').toUpperCase()}! 🎉`, { isSystem: true });
+    const gameLabel = String(game || 'casino').toUpperCase();
+    toastRef?.(`💥 JACKPOT! ${player} vừa trúng độc đắc ${jackpotAmount.toLocaleString()} Xu ở trò ${gameLabel}! 🎉`);
+    updateCasinoTicker(`💥 JACKPOT! ${player} vừa trúng độc đắc ${jackpotAmount.toLocaleString()} Xu ở ${gameLabel}! 🎉`);
     playSfx('jackpot_voice', 'casino');
     worldRef?.spawnFireworksShow?.(14.5, 11.5);
   } else {
@@ -570,12 +584,32 @@ export function handleCasinoBroadcast(op, senderId = null) {
       updateCasinoTicker(`🎰 ${player} vừa giật cần quay Slot Machine 777!`);
       toastRef?.(`🎰 ${player} vừa giật cần quay Slot Machine 777!`);
     } else if (game === 'plinko') {
-      worldRef?.casinoObjs?.filter(o => o.userData?.type === 'plinko')
-        .forEach(pk => pk.userData.dropBall?.());
       if (subAction === 'drop') {
-        updateCasinoTicker(`🟡 ${player} vừa thả bóng Plinko cược ${op.bet || 25} Xu!`);
-        toastRef?.(`⚡ ${player} vừa thả bóng chông Plinko!`);
-        activePlinkoInstance?.addPeerBall?.(player, op.bet || 25, op.xOffset || 0);
+        if (!senderId) return;
+        const peerId = String(senderId);
+        const peerBet = Number(op.bet);
+        if (![10, 25, 50, 100].includes(peerBet)) return;
+        const requestedOffset = Number(op.xOffset);
+        const peerOffset = Number.isFinite(requestedOffset) ? Math.max(-4, Math.min(4, requestedOffset)) : 0;
+        const now = Date.now();
+        const lastDropAt = lastPeerPlinkoDropAt.get(peerId) || 0;
+        if (!peerId || now - lastDropAt < PLINKO_DROP_COOLDOWN_MS) return;
+        lastPeerPlinkoDropAt.set(peerId, now);
+        if (lastPeerPlinkoDropAt.size > 256) {
+          for (const [id, at] of lastPeerPlinkoDropAt) {
+            if (now - at > PLINKO_DROP_COOLDOWN_MS * 10) lastPeerPlinkoDropAt.delete(id);
+          }
+          if (lastPeerPlinkoDropAt.size > 256) {
+            lastPeerPlinkoDropAt.delete(lastPeerPlinkoDropAt.keys().next().value);
+          }
+        }
+        const peerName = String(player || 'Bạn bè').slice(0, 32);
+        const peerBallAdded = activePlinkoInstance?.addPeerBall?.(peerName, peerBet, peerOffset, peerId);
+        if (peerBallAdded === false) return;
+        worldRef?.casinoObjs?.filter(o => o.userData?.type === 'plinko')
+          .forEach(pk => pk.userData.dropBall?.());
+        updateCasinoTicker(`🟡 ${peerName} vừa thả bóng Plinko cược ${peerBet} Xu!`);
+        toastRef?.(`⚡ ${peerName} vừa thả bóng chông Plinko!`);
       } else {
         toastRef?.(`⚡ ${player} vừa thả bóng chông Plinko!`);
       }
@@ -995,14 +1029,15 @@ export function openRoulette() {
     });
 
     if (totalWin > 0) {
-      addCoins(totalWin);
-      if (bets.has(String(winningNum))) {
-        recordJackpotWin('roulette');
+      const payout = capCasinoPayout(totalWin);
+      addCoins(payout);
+      if (bets.size === 1 && bets.has(String(winningNum))) {
+        recordJackpotWin('roulette', payout);
       } else {
         playSfx('slot_win', 'casino');
       }
       modal.querySelector('#rouletteResult').innerHTML = `
-        <span style="color:#4ade80;font-size:16px">🎉 THẮNG LỚN +${totalWin.toLocaleString()} Xu!</span><br>
+        <span style="color:#4ade80;font-size:16px">🎉 THẮNG LỚN +${payout.toLocaleString()} Xu!</span><br>
         Bóng rơi vào <b>${colName}</b>!
       `;
       updateCasinoTicker(`🎉 ${spinnerName} và bàn Roulette trúng lớn với kết quả [${colName}]!`);
@@ -1246,9 +1281,13 @@ export function openDuckDerby() {
 
     const winner = ducks[winIdx];
     if (hasBet && winIdx === chosenDuckIdx) {
-      const payout = Math.floor(betAmount * winner.odds);
+      const payout = capCasinoPayout(Math.floor(betAmount * winner.odds));
       addCoins(payout);
-      recordJackpotWin('duck_derby');
+      if (winIdx === ducks.length - 1 && Math.random() < 0.1) {
+        recordJackpotWin('duck_derby', payout);
+      } else {
+        playSfx('slot_win', 'casino');
+      }
       modal.querySelector('#duckRaceToast').innerHTML = `
         <span style="color:#4ade80;font-size:16px">🏆 VÔ ĐỊCH: #${winIdx + 1} ${winner.name}!</span>
         Chúc mừng bạn đã đoán trúng và nhận <b>+${payout.toLocaleString()} Xu</b>!
@@ -1488,19 +1527,19 @@ export function openBlackjack() {
     let payout = 0;
     let result = 'Nhà cái thắng. Hãy thử lại ván sau!';
     if (playerScore <= 21 && natural && (dealerScore !== 21 || state.dealerCards.length > 2)) {
-      payout = Math.floor(hand.bet * 2.5);
+      payout = capCasinoPayout(Math.floor(hand.bet * 2.5));
       result = `⭐ BLACKJACK 21 ĐIỂM! Bạn nhận +${payout.toLocaleString()} Xu!`;
     } else if (playerScore > 21) {
       result = '💥 Bạn bị quắc (>21). Nhà cái thắng.';
     } else if (dealerScore > 21 || playerScore > dealerScore) {
-      payout = hand.bet * 2;
+      payout = capCasinoPayout(hand.bet * 2);
       result = `🎉 Bạn thắng (${playerScore} vs ${dealerScore})! Nhận +${payout.toLocaleString()} Xu!`;
     } else if (playerScore === dealerScore) {
       payout = hand.bet;
       result = `🤝 Hòa (${playerScore} điểm)! Hoàn lại tiền cược.`;
     }
     if (payout) addCoins(payout);
-    if (natural && payout) recordJackpotWin('blackjack');
+    if (natural && payout) recordJackpotWin('blackjack', payout);
     try {
       localStorage.setItem('gh_blackjack_settled_rounds', JSON.stringify([...settledRoundIds]));
     } catch (error) {
@@ -1789,17 +1828,17 @@ export function openBlackjack() {
     if (pScore > 21) {
       resultToast.innerHTML = '<span style="color:#ef4444">💥 BẠN BỊ QUẮC (BUST > 21)! Nhà cái thắng.</span>';
     } else if (pScore === 21 && playerCards.length === 2 && (dScore !== 21 || dealerCards.length > 2)) {
-      const win = Math.floor(betAmount * 2.5); // 3:2 payout
+      const win = capCasinoPayout(Math.floor(betAmount * 2.5)); // 3:2 payout
       addCoins(win);
-      recordJackpotWin('blackjack');
+      recordJackpotWin('blackjack', win);
       resultToast.innerHTML = `<span style="color:#4ade80">⭐ BLACKJACK 21 ĐIỂM! Bạn thắng lớn +${win.toLocaleString()} Xu!</span>`;
     } else if (dScore > 21) {
-      const win = betAmount * 2;
+      const win = capCasinoPayout(betAmount * 2);
       addCoins(win);
       playSfx('slot_win', 'casino');
       resultToast.innerHTML = `<span style="color:#4ade80">🎉 NHÀ CÁI BỊ QUẮC (>21)! Bạn thắng +${win.toLocaleString()} Xu!</span>`;
     } else if (pScore > dScore) {
-      const win = betAmount * 2;
+      const win = capCasinoPayout(betAmount * 2);
       addCoins(win);
       playSfx('slot_win', 'casino');
       resultToast.innerHTML = `<span style="color:#4ade80">🎉 BẠN THẮNG (${pScore} vs ${dScore})! Nhận +${win.toLocaleString()} Xu!</span>`;
@@ -1895,7 +1934,7 @@ export function openSlotMachine() {
     ];
 
     // Balanced jackpot chance (2.5% for 777, 8% for diamonds)
-    if (Math.random() < 0.025) {
+    if (Math.random() < 0.005) {
       results[0] = results[1] = results[2] = '7️⃣';
     } else if (Math.random() < 0.08) {
       results[0] = results[1] = '💎';
@@ -1938,16 +1977,16 @@ export function openSlotMachine() {
     const [r1, r2, r3] = res;
 
     if (r1 === '7️⃣' && r2 === '7️⃣' && r3 === '7️⃣') {
-      const jackpot = betAmount * 100;
+      const jackpot = capCasinoPayout(betAmount * 100);
       addCoins(jackpot);
-      recordJackpotWin('slot_machine');
+      recordJackpotWin('slot_machine', jackpot);
       worldRef?.spawnFireworksShow(14.5, 11.5);
       modal.querySelector('#slotResultToast').innerHTML = `
         <span style="color:#facc15;font-size:18px">💥 MEGA JACKPOT 777!</span><br>
         Bạn nhận thưởng siêu khủng <b>+${jackpot.toLocaleString()} Xu</b>!
       `;
     } else if (r1 === r2 && r2 === r3) {
-      const win = betAmount * 30;
+      const win = capCasinoPayout(betAmount * 30);
       addCoins(win);
       playSfx('slot_win', 'casino');
       modal.querySelector('#slotResultToast').innerHTML = `
@@ -1955,7 +1994,7 @@ export function openSlotMachine() {
         Nhận thưởng <b>+${win.toLocaleString()} Xu</b>!
       `;
     } else if (r1 === r2 || r2 === r3 || r1 === r3) {
-      const win = betAmount * 3;
+      const win = capCasinoPayout(betAmount * 3);
       addCoins(win);
       playSfx('slot_win', 'casino');
       modal.querySelector('#slotResultToast').innerHTML = `
@@ -2045,10 +2084,15 @@ export function openPlinko() {
   const binWidth = 400 / bins.length;
   const binStartX = 30;
   const binY = 385;
+  const ballRadius = 6.5;
+  const leftWall = binStartX + ballRadius;
+  const rightWall = binStartX + binWidth * bins.length - ballRadius;
 
   const balls = [];
+  let lastLocalPlinkoDropAt = 0;
 
   function drawPlinko() {
+    if (!modal.isConnected) return;
     ctx.clearRect(0, 0, 460, 420);
 
     // Pegs
@@ -2077,13 +2121,24 @@ export function openPlinko() {
       ctx.textAlign = 'center';
       ctx.fillText(`${b.mult}x`, bx + binWidth / 2, binY + 18);
     });
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(binStartX, 55, 2, binY - 55);
+    ctx.fillRect(binStartX + binWidth * bins.length - 2, 55, 2, binY - 55);
 
     // Active Balls
     for (let i = balls.length - 1; i >= 0; i--) {
       const ball = balls[i];
-      ball.vy += 0.28; // gravity
+      ball.vy += 0.2;
       ball.x += ball.vx;
       ball.y += ball.vy;
+
+      if (ball.y < binY && ball.x < leftWall) {
+        ball.x = leftWall;
+        ball.vx = Math.abs(ball.vx) * 0.65;
+      } else if (ball.y < binY && ball.x > rightWall) {
+        ball.x = rightWall;
+        ball.vx = -Math.abs(ball.vx) * 0.65;
+      }
 
       // Peg collisions
       for (const peg of pegs) {
@@ -2093,16 +2148,24 @@ export function openPlinko() {
         if (dist < 10) {
           peg.flash = 1.0;
           playSfx('plinko_peg', 'casino');
-          ball.vx = (dx > 0 ? 1 : -1) * (1.2 + Math.random() * 1.5);
-          ball.vy = -Math.abs(ball.vy) * 0.42;
+          ball.vx = (dx > 0 ? 1 : -1) * (0.9 + Math.random() * 1.1);
+          ball.vy = -Math.abs(ball.vy) * 0.38;
           ball.y = peg.y - 4;
           break;
         }
       }
 
+      if (ball.y < binY && ball.x < leftWall) {
+        ball.x = leftWall;
+        ball.vx = Math.abs(ball.vx) * 0.65;
+      } else if (ball.y < binY && ball.x > rightWall) {
+        ball.x = rightWall;
+        ball.vx = -Math.abs(ball.vx) * 0.65;
+      }
+
       // Draw Ball
       ctx.beginPath();
-      ctx.arc(ball.x, ball.y, 6.5, 0, Math.PI * 2);
+      ctx.arc(ball.x, ball.y, ballRadius, 0, Math.PI * 2);
       ctx.fillStyle = ball.color || '#facc15';
       ctx.fill();
       ctx.lineWidth = 1.5;
@@ -2117,14 +2180,24 @@ export function openPlinko() {
       }
 
       if (ball.y >= binY) {
-        const binIdx = Math.max(0, Math.min(bins.length - 1, Math.floor((ball.x - binStartX) / binWidth)));
+        const relativeX = ball.x - binStartX;
+        const binIdx = Math.floor(relativeX / binWidth);
+        const binOffset = relativeX - binIdx * binWidth;
+        if (binIdx < 0 || binIdx >= bins.length || binOffset < 1 || binOffset >= binWidth - 1) {
+          if (!ball.isPeer) {
+            modal.querySelector('#plinkoResultToast').textContent = 'Bóng rơi ngoài ô thưởng — nhận 0 Xu.';
+            updateCasinoTicker('🟡 Bóng Plinko rơi ngoài ô thưởng — nhận 0 Xu.');
+          }
+          balls.splice(i, 1);
+          continue;
+        }
         const wonBin = bins[binIdx];
-        const payout = Math.floor(ball.bet * wonBin.mult);
+        const payout = capCasinoPayout(Math.floor(ball.bet * wonBin.mult));
 
         if (!ball.isPeer) {
           addCoins(payout);
           if (wonBin.mult >= 5) {
-            recordJackpotWin('plinko');
+            recordJackpotWin('plinko', payout);
           } else {
             playSfx(wonBin.mult >= 2 ? 'slot_win' : 'plinko_win', 'casino');
           }
@@ -2152,26 +2225,39 @@ export function openPlinko() {
 
   // Multiplayer Hook for Plinko
   activePlinkoInstance = {
-    addPeerBall: (playerName, bet, xOffset) => {
+    addPeerBall: (playerName, bet, xOffset, playerId = playerName) => {
+      const peerBallCount = balls.filter(ball => ball.isPeer && ball.playerId === playerId).length;
+      if (balls.length >= MAX_ACTIVE_PLINKO_BALLS || peerBallCount >= MAX_PLINKO_BALLS_PER_PLAYER) return false;
       balls.push({
         x: 230 + (xOffset || 0),
         y: 25,
         vx: (Math.random() - 0.5) * 0.6,
         vy: 0.5,
-        bet: bet || 25,
+        bet: [10, 25, 50, 100].includes(Number(bet)) ? Number(bet) : 25,
         isPeer: true,
+        playerId,
         playerName: playerName || 'Bạn bè',
         color: '#38bdf8',
       });
       playSfx('plinko_peg', 'casino');
+      return true;
     },
   };
 
   modal.querySelector('#btnDropPlinko').onclick = () => {
+    const now = Date.now();
+    const playerId = getCasinoPlayer().id;
+    const localBallCount = balls.filter(ball => !ball.isPeer && ball.playerId === playerId).length;
+    if (now - lastLocalPlinkoDropAt < PLINKO_DROP_COOLDOWN_MS) return;
+    if (balls.length >= MAX_ACTIVE_PLINKO_BALLS || localBallCount >= MAX_PLINKO_BALLS_PER_PLAYER) {
+      toastRef?.('⏳ Hãy chờ bóng đang rơi xong rồi thả tiếp nhé!');
+      return;
+    }
     if (!spendCoins(betAmount)) {
       toastRef?.('⚠️ Bạn không đủ Xu để thả bóng!');
       return;
     }
+    lastLocalPlinkoDropAt = now;
 
     const xOff = (Math.random() - 0.5) * 8;
     balls.push({
@@ -2181,6 +2267,7 @@ export function openPlinko() {
       vy: 0.5,
       bet: betAmount,
       isPeer: false,
+      playerId,
     });
 
     // Trigger 3D world plinko ball and broadcast

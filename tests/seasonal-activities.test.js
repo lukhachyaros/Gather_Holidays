@@ -78,6 +78,7 @@ test('legacy seasonal room maps expand without losing existing tiles', () => {
     assert.equal(migrated.rows[11][29], 'P');
     assert.equal(migrated.rows[12][29], 'P');
     assert.equal(migrated.rows[21].slice(0, 30), '#'.repeat(30));
+    assert.equal(migrated.rows[21].slice(30, 36), '#'.repeat(6));
     if (theme === 'halloween' || theme === 'valentine') assert.equal(migrated.rows[18][29], 'P');
     if (theme === 'valentine') {
       assert.equal(migrated.rows[14][29], 'P');

@@ -88,7 +88,6 @@ function buildSeasonalLandmark(type) {
     });
     addBox(0, 2.42, 0, 2.95, 0.16, 0.18, cool);
     addBox(0, 1.2, 0, 2.55, 0.08, 0.08, warm);
-    // A visible sled at the starting line gives the gate a clear race identity.
     addBox(0, 0.46, 1.0, 1.12, 0.2, 1.5, wood);
     addBox(0, 0.62, 0.86, 0.82, 0.22, 0.72, warm);
     [-0.48, 0.48].forEach(x => {
@@ -97,7 +96,6 @@ function buildSeasonalLandmark(type) {
     });
     addBox(0, 0.8, 0.28, 0.84, 0.18, 0.18, white);
   } else if (type === 'haunted_mansion') {
-    // Build an open-front shell so the entrance reads as a doorway, not a solid block.
     addBox(-2.55, 1.55, 0, 0.5, 3.1, 4.4, dark);
     addBox(2.55, 1.55, 0, 0.5, 3.1, 4.4, dark);
     addBox(0, 1.55, 2.05, 5.6, 3.1, 0.35, dark);
@@ -135,9 +133,7 @@ function buildSeasonalLandmark(type) {
       addCylinder(x, 2.9, z, 0.22, 0.26, warm);
     });
   }
-  group.traverse(object => {
-    if (object.isMesh) object.frustumCulled = true;
-  });
+  group.traverse(object => { if (object.isMesh) object.frustumCulled = true; });
   return group;
 }
 const DARK = new Set(['halloween', 'tet', 'christmas', 'valentine', 'casino']);
@@ -211,9 +207,6 @@ export class World {
     this.vampireSwoop = null; // { tx, tz, until }
     this.screenObj = null;
     this.casinoObjs = [];
-    this.communityTreeGroup = null;
-    this.communityTreeDecorationMesh = null;
-    this.seasonalVisualKey = '';
     this.features = { hotspots: [], seats: [], colliders: [], extraProps: [] };
     this.t = 0;
     this.timeOfDay = 'day';
@@ -274,9 +267,7 @@ export class World {
   }
 
   syncSeasonalEventVisuals(events, themeKey) {
-    const contributors = themeKey === 'christmas'
-      ? events?.christmas?.tree?.contributors || []
-      : [];
+    const contributors = themeKey === 'christmas' ? events?.christmas?.tree?.contributors || [] : [];
     const count = Math.min(24, contributors.length);
     const key = themeKey + ':' + count;
     if (key === this.seasonalVisualKey) return;
@@ -292,11 +283,8 @@ export class World {
 
     const geometry = new THREE.SphereGeometry(0.105, 10, 8);
     const material = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.28,
-      metalness: 0.18,
-      emissive: 0x332211,
-      emissiveIntensity: 0.28,
+      color: 0xffffff, roughness: 0.28, metalness: 0.18,
+      emissive: 0x332211, emissiveIntensity: 0.28,
     });
     const bulbs = new THREE.InstancedMesh(geometry, material, count);
     const transform = new THREE.Object3D();
@@ -306,11 +294,7 @@ export class World {
       const slot = i % 8;
       const angle = (slot / 8) * Math.PI * 2 + tier * 0.27;
       const radius = 0.42 + tier * 0.07;
-      transform.position.set(
-        Math.cos(angle) * radius,
-        0.72 + tier * 0.54 + (slot % 2) * 0.14,
-        Math.sin(angle) * radius
-      );
+      transform.position.set(Math.cos(angle) * radius, 0.72 + tier * 0.54 + (slot % 2) * 0.14, Math.sin(angle) * radius);
       transform.scale.setScalar(0.88 + (slot % 3) * 0.12);
       transform.updateMatrix();
       bulbs.setMatrixAt(i, transform.matrix);
@@ -856,8 +840,9 @@ export class World {
       } else if (map === 'casino' && target === 'plinko') {
         const dropBall = group.userData.dropBall;
         group.userData.dropBall = function (onLand) {
-          dropBall.call(this, onLand);
+          if (dropBall.call(this, onLand) === false) return false;
           replacement.userData.drop?.();
+          return true;
         };
       }
       if (hasAnimation) {
@@ -1315,6 +1300,14 @@ export class World {
           b.x += b.vx * dt;
           b.y += b.vy * dt;
 
+          if (b.y > 0.48 && b.x < -1.015) {
+            b.x = -1.015;
+            b.vx = Math.abs(b.vx) * 0.65;
+          } else if (b.y > 0.48 && b.x > 1.015) {
+            b.x = 1.015;
+            b.vx = -Math.abs(b.vx) * 0.65;
+          }
+
           // Check collisions against pegs
           for (const peg of u.pegs) {
             const dx = b.x - peg.x;
@@ -1332,14 +1325,16 @@ export class World {
           b.mesh.position.y = b.y;
 
           if (b.y <= 0.48) {
-            // Reached reward bin! Calculate bin index
+            // Award only when the ball lands inside a visible bin, not on dividers or outside.
             const binW = 2.1 / 11;
-            const binIdx = Math.max(0, Math.min(10, Math.floor((b.x + 1.05) / binW)));
+            const relativeX = b.x + 1.05;
+            const binIdx = Math.floor(relativeX / binW);
+            const binOffset = relativeX - binIdx * binW;
             const mults = ['5x', '3x', '2x', '1.2x', '0.5x', '0.2x', '0.5x', '1.2x', '2x', '3x', '5x'];
-            b.onLand?.(mults[binIdx] || '1x');
-            setTimeout(() => {
-              co.remove(b.mesh);
-            }, 1200);
+            const landedInBin = binIdx >= 0 && binIdx < mults.length &&
+              binOffset >= binW * 0.05 && binOffset < binW * 0.95;
+            b.onLand?.(landedInBin ? mults[binIdx] : null);
+            co.remove(b.mesh);
             u.activeBalls.splice(bi, 1);
           }
         }
