@@ -508,6 +508,14 @@ try {
     emitOp,
     toast,
     onCostumeSubmit: costumeKey => equipCostume(costumeKey),
+    onCapturePhoto: () => {
+      try {
+        renderer.render(scene, camera);
+        return renderer.domElement.toDataURL('image/png');
+      } catch {
+        return null;
+      }
+    },
   });
   initAudio();
   initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId, logChat);

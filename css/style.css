@@ -2052,3 +2052,11 @@ body.matrix-active::after {
 .seasonal-move-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
 .seasonal-move{min-height:56px;font-size:16px}
 @media(max-width:420px){.seasonal-track-grid{gap:5px}.seasonal-lane{min-height:98px;padding:8px 4px;font-size:11px}}
+
+.seasonal-photo-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.seasonal-photo-card{display:flex;min-width:0;flex-direction:column;gap:6px;padding:8px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(15,23,42,.58)}
+.seasonal-photo-image{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:8px;background:#0f172a}
+.seasonal-photo-caption{overflow:hidden;color:#cbd5e1;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.seasonal-photo-download{align-self:flex-start;color:#93c5fd;font-size:12px;font-weight:750;text-decoration:none}
+.seasonal-photo-download:hover{text-decoration:underline}
+@media(max-width:420px){.seasonal-photo-gallery{grid-template-columns:1fr}}

@@ -203,13 +203,16 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
 }
 
 export class SeasonalActivities {
-  constructor({ getState, getSelfId, getPlayerName, emitOp, toast, onCostumeSubmit }) {
+  constructor({ getState, getSelfId, getPlayerName, emitOp, toast, onCostumeSubmit, onCapturePhoto }) {
     this.getState = getState;
     this.getSelfId = getSelfId;
     this.getPlayerName = getPlayerName;
     this.emitOp = emitOp;
     this.toast = toast;
     this.onCostumeSubmit = onCostumeSubmit;
+    this.onCapturePhoto = onCapturePhoto;
+    this.photoShots = [];
+    this.mansionRoomId = '';
     this.theme = null;
     this.active = null;
     this.race = null;
@@ -308,6 +311,40 @@ export class SeasonalActivities {
     return true;
   }
 
+  takePhoto(label = 'Khoảnh khắc lễ hội') {
+    let image = null;
+    try { image = this.onCapturePhoto?.(); } catch {}
+    if (typeof image !== 'string' || !image.startsWith('data:image/')) {
+      this.toast?.('📷 Chưa thể chụp ảnh lúc này. Hãy thử lại sau khi cảnh 3D tải xong.');
+      return false;
+    }
+    this.photoShots.unshift({ image, label: String(label).slice(0, 48), at: new Date().toLocaleTimeString() });
+    this.photoShots = this.photoShots.slice(0, 6);
+    this.toast?.('📸 Đã chụp ảnh! Bạn có thể xem và tải ảnh trong bảng hoạt động.');
+    this.refresh();
+    return true;
+  }
+
+  renderPhotoGallery() {
+    if (!this.photoShots.length) return;
+    this.heading('📷 Album ảnh trên thiết bị này');
+    const gallery = this.el('div', null, 'seasonal-photo-gallery');
+    this.photoShots.forEach((shot, index) => {
+      const card = this.el('div', null, 'seasonal-photo-card');
+      const image = this.el('img', null, 'seasonal-photo-image');
+      image.src = shot.image;
+      image.alt = shot.label;
+      image.loading = 'lazy';
+      const caption = this.el('span', shot.label + ' · ' + shot.at, 'seasonal-photo-caption');
+      const download = this.el('a', '⬇ Tải ảnh', 'seasonal-photo-download');
+      download.href = shot.image;
+      download.download = 'gather-holidays-' + (index + 1) + '.png';
+      card.append(image, caption, download);
+      gallery.appendChild(card);
+    });
+    this.body.appendChild(gallery);
+  }
+
   capturePhotoSpot(spotId) {
     if (this.theme !== 'valentine' || !PHOTO_SPOT_IDS.includes(spotId)) return;
     const state = this.getState?.();
@@ -317,8 +354,10 @@ export class SeasonalActivities {
       this.toast?.('📸 Bạn đã lưu góc chụp này rồi. Hãy tìm góc khác nhé!');
       return;
     }
+    const spot = PHOTO_SPOTS.find(item => item.id === spotId);
+    this.takePhoto(spot?.name || 'Góc chụp Valentine');
     this.submit('photo_spot', { spotId });
-    this.toast?.('📸 Đã lưu góc chụp vào bộ sưu tập Valentine!');
+    this.toast?.('📸 Đã ghi dấu góc chụp vào bộ sưu tập Valentine!');
   }
 
   collectMansionKey(keyId) {
@@ -379,12 +418,14 @@ export class SeasonalActivities {
       haunted_mansion: '🏚️ Dinh Thự Bí Ẩn',
       costume_runway: '🎭 Sàn Diễn Hóa Trang',
       photo_hunt: '📸 Photo Scavenger Hunt',
+      mansion_room: '🚪 Phòng Bí Mật',
       dance_stage: '🎶 Sàn Nhảy Tương Tác',
     };
     this.title.textContent = titles[this.active] || 'Hoạt động lễ hội';
     if (this.active === 'community_tree') this.renderTree();
     else if (this.active === 'sled_race') this.renderSledRace();
     else if (this.active === 'haunted_mansion') this.renderMansion();
+    else if (this.active === 'mansion_room') this.renderMansionRoom();
     else if (this.active === 'costume_runway') this.renderCostumeRunway();
     else if (this.active === 'photo_hunt') this.renderPhotoHunt();
     else if (this.active === 'dance_stage') this.renderDanceStage();
@@ -508,8 +549,17 @@ export class SeasonalActivities {
       row.appendChild(this.el('span', found ? 'Đã thu thập' : clue, 'seasonal-collectible-hint'));
       this.body.appendChild(row);
     });
-    if (complete) this.body.appendChild(this.el('p', '🔓 Bạn đã mở được cả ba căn phòng bí mật!', 'seasonal-result'));
-    else if (MANSION_KEY_IDS.every(keyId => keys.includes(keyId))) {
+    if (complete) {
+      this.body.appendChild(this.el('p', '🔓 Bạn đã mở được cả ba căn phòng bí mật!', 'seasonal-result'));
+      this.heading('🚪 Chọn phòng để khám phá');
+      const rooms = this.el('div', null, 'seasonal-actions');
+      [
+        ['candle', '🕯️ Phòng Nến'],
+        ['bat', '🦇 Phòng Dơi'],
+        ['pumpkin', '🎃 Hầm Bí Ngô'],
+      ].forEach(([id, label]) => rooms.appendChild(this.button(label, 'mansion-room', { roomId: id }, 'seasonal-button seasonal-primary')));
+      this.body.appendChild(rooms);
+    } else if (MANSION_KEY_IDS.every(keyId => keys.includes(keyId))) {
       this.body.appendChild(this.button('🗝️ Mở ba căn phòng bí mật', 'mansion-unlock', {}, 'seasonal-button seasonal-primary'));
     } else this.body.appendChild(this.el('p', 'Hãy tìm đủ 3 chìa khóa ngoài bản đồ rồi quay lại đây.', 'seasonal-copy'));
     this.heading('Nhà thám hiểm');
@@ -517,6 +567,35 @@ export class SeasonalActivities {
     solved.slice(-8).reverse().forEach(item => list.appendChild(this.el('div', '🔓 ' + item.name + ' · đã mở dinh thự', 'seasonal-list-item')));
     if (!solved.length) list.appendChild(this.el('div', 'Chưa có ai mở được các căn phòng bí mật.', 'seasonal-empty'));
     this.body.appendChild(list);
+  }
+
+  renderMansionRoom() {
+    const rooms = {
+      candle: ['🕯️ Phòng Nến', 'Những ngọn nến cổ đồng loạt thắp sáng. Trên tường hiện ra bản đồ bí mật của dinh thự.'],
+      bat: ['🦇 Phòng Dơi', 'Một thư viện tối mở ra. Những trang nhật ký kể lại lịch sử của dinh thự và lối đi ẩn dưới tháp phía đông.'],
+      pumpkin: ['🎃 Hầm Bí Ngô', 'Cánh cửa đá mở ra kho báu trang trí: bí ngô phát sáng, dải ruy băng và một góc chụp ma mị.'],
+    };
+    const room = rooms[this.mansionRoomId];
+    if (!room || !this.myRecord(this.stateBucket('halloween', 'mansion', 'solved'))) {
+      this.active = 'haunted_mansion';
+      this.render();
+      return;
+    }
+    this.title.textContent = room[0];
+    this.paragraph(room[1]);
+    this.body.appendChild(this.el('div', '✨ Căn phòng đã được mở khóa cho bạn trong phiên chơi này.', 'seasonal-result'));
+    this.body.appendChild(this.button('← Quay lại dinh thự', 'mansion-back'));
+  }
+
+  openMansionRoom(roomId) {
+    if (!['candle', 'bat', 'pumpkin'].includes(roomId)) return;
+    if (!this.myRecord(this.stateBucket('halloween', 'mansion', 'solved'))) {
+      this.toast?.('🔒 Hãy tìm đủ ba chìa khóa và mở dinh thự trước.');
+      return;
+    }
+    this.mansionRoomId = roomId;
+    this.active = 'mansion_room';
+    this.render();
   }
 
   renderCostumeRunway() {
@@ -539,6 +618,7 @@ export class SeasonalActivities {
     const submit = this.button(mine ? '↻ Cập nhật trang phục' : '✨ Gửi bài dự thi', 'costume-submit');
     this.body.appendChild(submit);
     this.body.appendChild(this.el('p', entries.length + ' bài dự thi · ' + votes.length + ' lượt bình chọn', 'seasonal-stat'));
+    this.body.appendChild(this.button('📸 Chụp ảnh trên sàn diễn', 'costume-photo', {}, 'seasonal-button seasonal-primary'));
     this.heading('Sân khấu & bình chọn');
     const list = this.el('div', null, 'seasonal-list');
     entries.forEach(entry => {
@@ -552,6 +632,7 @@ export class SeasonalActivities {
     if (!entries.length) list.appendChild(this.el('div', 'Chưa có bài dự thi. Hãy mở màn lễ hội!', 'seasonal-empty'));
     this.body.appendChild(list);
     if (myVote) this.body.appendChild(this.el('p', '✓ Bạn đã gửi bình chọn. Cảm ơn bạn!', 'seasonal-result'));
+    this.renderPhotoGallery();
   }
 
   renderPhotoHunt() {
@@ -592,6 +673,7 @@ export class SeasonalActivities {
     this.heading('Tiến độ cộng đồng');
     const completed = players.filter(player => player.spots?.length === PHOTO_SPOTS.length && player.items?.length === PHOTO_ITEM_IDS.length).length;
     this.body.appendChild(this.el('p', completed + ' người đã hoàn thành trọn bộ sưu tập.', 'seasonal-copy'));
+    this.renderPhotoGallery();
   }
 
   renderDanceStage() {
@@ -701,7 +783,12 @@ export class SeasonalActivities {
     } else if (action === 'mansion-unlock') {
       this.submit('mansion_clear');
       this.toast?.('🔓 Đã gửi yêu cầu mở ba căn phòng bí mật!');
-    } else if (action === 'dance-start') this.startDance();
+    } else if (action === 'mansion-room') this.openMansionRoom(data.roomId);
+    else if (action === 'mansion-back') {
+      this.active = 'haunted_mansion';
+      this.render();
+    } else if (action === 'costume-photo') this.takePhoto('Sàn diễn hóa trang Halloween');
+    else if (action === 'dance-start') this.startDance();
     else if (action === 'dance-move') this.moveDance(data.direction);
   }
 }
