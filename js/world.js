@@ -287,7 +287,7 @@ export class World {
   syncSeasonalEventVisuals(events, themeKey) {
     const contributors = themeKey === 'christmas' ? events?.christmas?.tree?.contributors || [] : [];
     const count = Math.min(24, contributors.length);
-    const key = themeKey + ':' + count;
+    const key = themeKey + ':' + contributors.slice(0, 24).map(item => item?.decorationType || 'bell').join(',');
     if (key === this.seasonalVisualKey) return;
     this.seasonalVisualKey = key;
 
@@ -306,17 +306,18 @@ export class World {
     });
     const bulbs = new THREE.InstancedMesh(geometry, material, count);
     const transform = new THREE.Object3D();
-    const palette = ['#fbbf24', '#fb7185', '#38bdf8', '#a3e635', '#c084fc', '#f8fafc'];
+    const palette = { star: '#fbbf24', bell: '#38bdf8', ribbon: '#f472b6' };
     for (let i = 0; i < count; i++) {
       const tier = Math.floor(i / 8);
       const slot = i % 8;
       const angle = (slot / 8) * Math.PI * 2 + tier * 0.27;
       const radius = 0.42 + tier * 0.07;
+      const decorationType = contributors[i]?.decorationType || 'bell';
       transform.position.set(Math.cos(angle) * radius, 0.72 + tier * 0.54 + (slot % 2) * 0.14, Math.sin(angle) * radius);
-      transform.scale.setScalar(0.88 + (slot % 3) * 0.12);
+      transform.scale.setScalar((decorationType === 'star' ? 1.22 : decorationType === 'ribbon' ? 0.92 : 1) * (0.88 + (slot % 3) * 0.12));
       transform.updateMatrix();
       bulbs.setMatrixAt(i, transform.matrix);
-      bulbs.setColorAt(i, new THREE.Color(palette[i % palette.length]));
+      bulbs.setColorAt(i, new THREE.Color(palette[decorationType] || palette.bell));
     }
     bulbs.instanceMatrix.needsUpdate = true;
     if (bulbs.instanceColor) bulbs.instanceColor.needsUpdate = true;
