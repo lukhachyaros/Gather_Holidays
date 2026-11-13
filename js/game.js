@@ -7,7 +7,7 @@ import {
   CARD_STYLES,
   rollLixiReward,
 } from './themes.js';
-import { isSolid, buildThemeMap, validMap } from './maps.js?v=2026111218';
+import { isSolid, buildThemeMap, validMap, migrateLegacyThemeMap } from './maps.js?v=2026111218';
 import { connect, connectLobby, hashPass } from './net.js';
 import {
   initPlayer,
@@ -43,6 +43,7 @@ import {
   getBgmVolume,
 } from './audio.js';
 import { MinigameManager, DRAGON_SKINS, FLIGHT_QUESTS } from './minigames.js';
+import { SeasonalActivities } from './seasonal-activities.js?v=20261113';
 import {
   initCasino,
   openRoulette,
@@ -69,6 +70,7 @@ import { loadAvatarCustomization, openAvatarStudioModal } from './avatar_customi
 let myAvatarCustom = loadAvatarCustomization();
 let rtc = null;
 let minigames = null;
+let seasonalActivities = null;
 const voiceFallbackPeers = new Set();
 let rtcSignalSequence = 0;
 
@@ -370,7 +372,8 @@ const GRAPHICS_QUALITY_KEY = 'gh_graphics_quality';
 const GRAPHICS_PROFILES = {
   low: { pixelRatio: 0.65, shadows: false, shadowMapSize: 512, particleScale: 0.3 },
   medium: { pixelRatio: 1, shadows: true, shadowMapSize: 512, particleScale: 0.65 },
-  high: { pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5), shadows: true, shadowMapSize: 1024, particleScale: 1 },
+  // Sharper native resolution and shadows; Auto quality can step down on slower devices.
+  high: { pixelRatio: Math.min(window.devicePixelRatio || 1, 1.75), shadows: true, shadowMapSize: 2048, particleScale: 1 },
 };
 const GRAPHICS_QUALITY_ORDER = ['low', 'medium', 'high'];
 const savedGraphicsQuality = localStorage.getItem(GRAPHICS_QUALITY_KEY);
@@ -498,6 +501,14 @@ try {
   world.setGraphicsQuality(initialGraphicsProfile);
   updateGraphicsQualityHint();
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
+  seasonalActivities = new SeasonalActivities({
+    getState: () => state,
+    getSelfId: () => net?.selfId,
+    getPlayerName: id => id === net?.selfId ? me?.name : peers.get(id)?.name || 'Người chơi',
+    emitOp,
+    toast,
+    onCostumeSubmit: costumeKey => equipCostume(costumeKey),
+  });
   initAudio();
   initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId, logChat);
   initMobileControls();
@@ -1283,6 +1294,7 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
       ],
       mediaCurrent: null,
       mediaQueue: [],
+      seasonalEvents: {},
     };
     toast(`👑 Bạn đã mở phòng "${roomTitle}"${passHash ? ' (🔒 Có mật khẩu)' : ''}!`);
     start();
@@ -1380,6 +1392,7 @@ async function start() {
   $('statFps').textContent = '⚡ 60 FPS';
   playBgm(state.theme);
   minigames?.setTheme(state.theme);
+  seasonalActivities?.setTheme(state.theme);
   net.send('hello', pubInfo());
   applyMedia(state.mediaCurrent);
   updateHud();
@@ -1747,6 +1760,11 @@ const handlers = {
 
     const first = !state;
     state = s;
+    state.map = migrateLegacyThemeMap(state.map, state.theme);
+    state.seasonalEvents = state.seasonalEvents && typeof state.seasonalEvents === 'object' && !Array.isArray(state.seasonalEvents)
+      ? state.seasonalEvents
+      : {};
+    seasonalActivities?.setTheme(state.theme);
     state.kickedIds = Array.isArray(state.kickedIds) ? state.kickedIds : [];
     state.bannedNames = Array.isArray(state.bannedNames) ? state.bannedNames : [];
     state.mutedNames = Array.isArray(state.mutedNames) ? state.mutedNames : [];
@@ -1756,6 +1774,8 @@ const handlers = {
     if (first) {
       start();
     } else {
+      seasonalActivities?.refresh();
+      world?.syncSeasonalEventVisuals(state.seasonalEvents, state.theme);
       if (state.passHash && state.hostId !== net.selfId && verifiedPassHash !== state.passHash) {
         promptRoomPassword({ id: roomName, title: state.roomTitle || roomName, passHash: state.passHash });
       }
@@ -1838,6 +1858,7 @@ function applyOp(op, senderId = null) {
         playBgm(op.theme);
         world.sync(state, roomName);
         minigames?.setTheme(op.theme);
+        seasonalActivities?.setTheme(op.theme);
         broadcastMyRoomToLobby();
         if (op.theme === 'casino') {
           me.x = 14.5;
@@ -2445,6 +2466,11 @@ function applyOp(op, senderId = null) {
         }
       });
       toast('✨ Tất cả hiệu ứng troll đã được khôi phục về trạng thái ban đầu!');
+      break;
+    }
+    case 'seasonal_event': {
+      const changed = seasonalActivities?.applyOperation(op, senderId);
+      if (changed) world?.syncSeasonalEventVisuals(state.seasonalEvents, state.theme);
       break;
     }
     case 'mg_snowball_throw':
@@ -4300,6 +4326,27 @@ function triggerInteract(target = activeTarget) {
   if (target.kind === 'hotspot') {
     const h = target.hotspot;
     switch (h.type) {
+      case 'community_tree':
+        seasonalActivities?.open('community_tree');
+        break;
+      case 'sled_race':
+        seasonalActivities?.open('sled_race');
+        break;
+      case 'haunted_mansion':
+        seasonalActivities?.open('haunted_mansion');
+        break;
+      case 'costume_runway':
+        seasonalActivities?.open('costume_runway');
+        break;
+      case 'photo_hunt':
+        seasonalActivities?.open('photo_hunt');
+        break;
+      case 'photo_spot':
+        seasonalActivities?.capturePhotoSpot(h.spotId);
+        break;
+      case 'dance_stage':
+        seasonalActivities?.open('dance_stage');
+        break;
       case 'screen':
         updateMediaDialog();
         openDialog('dlgMedia');

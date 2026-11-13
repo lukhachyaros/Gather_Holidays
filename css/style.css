@@ -2001,3 +2001,39 @@ body.matrix-active::after {
 }
 
 
+
+
+/* Seasonal community activities */
+.seasonal-overlay{position:fixed;inset:0;z-index:110;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(3,7,18,.78);backdrop-filter:blur(9px)}
+.seasonal-overlay.hidden{display:none!important}
+.seasonal-panel{width:min(700px,100%);max-height:min(88vh,820px);overflow:auto;border:1px solid rgba(255,255,255,.2);border-radius:20px;background:linear-gradient(155deg,rgba(30,41,59,.98),rgba(20,15,38,.98));box-shadow:0 28px 90px rgba(0,0,0,.65);color:#f8fafc}
+.seasonal-header{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.12);background:rgba(17,24,39,.96);backdrop-filter:blur(12px)}
+.seasonal-eyebrow{display:block;margin-bottom:5px;color:#93c5fd;font-size:10px;font-weight:800;letter-spacing:.14em}
+.seasonal-title{margin:0;font-size:clamp(20px,3vw,27px);line-height:1.2}
+.seasonal-close{width:40px;height:40px;flex:0 0 40px;border-radius:12px;background:rgba(255,255,255,.08);font-size:18px}
+.seasonal-body{display:flex;flex-direction:column;gap:12px;padding:20px}
+.seasonal-footer{padding:10px 20px 14px;border-top:1px solid rgba(255,255,255,.1);color:#94a3b8;text-align:center;font-size:11px}
+.seasonal-section-title{margin:8px 0 0;color:#fcd34d;font-size:13px}
+.seasonal-copy{margin:0;color:#cbd5e1;font-size:13px;line-height:1.6}
+.seasonal-stat{margin:0;color:#f8fafc;font-weight:750;font-variant-numeric:tabular-nums}
+.seasonal-progress{height:12px;overflow:hidden;border:1px solid rgba(255,255,255,.16);border-radius:99px;background:rgba(2,6,23,.65)}
+.seasonal-progress-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#22c55e,#a3e635);box-shadow:0 0 15px rgba(74,222,128,.35);transition:width .25s ease}
+.seasonal-button{min-height:42px;padding:10px 16px;border:1px solid rgba(148,163,184,.4);border-radius:12px;background:rgba(51,65,85,.82);color:#f8fafc;font-weight:750}
+.seasonal-button:hover:not(:disabled){transform:translateY(-1px);border-color:#93c5fd;background:rgba(59,130,246,.25)}
+.seasonal-button:disabled{opacity:.48;cursor:not-allowed}
+.seasonal-primary{border-color:#60a5fa;background:linear-gradient(135deg,#2563eb,#7c3aed)}
+.seasonal-actions{display:flex;flex-wrap:wrap;gap:10px}
+.seasonal-actions>.seasonal-button{flex:1;min-width:120px}
+.seasonal-race-cue{display:flex;align-items:center;justify-content:center;min-height:98px;border:1px solid rgba(125,211,252,.35);border-radius:16px;background:radial-gradient(circle,rgba(14,165,233,.23),rgba(15,23,42,.6));color:#fef3c7;font-size:clamp(24px,5vw,38px);font-weight:900;text-align:center;text-shadow:0 0 20px rgba(56,189,248,.55)}
+.seasonal-list{display:flex;flex-direction:column;gap:7px}
+.seasonal-list-item,.seasonal-contest-entry{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid rgba(255,255,255,.1);border-radius:11px;background:rgba(15,23,42,.48);color:#e2e8f0;font-size:12.5px}
+.seasonal-empty{padding:14px;border:1px dashed rgba(255,255,255,.18);border-radius:12px;color:#94a3b8;text-align:center;font-size:12px}
+.seasonal-result{margin:0;padding:12px;border:1px solid rgba(74,222,128,.35);border-radius:12px;background:rgba(22,101,52,.18);color:#bbf7d0;font-weight:750}
+.seasonal-label{display:flex;flex-direction:column;gap:6px;color:#cbd5e1;font-size:12px}
+.seasonal-select{width:100%;min-height:42px;background:#1e293b}
+.seasonal-vote-count{white-space:nowrap;color:#fde68a;font-size:11px;font-weight:800}
+.seasonal-small{min-height:34px;padding:6px 10px;font-size:11px}
+.seasonal-symbols>.seasonal-button{min-width:78px;font-size:26px}
+.seasonal-tap{min-height:74px;font-size:17px;letter-spacing:.08em}
+.is-complete{border-color:rgba(74,222,128,.3);color:#bbf7d0}
+@media(max-width:560px){.seasonal-overlay{padding:8px;align-items:flex-end}.seasonal-panel{max-height:92vh;border-radius:18px 18px 12px 12px}.seasonal-header{padding:14px}.seasonal-body{padding:14px}.seasonal-footer{padding:9px}.seasonal-list-item{font-size:11.5px}}
