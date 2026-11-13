@@ -131,6 +131,33 @@ export function validMap(m) {
   );
 }
 
+// Expand legacy seasonal rooms without discarding player-built tiles.
+// New areas are appended to the east; a few doorway tiles connect them to the old map.
+export function migrateLegacyThemeMap(map, themeKey) {
+  if (!validMap(map) || map.w !== 30 || map.h !== 22) return map;
+  if (!['christmas', 'halloween', 'valentine'].includes(themeKey)) return map;
+
+  const expanded = buildThemeMap(themeKey);
+  const rows = expanded.rows.map((generatedRow, y) => {
+    if (y >= map.h) return generatedRow;
+    let row = map.rows[y] + generatedRow.slice(map.w);
+    if (y === 11 || y === 12) {
+      if (themeKey === 'christmas' || themeKey === 'halloween') row = row.slice(0, 29) + 'P' + row.slice(30);
+    }
+    if (themeKey === 'halloween' && y === 18) row = row.slice(0, 29) + 'P' + row.slice(30);
+    if (themeKey === 'valentine' && (y === 14 || y === 15 || y === 18)) {
+      row = row.slice(0, 29) + 'P' + row.slice(30);
+    }
+    return row;
+  });
+
+  return {
+    ...expanded,
+    rows,
+    spawn: Array.isArray(map.spawn) ? map.spawn : expanded.spawn,
+  };
+}
+
 // Deterministic pseudo-random generator for snowmen placement
 function makeRng(seedStr = 'gather') {
   let s = 2166136261 >>> 0;

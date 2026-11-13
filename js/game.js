@@ -7,7 +7,7 @@ import {
   CARD_STYLES,
   rollLixiReward,
 } from './themes.js';
-import { isSolid, buildThemeMap, validMap } from './maps.js?v=2026111218';
+import { isSolid, buildThemeMap, validMap, migrateLegacyThemeMap } from './maps.js?v=2026111218';
 import { connect, connectLobby, hashPass } from './net.js';
 import {
   initPlayer,
@@ -1734,6 +1734,7 @@ const handlers = {
 
     const first = !state;
     state = s;
+    state.map = migrateLegacyThemeMap(state.map, state.theme);
     state.seasonalEvents = state.seasonalEvents && typeof state.seasonalEvents === 'object' && !Array.isArray(state.seasonalEvents)
       ? state.seasonalEvents
       : {};

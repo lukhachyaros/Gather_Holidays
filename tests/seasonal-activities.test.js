@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS } from '../js/seasonal-activities.js';
-import { buildThemeMap, getThemeFeatures, validMap } from '../js/maps.js';
+import { buildThemeMap, getThemeFeatures, validMap, migrateLegacyThemeMap } from '../js/maps.js';
 
 function room(theme) {
   return { theme, kickedIds: [], seasonalEvents: createSeasonalEventsState() };
@@ -52,6 +52,30 @@ test('dance scores are bounded and only improve', () => {
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 75 } }, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 65 } }, 'p1', 'An'), false);
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 101 } }, 'p2', 'Bình'), false);
+});
+
+
+test('legacy seasonal room maps expand without losing existing tiles', () => {
+  for (const theme of ['christmas', 'halloween', 'valentine']) {
+    const modern = buildThemeMap(theme);
+    const legacy = {
+      w: 30,
+      h: 22,
+      rows: modern.rows.slice(0, 22).map(row => row.slice(0, 30)),
+      spawn: [13.5, 18.5],
+    };
+    // Simulate a player-built tile on the original side of the map.
+    legacy.rows[8] = legacy.rows[8].slice(0, 8) + 'R' + legacy.rows[8].slice(9);
+    const migrated = migrateLegacyThemeMap(legacy, theme);
+    assert.equal(validMap(migrated), true);
+    assert.equal(migrated.w, 36);
+    assert.equal(migrated.h, 24);
+    assert.equal(migrated.rows[8][8], 'R');
+    assert.deepEqual(migrated.spawn, legacy.spawn);
+    assert.equal(migrated.rows[11][29], 'P');
+  }
+  const tet = buildThemeMap('tet');
+  assert.equal(migrateLegacyThemeMap(tet, 'tet'), tet);
 });
 
 test('seasonal map expansions leave Tet layout unchanged', () => {
