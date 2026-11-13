@@ -360,7 +360,8 @@ const GRAPHICS_QUALITY_KEY = 'gh_graphics_quality';
 const GRAPHICS_PROFILES = {
   low: { pixelRatio: 0.65, shadows: false, shadowMapSize: 512, particleScale: 0.3 },
   medium: { pixelRatio: 1, shadows: true, shadowMapSize: 512, particleScale: 0.65 },
-  high: { pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5), shadows: true, shadowMapSize: 1024, particleScale: 1 },
+  // Higher native resolution + sharper shadows; the existing adaptive tier steps down when FPS drops.
+  high: { pixelRatio: Math.min(window.devicePixelRatio || 1, 1.75), shadows: true, shadowMapSize: 2048, particleScale: 1 },
 };
 const GRAPHICS_QUALITY_ORDER = ['low', 'medium', 'high'];
 const savedGraphicsQuality = localStorage.getItem(GRAPHICS_QUALITY_KEY);
