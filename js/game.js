@@ -1734,7 +1734,9 @@ const handlers = {
 
     const first = !state;
     state = s;
-    state.seasonalEvents = isObject(state.seasonalEvents) ? state.seasonalEvents : {};
+    state.seasonalEvents = state.seasonalEvents && typeof state.seasonalEvents === 'object' && !Array.isArray(state.seasonalEvents)
+      ? state.seasonalEvents
+      : {};
     seasonalActivities?.setTheme(state.theme);
     state.kickedIds = Array.isArray(state.kickedIds) ? state.kickedIds : [];
     state.bannedNames = Array.isArray(state.bannedNames) ? state.bannedNames : [];
