@@ -78,7 +78,7 @@ function playFallbackTone(frequency, duration = 0.46, level = 0.04) {
   oscillator.stop(now + duration + 0.02);
 }
 function startFallbackMusic(themeKey) {
-  if (!audioUnlocked || bgmMuted) return;
+  if (!audioUnlocked || bgmMuted || themeKey === 'casino') return;
   const ctx = getAudioContext();
   if (!ctx) return;
   if (ctx.state === 'suspended') ctx.resume().catch(() => {});
@@ -90,8 +90,7 @@ function startFallbackMusic(themeKey) {
     christmas: [659.25, 783.99, 987.77, 783.99, 698.46, 880, 1046.5, 880],
     halloween: [220, 261.63, 293.66, 261.63, 196, 233.08, 261.63, 233.08],
     tet: [523.25, 587.33, 659.25, 783.99, 659.25, 587.33, 523.25, 440],
-    valentine: [392, 493.88, 587.33, 493.88, 440, 523.25, 659.25, 523.25],
-    casino: [440, 523.25, 659.25, 783.99, 659.25, 523.25, 493.88, 587.33]
+    valentine: [392, 493.88, 587.33, 493.88, 440, 523.25, 659.25, 523.25]
   };
   const notes = melodies[themeKey] || melodies.christmas;
   let beat = 0;
