@@ -3,6 +3,7 @@
 export const PHOTO_SPOT_IDS = ['snow_globe', 'rose_gate', 'moon_bridge', 'lantern_deck'];
 export const PHOTO_ITEM_IDS = ['rose_locket', 'star_charm', 'moon_crystal', 'heart_ribbon'];
 export const MANSION_KEY_IDS = ['candle', 'bat', 'pumpkin'];
+export const MANSION_RIDDLE_SEQUENCE = ['moon', 'flame', 'star'];
 const DANCE_MOVES = ['left', 'right', 'up', 'down'];
 const COSTUME_KEYS = ['default', 'frankenstein', 'zombie', 'vampire', 'witch', 'skeleton'];
 const PHOTO_SPOTS = [
@@ -108,6 +109,7 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
   }
 
   if (op.season === 'halloween' && op.action === 'mansion_clear') {
+    if (String(data.code || '') !== MANSION_RIDDLE_SEQUENCE.join('-')) return false;
     if (!isObject(season.mansion)) season.mansion = {};
     const players = ensureList(season.mansion, 'players');
     const player = findRecord(players, id);
@@ -217,6 +219,11 @@ export class SeasonalActivities {
     this.active = null;
     this.race = null;
     this.mansionStep = 0;
+    this.mansionPuzzle = [];
+    this.raceFrame = 0;
+    this.racePrompt = null;
+    this.raceTimer = null;
+    this.raceTimerFill = null;
     this.dance = null;
     this.danceFrame = 0;
     this.lastRaceResult = '';
@@ -254,6 +261,26 @@ export class SeasonalActivities {
     this.overlay = overlay;
     this.body = overlay.querySelector('.seasonal-body');
     this.title = overlay.querySelector('.seasonal-title');
+    this.onActivityKeyDown = event => {
+      if (this.overlay?.classList.contains('hidden') || event.target?.closest?.('input,textarea,select')) return;
+      let handled = false;
+      if (this.active === 'sled_race' && this.race) {
+        const lanes = { ArrowLeft: 'left', ArrowUp: 'center', ArrowDown: 'center', ArrowRight: 'right' };
+        if (lanes[event.key]) handled = this.chooseRace(lanes[event.key]);
+      } else if (this.active === 'dance_stage' && this.dance) {
+        const moves = {
+          ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
+          ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
+        };
+        const direction = moves[event.code] || moves[event.key];
+        if (direction) { this.moveDance(direction); handled = true; }
+      }
+      if (handled) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', this.onActivityKeyDown, true);
   }
 
   setTheme(theme) {
@@ -275,6 +302,7 @@ export class SeasonalActivities {
     this.active = activity;
     this.race = null;
     this.mansionStep = 0;
+    this.mansionPuzzle = [];
     this.dance = null;
     this.lastRaceResult = '';
     this.lastDanceScore = null;
@@ -284,6 +312,11 @@ export class SeasonalActivities {
 
   close() {
     this.stopDance();
+    if (this.raceFrame) cancelAnimationFrame(this.raceFrame);
+    this.raceFrame = 0;
+    this.racePrompt = null;
+    this.raceTimer = null;
+    this.raceTimerFill = null;
     this.race = null;
     this.active = null;
     this.overlay?.classList.add('hidden');
@@ -355,7 +388,7 @@ export class SeasonalActivities {
       return;
     }
     const spot = PHOTO_SPOTS.find(item => item.id === spotId);
-    this.takePhoto(spot?.name || 'Góc chụp Valentine');
+    if (!this.takePhoto(spot?.name || 'Góc chụp Valentine')) return false;
     this.submit('photo_spot', { spotId });
     this.toast?.('📸 Đã ghi dấu góc chụp vào bộ sưu tập Valentine!');
   }
@@ -457,11 +490,16 @@ export class SeasonalActivities {
     const records = this.stateBucket('christmas', 'sled', 'records').slice()
       .sort((a, b) => (b.gatesHit - a.gatesHit) || ((b.shortcuts || 0) - (a.shortcuts || 0)) ||
         ((a.collisions || 0) - (b.collisions || 0)) || (a.timeMs - b.timeMs));
-    this.paragraph('Đua qua 8 cổng tuyết: chọn làn an toàn ❄️, liều lĩnh đi đường tắt ⚡ để tiết kiệm thời gian, hoặc né đá 🪨. Va chạm làm chậm xe; thành tích tốt nhất của bạn được lưu vào bảng xếp hạng phòng.');
+    this.paragraph('Đây là lượt đua phản xạ: mỗi cổng chỉ mở trong 1,45 giây. Chọn làn an toàn để giữ nhịp, chớp đường tắt để rút thời gian, hoặc né chướng ngại. Có thể dùng ← ↑ → trên bàn phím hoặc chạm nút.');
     if (this.race) {
+      this.racePrompt = this.el('div', 'CỔNG ' + (this.race.step + 1) + ' / 8', 'seasonal-stat');
+      this.body.appendChild(this.racePrompt);
+      this.raceTimer = this.el('div', null, 'seasonal-race-timer');
+      this.raceTimerFill = this.el('div', null, 'seasonal-race-timer-fill');
+      this.raceTimer.appendChild(this.raceTimerFill);
+      this.body.appendChild(this.raceTimer);
+      this.body.appendChild(this.el('div', '❄️ An toàn · ⚡ Đường tắt · 🪨 Chướng ngại', 'seasonal-race-cue'));
       const gate = this.race.sequence[this.race.step];
-      this.body.appendChild(this.el('div', 'CỔNG ' + (this.race.step + 1) + ' / 8', 'seasonal-stat'));
-      this.body.appendChild(this.el('div', '❄️ Làn an toàn · ⚡ Đường tắt · 🪨 Chướng ngại vật', 'seasonal-race-cue'));
       const row = this.el('div', null, 'seasonal-track-grid');
       [
         { id: 'left', label: 'TRÁI' },
@@ -470,7 +508,7 @@ export class SeasonalActivities {
       ].forEach(lane => {
         const kind = lane.id === gate.shortcutLane ? 'shortcut' : lane.id === gate.safeLane ? 'safe' : 'obstacle';
         const symbol = kind === 'shortcut' ? '⚡' : kind === 'safe' ? '❄️' : '🪨';
-        const label = kind === 'shortcut' ? 'ĐƯỜNG TẮT' : kind === 'safe' ? 'AN TOÀN' : 'ĐÁ CẢN';
+        const label = kind === 'shortcut' ? 'TĂNG TỐC' : kind === 'safe' ? 'AN TOÀN' : 'NÉ NGAY';
         row.appendChild(this.button(symbol + '\n' + lane.label + '\n' + label, 'race-choice', { lane: lane.id }, 'seasonal-button seasonal-lane seasonal-lane-' + kind));
       });
       this.body.appendChild(row);
@@ -489,6 +527,7 @@ export class SeasonalActivities {
   }
 
   startRace() {
+    if (this.raceFrame) cancelAnimationFrame(this.raceFrame);
     const lanes = ['left', 'center', 'right'];
     const sequence = Array.from({ length: 8 }, () => {
       const shortcutIndex = Math.floor(Math.random() * 3);
@@ -500,13 +539,30 @@ export class SeasonalActivities {
     this.race = {
       sequence, step: 0, gatesHit: 0, shortcuts: 0, collisions: 0,
       penaltyMs: 0, bonusMs: 0, startedAt: performance.now(),
+      gateStartedAt: performance.now(), gateDurationMs: 1450,
     };
     this.lastRaceResult = '';
     this.render();
+    this.tickRace();
+  }
+
+  tickRace() {
+    if (!this.race) return;
+    const remaining = this.race.gateDurationMs - (performance.now() - this.race.gateStartedAt);
+    if (remaining <= 0) {
+      this.race.collisions++;
+      this.race.penaltyMs += 1450;
+      this.advanceRace();
+      return;
+    }
+    if (this.racePrompt) this.racePrompt.textContent = 'CỔNG ' + (this.race.step + 1) + ' / 8 · ' + (remaining / 1000).toFixed(1) + ' giây';
+    if (this.raceTimerFill) this.raceTimerFill.style.width = Math.max(0, remaining / this.race.gateDurationMs * 100) + '%';
+    this.raceFrame = requestAnimationFrame(() => this.tickRace());
   }
 
   chooseRace(lane) {
-    if (!this.race || !['left', 'center', 'right'].includes(lane)) return;
+    if (!this.race || !['left', 'center', 'right'].includes(lane)) return false;
+    if (performance.now() - this.race.gateStartedAt > this.race.gateDurationMs) return false;
     const gate = this.race.sequence[this.race.step];
     if (lane === gate.obstacleLane) {
       this.race.collisions++;
@@ -518,14 +574,31 @@ export class SeasonalActivities {
         this.race.bonusMs += 450;
       }
     }
+    this.advanceRace();
+    return true;
+  }
+
+  advanceRace() {
+    if (!this.race) return;
     this.race.step++;
     if (this.race.step >= this.race.sequence.length) {
-      const timeMs = Math.max(5000, Math.min(300000, performance.now() - this.race.startedAt + this.race.penaltyMs - this.race.bonusMs));
-      const { gatesHit, shortcuts, collisions } = this.race;
-      this.submit('sled_record', { timeMs, gatesHit, shortcuts, collisions });
-      this.lastRaceResult = '🏁 Hoàn thành! ' + gatesHit + '/8 cổng · ' + shortcuts + ' đường tắt · ' + collisions + ' va chạm · ' + (timeMs / 1000).toFixed(2) + ' giây.';
-      this.race = null;
+      this.finishRace();
+      return;
     }
+    this.race.gateStartedAt = performance.now();
+    this.render();
+    this.tickRace();
+  }
+
+  finishRace() {
+    if (!this.race) return;
+    const timeMs = Math.max(5000, Math.min(300000, performance.now() - this.race.startedAt + this.race.penaltyMs - this.race.bonusMs));
+    const { gatesHit, shortcuts, collisions } = this.race;
+    if (this.raceFrame) cancelAnimationFrame(this.raceFrame);
+    this.raceFrame = 0;
+    this.submit('sled_record', { timeMs, gatesHit, shortcuts, collisions });
+    this.lastRaceResult = '🏁 Hoàn thành! ' + gatesHit + '/8 cổng · ' + shortcuts + ' đường tắt · ' + collisions + ' va chạm · ' + (timeMs / 1000).toFixed(2) + ' giây.';
+    this.race = null;
     this.render();
   }
 
@@ -560,7 +633,14 @@ export class SeasonalActivities {
       ].forEach(([id, label]) => rooms.appendChild(this.button(label, 'mansion-room', { roomId: id }, 'seasonal-button seasonal-primary')));
       this.body.appendChild(rooms);
     } else if (MANSION_KEY_IDS.every(keyId => keys.includes(keyId))) {
-      this.body.appendChild(this.button('🗝️ Mở ba căn phòng bí mật', 'mansion-unlock', {}, 'seasonal-button seasonal-primary'));
+      this.heading('🧩 Câu đố trên cánh cửa');
+      this.paragraph('Ba dòng khắc trên cửa: “Trăng dẫn lối khi đêm xuống. Ngọn lửa soi đường vào trong. Ngôi sao khép lại điều ước.” Chọn đúng thứ tự ba biểu tượng; chọn sai sẽ phải thử lại.');
+      const symbolLabel = { moon: '🌙', flame: '🔥', star: '⭐' };
+      this.body.appendChild(this.el('p', 'Mật mã: ' + this.mansionPuzzle.map(symbol => symbolLabel[symbol]).join('  ') + ' · ' + this.mansionPuzzle.length + '/3', 'seasonal-stat'));
+      const symbols = this.el('div', null, 'seasonal-actions seasonal-symbols');
+      [['moon', '🌙 Trăng'], ['flame', '🔥 Lửa'], ['star', '⭐ Sao'], ['bat', '🦇 Dơi'], ['pumpkin', '🎃 Bí ngô']]
+        .forEach(([symbol, label]) => symbols.appendChild(this.button(label, 'mansion-symbol', { symbol }, 'seasonal-button seasonal-small')));
+      this.body.appendChild(symbols);
     } else this.body.appendChild(this.el('p', 'Hãy tìm đủ 3 chìa khóa ngoài bản đồ rồi quay lại đây.', 'seasonal-copy'));
     this.heading('Nhà thám hiểm');
     const list = this.el('div', null, 'seasonal-list');
@@ -585,6 +665,23 @@ export class SeasonalActivities {
     this.paragraph(room[1]);
     this.body.appendChild(this.el('div', '✨ Căn phòng đã được mở khóa cho bạn trong phiên chơi này.', 'seasonal-result'));
     this.body.appendChild(this.button('← Quay lại dinh thự', 'mansion-back'));
+  }
+
+  chooseMansionSymbol(symbol) {
+    if (!MANSION_RIDDLE_SEQUENCE.includes(symbol) || this.mansionPuzzle.length >= 3) return;
+    const expected = MANSION_RIDDLE_SEQUENCE[this.mansionPuzzle.length];
+    if (symbol !== expected) {
+      this.mansionPuzzle = [];
+      this.toast?.('🧩 Sai thứ tự rồi. Đọc lại ba gợi ý và thử lại nhé!');
+      this.render();
+      return;
+    }
+    this.mansionPuzzle.push(symbol);
+    if (this.mansionPuzzle.length === MANSION_RIDDLE_SEQUENCE.length) {
+      this.submit('mansion_clear', { code: MANSION_RIDDLE_SEQUENCE.join('-') });
+      this.toast?.('🔓 Mật mã chính xác! Đang mở các căn phòng bí mật…');
+    }
+    this.render();
   }
 
   openMansionRoom(roomId) {
@@ -780,10 +877,8 @@ export class SeasonalActivities {
     } else if (action === 'costume-vote') {
       this.submit('costume_vote', { targetId: data.targetId });
       this.toast?.('⭐ Đã gửi bình chọn của bạn!');
-    } else if (action === 'mansion-unlock') {
-      this.submit('mansion_clear');
-      this.toast?.('🔓 Đã gửi yêu cầu mở ba căn phòng bí mật!');
-    } else if (action === 'mansion-room') this.openMansionRoom(data.roomId);
+    } else if (action === 'mansion-symbol') this.chooseMansionSymbol(data.symbol);
+    else if (action === 'mansion-room') this.openMansionRoom(data.roomId);
     else if (action === 'mansion-back') {
       this.active = 'haunted_mansion';
       this.render();
