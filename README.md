@@ -280,3 +280,30 @@ Gather_Holidays/
 <div align="center">
   <sub>Được xây dựng với niềm đam mê dành cho cộng đồng yêu thích không gian 3D tương tác.</sub>
 </div>
+
+
+---
+
+## 🚧 Roadmap đề xuất: Social Sandbox 2.0
+
+Các hạng mục dưới đây là kế hoạch phát triển, chưa được triển khai trong phiên bản hiện tại.
+
+### Ưu tiên kỹ thuật
+- [ ] Đo hiệu năng theo thiết bị và cảnh (FPS median / 1% low, draw calls, GPU time).
+- [ ] Thêm profile đồ họa thích ứng có hysteresis để tránh đổi chất lượng liên tục.
+- [ ] Thêm kiểm thử reconnect, mất broker, mất peer và phòng đông người.
+- [ ] Chuyển quyền quản trị sang xác thực server-side; không dùng tên hiển thị làm bằng chứng admin.
+- [ ] Rà soát private-room verification: hash hiện tại là FNV-1a không có salt, không phù hợp lưu mật khẩu.
+- [ ] Rà soát token server / cấu hình LiveKit và giới hạn quyền publish/subscribe theo phòng.
+
+### Tính năng giữ chân người chơi
+1. **Daily & Weekly Discovery Quests** — nhiệm vụ khám phá, chụp ảnh, ghé địa điểm mới và tương tác tích cực; phần thưởng chỉ là XP/cosmetic, không gắn với cược.
+2. **Personal Room** — không gian riêng có thể trang trí và mời bạn bè.
+3. **Seasonal Community Events** — mục tiêu cộng đồng theo mùa với tiến độ minh bạch.
+4. **Photo Mode & Album** — chụp ảnh, pose avatar và album chia sẻ có quyền riêng tư.
+5. **Pet Companions** — thú đồng hành cosmetic, không tăng sức mạnh PvP.
+
+### Nguyên tắc triển khai
+- Ưu tiên tính năng xã hội và khám phá, không dùng streak phạt người chơi khi nghỉ.
+- Tiến trình / phần thưởng có giá trị phải được server xác thực; không tin dữ liệu client hoặc MQTT broadcast.
+- Triển khai từng phần sau khi có test và đo đạc baseline; tránh thay đổi lớn nhiều module cùng lúc.
