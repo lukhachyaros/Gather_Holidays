@@ -14,7 +14,8 @@ const SOLID = new Set(TILES.filter(t => t.solid).map(t => t.ch));
 export const isSolid = ch => SOLID.has(ch);
 
 export function buildThemeMap(themeKey = 'christmas') {
-  const w = 30, h = 22;
+  const expanded = ['christmas', 'halloween', 'valentine'].includes(themeKey);
+  const w = expanded ? 36 : 30, h = expanded ? 24 : 22;
   const grid = Array.from({ length: h }, (_, y) =>
     Array.from({ length: w }, (_, x) => (x === 0 || y === 0 || x === w - 1 || y === h - 1 ? '#' : '.'))
   );
@@ -47,6 +48,9 @@ export function buildThemeMap(themeKey = 'christmas') {
     // Cozy carpets around the two campfires
     rect(5, 14, 8, 16, 'P');
     rect(21, 14, 24, 16, 'P');
+    // Expanded eastern snow-racing quarter with a broad, flat track.
+    rect(24, 9, 34, 14, 'P');
+    rect(27, 10, 34, 13, 'R');
     // Frozen pond corners
     rect(3, 4, 5, 5, '~');
     rect(24, 4, 26, 5, '~');
@@ -57,6 +61,15 @@ export function buildThemeMap(themeKey = 'christmas') {
     // Mystic purple ponds
     rect(4, 13, 6, 15, '~');
     rect(23, 13, 25, 15, '~');
+    // Expanded eastern festival quarter: costume runway and a walkable approach.
+    rect(23, 8, 34, 13, 'P');
+    // The mansion annex uses real wall tiles with a central doorway and inner passage.
+    rect(23, 18, 34, 20, 'P');
+    for (let x = 27; x <= 34; x++) { set(x, 16, '#'); set(x, 22, '#'); }
+    for (let y = 16; y <= 22; y++) { set(27, y, '#'); set(34, y, '#'); }
+    set(30, 16, 'P');
+    for (let x = 28; x <= 33; x++) if (x !== 30) set(x, 19, '#');
+    set(30, 19, 'P');
   } else if (themeKey === 'tet') {
     // Red festive carpet under Giant Mai Tree & Firework Zones
     rect(12, 10, 17, 13, 'R');
@@ -71,6 +84,10 @@ export function buildThemeMap(themeKey = 'christmas') {
     rect(20, 13, 25, 16, 'R');
     rect(7, 8, 10, 10, 'P');
     rect(19, 8, 22, 10, 'P');
+    // Expanded eastern festival quarter: shared photo route and a dedicated dance floor.
+    rect(24, 10, 34, 17, 'P');
+    rect(28, 12, 33, 16, 'R');
+    rect(26, 18, 34, 20, 'P');
     // Decorative reflecting pools in the outer corners.
     rect(3, 4, 5, 5, '~');
     rect(24, 4, 26, 5, '~');
@@ -196,6 +213,14 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
   if (themeKey === 'christmas') {
     // Centerpiece: Giant Christmas Tree
     hotspots.push({
+      id: 'community_tree', type: 'community_tree', x: 14.5, y: 15.3, radius: 1.8,
+      prompt: '🎄 Bảng Sự Kiện Cây Thông · [E] Đóng góp cho mục tiêu cộng đồng',
+    });
+    hotspots.push({
+      id: 'sled_race', type: 'sled_race', x: 31, y: 11.5, radius: 2.6,
+      prompt: '🛷 Đường Đua Tuyết · [E] Tham gia đua xe trượt tuyết',
+    });
+    hotspots.push({
       id: 'xmas_tree',
       type: 'xmas_tree',
       x: 14.5,
@@ -317,6 +342,14 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       }
     );
   } else if (themeKey === 'halloween') {
+    hotspots.push({
+      id: 'costume_runway', type: 'costume_runway', x: 30, y: 10.5, radius: 2.1,
+      prompt: '🎭 Sàn Diễn Hóa Trang · [E] Trình diễn và bình chọn trang phục',
+    });
+    hotspots.push({
+      id: 'haunted_mansion', type: 'haunted_mansion', x: 30, y: 18.5, radius: 2.1,
+      prompt: '🏚️ Dinh Thự Bí Ẩn · [E] Giải đố mở căn phòng bí mật',
+    });
     // Centerpiece: Giant Carved Jack-O'-Lantern
     hotspots.push({
       id: 'giant_pumpkin',
@@ -539,6 +572,20 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       }
     );
   } else if (themeKey === 'valentine') {
+    hotspots.push({
+      id: 'photo_hunt', type: 'photo_hunt', x: 26.8, y: 14, radius: 1.8,
+      prompt: '📸 Bảng Sưu Tầm Ảnh · [E] Xem bộ sưu tập và tiến độ khám phá',
+    });
+    hotspots.push({
+      id: 'dance_stage', type: 'dance_stage', x: 31, y: 14, radius: 2.3,
+      prompt: '🎶 Sàn Nhảy Valentine · [E] Thử thách bắt nhịp cùng mọi người',
+    });
+    [
+      { id: 'photo_snow_globe', spotId: 'snow_globe', x: 6.5, y: 8.5, prompt: '✨ Cổng Ánh Sao · [E] Lưu ảnh kỷ niệm' },
+      { id: 'photo_rose_gate', spotId: 'rose_gate', x: 22.5, y: 8.5, prompt: '🌹 Lối Hoa Hồng · [E] Lưu ảnh kỷ niệm' },
+      { id: 'photo_moon_bridge', spotId: 'moon_bridge', x: 29, y: 10, prompt: '🌙 Cầu Trăng · [E] Lưu ảnh kỷ niệm' },
+      { id: 'photo_lantern_deck', spotId: 'lantern_deck', x: 33, y: 18.5, prompt: '🏮 Sân Đèn Lồng · [E] Lưu ảnh kỷ niệm' },
+    ].forEach(spot => hotspots.push({ ...spot, type: 'photo_spot', radius: 1.25 }));
     // Centerpiece: a glowing heart tree where visitors can compose love notes.
     hotspots.push({
       id: 'valentine_heart_tree',

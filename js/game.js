@@ -43,6 +43,7 @@ import {
   getBgmVolume,
 } from './audio.js';
 import { MinigameManager, DRAGON_SKINS, FLIGHT_QUESTS } from './minigames.js';
+import { SeasonalActivities } from './seasonal-activities.js?v=20261113';
 import {
   initCasino,
   openRoulette,
@@ -69,6 +70,7 @@ import { loadAvatarCustomization, openAvatarStudioModal } from './avatar_customi
 let myAvatarCustom = loadAvatarCustomization();
 let rtc = null;
 let minigames = null;
+let seasonalActivities = null;
 
 function initRtc(selfId, roomId) {
   if (rtc) {
@@ -486,6 +488,13 @@ try {
   world.setGraphicsQuality(initialGraphicsProfile);
   updateGraphicsQualityHint();
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
+  seasonalActivities = new SeasonalActivities({
+    getState: () => state,
+    getSelfId: () => net?.selfId,
+    getPlayerName: id => id === net?.selfId ? me?.name : peers.get(id)?.name || 'Người chơi',
+    emitOp,
+    toast,
+  });
   initAudio();
   initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId);
   initMobileControls();
@@ -1271,6 +1280,7 @@ async function joinRoomConfig({ id, title, theme, passHash }) {
       ],
       mediaCurrent: null,
       mediaQueue: [],
+      seasonalEvents: {},
     };
     toast(`👑 Bạn đã mở phòng "${roomTitle}"${passHash ? ' (🔒 Có mật khẩu)' : ''}!`);
     start();
@@ -1368,6 +1378,7 @@ async function start() {
   $('statFps').textContent = '⚡ 60 FPS';
   playBgm(state.theme);
   minigames?.setTheme(state.theme);
+  seasonalActivities?.setTheme(state.theme);
   net.send('hello', pubInfo());
   applyMedia(state.mediaCurrent);
   updateHud();
@@ -1723,6 +1734,8 @@ const handlers = {
 
     const first = !state;
     state = s;
+    state.seasonalEvents = isObject(state.seasonalEvents) ? state.seasonalEvents : {};
+    seasonalActivities?.setTheme(state.theme);
     state.kickedIds = Array.isArray(state.kickedIds) ? state.kickedIds : [];
     state.bannedNames = Array.isArray(state.bannedNames) ? state.bannedNames : [];
     state.mutedNames = Array.isArray(state.mutedNames) ? state.mutedNames : [];
@@ -1739,6 +1752,7 @@ const handlers = {
       $('topTheme').classList.toggle('hidden', roomName === SECRET_CASINO_ROOM);
       playBgm(state.theme);
       minigames?.setTheme(state.theme);
+      seasonalActivities?.setTheme(state.theme);
       applyMedia(state.mediaCurrent);
       updateScreenShareOnTv();
       updateHostUI();
@@ -1813,6 +1827,7 @@ function applyOp(op, senderId = null) {
         playBgm(op.theme);
         world.sync(state, roomName);
         minigames?.setTheme(op.theme);
+        seasonalActivities?.setTheme(op.theme);
         broadcastMyRoomToLobby();
         if (op.theme === 'casino') {
           me.x = 14.5;
@@ -2420,6 +2435,10 @@ function applyOp(op, senderId = null) {
         }
       });
       toast('✨ Tất cả hiệu ứng troll đã được khôi phục về trạng thái ban đầu!');
+      break;
+    }
+    case 'seasonal_event': {
+      seasonalActivities?.applyOperation(op, senderId);
       break;
     }
     case 'mg_snowball_throw':
@@ -4275,6 +4294,27 @@ function triggerInteract(target = activeTarget) {
   if (target.kind === 'hotspot') {
     const h = target.hotspot;
     switch (h.type) {
+      case 'community_tree':
+        seasonalActivities?.open('community_tree');
+        break;
+      case 'sled_race':
+        seasonalActivities?.open('sled_race');
+        break;
+      case 'haunted_mansion':
+        seasonalActivities?.open('haunted_mansion');
+        break;
+      case 'costume_runway':
+        seasonalActivities?.open('costume_runway');
+        break;
+      case 'photo_hunt':
+        seasonalActivities?.open('photo_hunt');
+        break;
+      case 'photo_spot':
+        seasonalActivities?.capturePhotoSpot(h.spotId);
+        break;
+      case 'dance_stage':
+        seasonalActivities?.open('dance_stage');
+        break;
       case 'screen':
         updateMediaDialog();
         openDialog('dlgMedia');

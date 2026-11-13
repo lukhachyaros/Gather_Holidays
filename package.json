@@ -1,0 +1,9 @@
+{
+  "name": "gather-holidays",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check js/game.js && node --check js/maps.js && node --check js/world.js && node --check js/seasonal-activities.js",
+    "test": "node --test tests/*.test.js"
+  }
+}

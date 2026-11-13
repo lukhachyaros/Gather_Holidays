@@ -46,6 +46,81 @@ import {
 
 export const TILE = 2; // meters per grid tile
 export const WALL_H = 1.6; // parkour-friendly wall height
+
+function buildSeasonalLandmark(type) {
+  const group = new THREE.Group();
+  const addBox = (x, y, z, sx, sy, sz, material) => {
+    const mesh = new THREE.Mesh(G.box(), material);
+    mesh.position.set(x, y, z);
+    mesh.scale.set(sx, sy, sz);
+    mesh.castShadow = mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  };
+  const addCylinder = (x, y, z, radius, height, material) => {
+    const mesh = new THREE.Mesh(G.cyl(), material);
+    mesh.position.set(x, y, z);
+    mesh.scale.set(radius * 2, height, radius * 2);
+    mesh.castShadow = true;
+    group.add(mesh);
+    return mesh;
+  };
+  const warm = mat('#fbbf24', { emissive: '#f59e0b', emissiveIntensity: 0.65, roughness: 0.35 });
+  const cool = mat('#38bdf8', { emissive: '#0ea5e9', emissiveIntensity: 0.55, roughness: 0.3 });
+  const pink = mat('#f472b6', { emissive: '#ec4899', emissiveIntensity: 0.7, roughness: 0.3 });
+  const dark = mat('#24152f', { roughness: 0.85 });
+  const wood = mat('#7c4a2d', { roughness: 0.8 });
+  const white = mat('#f8fafc', { roughness: 0.55 });
+
+  if (type === 'community_tree') {
+    addBox(0, 0.16, 0, 2.1, 0.32, 1.15, wood);
+    addBox(0, 0.42, 0, 1.7, 0.12, 0.92, warm);
+    [-0.55, 0, 0.55].forEach((x, i) => addBox(x, 0.82 + (i % 2) * 0.12, 0, 0.42, 0.65, 0.42, i === 1 ? warm : pink));
+    addCylinder(0, 1.34, 0, 0.11, 0.42, warm);
+  } else if (type === 'sled_race') {
+    [-1.35, 1.35].forEach(x => {
+      addCylinder(x, 1.25, 0, 0.12, 2.5, cool);
+      addBox(x, 2.45, 0, 0.28, 0.18, 0.28, white);
+    });
+    addBox(0, 2.42, 0, 2.95, 0.16, 0.18, cool);
+    addBox(0, 1.2, 0, 2.55, 0.08, 0.08, warm);
+  } else if (type === 'haunted_mansion') {
+    addBox(0, 1.55, 0, 5.6, 3.1, 4.4, dark);
+    addBox(0, 3.18, 0, 6.0, 0.28, 4.8, wood);
+    addBox(0, 0.82, 2.22, 1.05, 1.65, 0.18, wood);
+    [-1.65, 1.65].forEach(x => {
+      addBox(x, 2.0, 2.24, 0.8, 0.72, 0.16, warm);
+      addBox(x, 2.0, 2.13, 0.16, 0.9, 0.12, wood);
+    });
+    addBox(0, 3.65, -0.5, 3.0, 0.2, 3.2, dark);
+  } else if (type === 'costume_runway') {
+    addBox(0, 0.18, 0, 4.3, 0.36, 2.25, dark);
+    addBox(0, 0.39, 0, 3.9, 0.08, 1.9, pink);
+    [-1.75, 1.75].forEach(x => {
+      addCylinder(x, 1.35, -0.55, 0.1, 2.5, pink);
+      addBox(x, 2.63, -0.55, 0.32, 0.18, 0.32, warm);
+    });
+  } else if (type === 'photo_hunt') {
+    addBox(0, 0.75, 0, 2.3, 1.5, 0.16, wood);
+    addBox(0, 0.75, 0.1, 1.95, 1.15, 0.08, pink);
+    addBox(0, 1.65, 0, 2.55, 0.12, 0.2, warm);
+  } else if (type === 'photo_spot') {
+    [-0.95, 0.95].forEach(x => addCylinder(x, 1.25, 0, 0.09, 2.5, pink));
+    addBox(0, 2.42, 0, 2.15, 0.16, 0.18, warm);
+    addBox(0, 1.1, 0, 1.8, 0.08, 0.1, cool);
+  } else if (type === 'dance_stage') {
+    addBox(0, 0.2, 0, 5.2, 0.4, 4.2, dark);
+    addBox(0, 0.43, 0, 4.9, 0.08, 3.9, pink);
+    [[-2, -1.45], [2, -1.45], [-2, 1.45], [2, 1.45]].forEach(([x, z]) => {
+      addCylinder(x, 1.65, z, 0.1, 2.4, cool);
+      addCylinder(x, 2.9, z, 0.22, 0.26, warm);
+    });
+  }
+  group.traverse(object => {
+    if (object.isMesh) object.frustumCulled = true;
+  });
+  return group;
+}
 const DARK = new Set(['halloween', 'tet', 'christmas', 'valentine', 'casino']);
 
 const rnd = seed => {
@@ -241,9 +316,9 @@ export class World {
     this.scene.fog = new THREE.Fog(bg, key === 'tet' ? 38 : 34, key === 'tet' ? 120 : 92);
     this.hemi.color.set(key === 'halloween' ? '#a78bfa' : key === 'tet' ? '#fde68a' : key === 'valentine' ? '#fbcfe8' : '#e0f2fe');
     this.hemi.groundColor.set(key === 'tet' ? '#070617' : dark ? '#1e1b2e' : '#8a7f70');
-    this.hemi.intensity = key === 'halloween' ? 0.72 : key === 'tet' ? 0.78 : key === 'valentine' ? 0.88 : 0.92;
+    this.hemi.intensity = key === 'halloween' ? 0.72 : key === 'tet' ? 0.9 : key === 'valentine' ? 0.88 : 0.92;
     this.sun.color.set(key === 'halloween' ? '#c4b5fd' : key === 'tet' ? '#fef08a' : key === 'valentine' ? '#fecdd3' : '#fff1d6');
-    this.sun.intensity = key === 'halloween' ? 0.68 : key === 'tet' ? 0.85 : key === 'valentine' ? 0.96 : 1.15;
+    this.sun.intensity = key === 'halloween' ? 0.68 : key === 'tet' ? 0.98 : key === 'valentine' ? 0.96 : 1.15;
     this.dayHemiIntensity = this.hemi.intensity;
     this.daySunIntensity = this.sun.intensity;
     this.dayFogColor = bg.clone();
@@ -267,11 +342,11 @@ export class World {
         emissiveIntensity: 2.2,
         roughness: 0.2,
       });
-      const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(3.6, 24, 24), moonMat);
+      const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(4.0, 32, 32), moonMat);
       moonGroup.add(moonMesh);
 
       // Warm Moon Light
-      const moonLight = new THREE.PointLight(0xfef08a, 2.5, 75);
+      const moonLight = new THREE.PointLight(0xfef08a, 2.8, 85);
       moonGroup.add(moonLight);
       this.nightSkyGroup.add(moonGroup);
 
@@ -595,6 +670,10 @@ export class World {
         pub.position.set(h.x * TILE, 0, h.y * TILE);
         addMapModel(h.type, pub);
         this.casinoObjs.push(pub);
+      } else if (['community_tree', 'sled_race', 'haunted_mansion', 'costume_runway', 'photo_hunt', 'photo_spot', 'dance_stage'].includes(h.type)) {
+        const landmark = buildSeasonalLandmark(h.type);
+        landmark.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(landmark);
       }
       if ((i + 1) % 2 === 0 && i + 1 < this.features.hotspots.length) {
         await this.yieldMapBuild(76 + ((i + 1) / this.features.hotspots.length) * 16, 'Dựng công trình và điểm tương tác...', themeKey);
