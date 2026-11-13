@@ -46,6 +46,96 @@ import {
 
 export const TILE = 2; // meters per grid tile
 export const WALL_H = 1.6; // parkour-friendly wall height
+
+function buildSeasonalLandmark(type) {
+  const group = new THREE.Group();
+  const addBox = (x, y, z, sx, sy, sz, material) => {
+    const mesh = new THREE.Mesh(G.box(), material);
+    mesh.position.set(x, y, z);
+    mesh.scale.set(sx, sy, sz);
+    mesh.castShadow = mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  };
+  const addCylinder = (x, y, z, radius, height, material) => {
+    const mesh = new THREE.Mesh(G.cyl(), material);
+    mesh.position.set(x, y, z);
+    mesh.scale.set(radius * 2, height, radius * 2);
+    mesh.castShadow = true;
+    group.add(mesh);
+    return mesh;
+  };
+  const warm = mat('#fbbf24', { emissive: '#f59e0b', emissiveIntensity: 0.65, roughness: 0.35 });
+  const cool = mat('#38bdf8', { emissive: '#0ea5e9', emissiveIntensity: 0.55, roughness: 0.3 });
+  const pink = mat('#f472b6', { emissive: '#ec4899', emissiveIntensity: 0.7, roughness: 0.3 });
+  const dark = mat('#24152f', { roughness: 0.85 });
+  const wood = mat('#7c4a2d', { roughness: 0.8 });
+  const white = mat('#f8fafc', { roughness: 0.55 });
+
+  if (type === 'community_tree') {
+    const evergreen = mat('#0f766e', { roughness: 0.76 });
+    addBox(0, 0.16, 0, 2.1, 0.32, 1.15, wood);
+    addBox(0, 0.36, 0, 1.7, 0.12, 0.92, warm);
+    addBox(0, 0.76, 0, 1.45, 0.92, 1.08, evergreen);
+    addBox(0, 1.32, 0, 1.08, 0.82, 0.84, evergreen);
+    addBox(0, 1.86, 0, 0.7, 0.68, 0.58, evergreen);
+    addCylinder(0, 2.3, 0, 0.13, 0.28, warm);
+    [-0.48, 0, 0.48].forEach((x, i) => addBox(x, 0.86 + (i % 2) * 0.22, 0.57, 0.16, 0.16, 0.12, i === 1 ? warm : pink));
+  } else if (type === 'sled_race') {
+    [-1.35, 1.35].forEach(x => {
+      addCylinder(x, 1.25, 0, 0.12, 2.5, cool);
+      addBox(x, 2.45, 0, 0.28, 0.18, 0.28, white);
+    });
+    addBox(0, 2.42, 0, 2.95, 0.16, 0.18, cool);
+    addBox(0, 1.2, 0, 2.55, 0.08, 0.08, warm);
+    addBox(0, 0.46, 1.0, 1.12, 0.2, 1.5, wood);
+    addBox(0, 0.62, 0.86, 0.82, 0.22, 0.72, warm);
+    [-0.48, 0.48].forEach(x => {
+      const runner = addCylinder(x, 0.13, 1.0, 0.065, 1.72, cool);
+      runner.rotation.x = Math.PI / 2;
+    });
+    addBox(0, 0.8, 0.28, 0.84, 0.18, 0.18, white);
+  } else if (type === 'haunted_mansion') {
+    addBox(-2.55, 1.55, 0, 0.5, 3.1, 4.4, dark);
+    addBox(2.55, 1.55, 0, 0.5, 3.1, 4.4, dark);
+    addBox(0, 1.55, 2.05, 5.6, 3.1, 0.35, dark);
+    addBox(-1.9, 1.55, -2.05, 1.8, 3.1, 0.35, dark);
+    addBox(1.9, 1.55, -2.05, 1.8, 3.1, 0.35, dark);
+    addBox(0, 2.95, -2.05, 2.1, 0.5, 0.35, dark);
+    addBox(0, 3.2, 0, 6.0, 0.32, 4.8, wood);
+    addBox(0, 0.08, 0, 5.35, 0.16, 4.15, wood);
+    [-1.02, 1.02].forEach(x => {
+      addBox(x, 1.2, -2.18, 0.18, 2.4, 0.22, warm);
+      addBox(x * 1.8, 2.0, -2.2, 0.7, 0.78, 0.12, warm);
+    });
+    addBox(0, 1.35, -1.98, 1.45, 0.12, 0.16, wood);
+    addBox(0, 2.78, -2.0, 1.75, 0.18, 0.2, warm);
+  } else if (type === 'costume_runway') {
+    addBox(0, 0.18, 0, 4.3, 0.36, 2.25, dark);
+    addBox(0, 0.39, 0, 3.9, 0.08, 1.9, pink);
+    [-1.75, 1.75].forEach(x => {
+      addCylinder(x, 1.35, -0.55, 0.1, 2.5, pink);
+      addBox(x, 2.63, -0.55, 0.32, 0.18, 0.32, warm);
+    });
+  } else if (type === 'photo_hunt') {
+    addBox(0, 0.75, 0, 2.3, 1.5, 0.16, wood);
+    addBox(0, 0.75, 0.1, 1.95, 1.15, 0.08, pink);
+    addBox(0, 1.65, 0, 2.55, 0.12, 0.2, warm);
+  } else if (type === 'photo_spot') {
+    [-0.95, 0.95].forEach(x => addCylinder(x, 1.25, 0, 0.09, 2.5, pink));
+    addBox(0, 2.42, 0, 2.15, 0.16, 0.18, warm);
+    addBox(0, 1.1, 0, 1.8, 0.08, 0.1, cool);
+  } else if (type === 'dance_stage') {
+    addBox(0, 0.2, 0, 5.2, 0.4, 4.2, dark);
+    addBox(0, 0.43, 0, 4.9, 0.08, 3.9, pink);
+    [[-2, -1.45], [2, -1.45], [-2, 1.45], [2, 1.45]].forEach(([x, z]) => {
+      addCylinder(x, 1.65, z, 0.1, 2.4, cool);
+      addCylinder(x, 2.9, z, 0.22, 0.26, warm);
+    });
+  }
+  group.traverse(object => { if (object.isMesh) object.frustumCulled = true; });
+  return group;
+}
 const DARK = new Set(['halloween', 'tet', 'christmas', 'valentine', 'casino']);
 
 const rnd = seed => {
@@ -99,6 +189,9 @@ export class World {
     this.replacementTemplates = new Map();
     this.ornamentKey = '';
     this.mediaBannerKey = '';
+    this.communityTreeGroup = null;
+    this.communityTreeDecorationMesh = null;
+    this.seasonalVisualKey = '';
     this.particles = [];
     this.particleBatches = [];
     this.particleScale = 1;
@@ -158,6 +251,8 @@ export class World {
       }
     }
 
+    this.syncSeasonalEventVisuals(state.seasonalEvents || {}, state.theme);
+
     // Sync Cinema Screen Banner
     if (this.screenObj?.userData?.updateBanner) {
       const q = state.mediaQueue || [];
@@ -169,6 +264,48 @@ export class World {
       }
     }
     return mapBuildPromise;
+  }
+
+  syncSeasonalEventVisuals(events, themeKey) {
+    const contributors = themeKey === 'christmas' ? events?.christmas?.tree?.contributors || [] : [];
+    const count = Math.min(24, contributors.length);
+    const key = themeKey + ':' + count;
+    if (key === this.seasonalVisualKey) return;
+    this.seasonalVisualKey = key;
+
+    if (this.communityTreeDecorationMesh) {
+      this.communityTreeGroup?.remove(this.communityTreeDecorationMesh);
+      this.communityTreeDecorationMesh.geometry.dispose();
+      this.communityTreeDecorationMesh.material.dispose();
+      this.communityTreeDecorationMesh = null;
+    }
+    if (!count || !this.communityTreeGroup) return;
+
+    const geometry = new THREE.SphereGeometry(0.105, 10, 8);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.28, metalness: 0.18,
+      emissive: 0x332211, emissiveIntensity: 0.28,
+    });
+    const bulbs = new THREE.InstancedMesh(geometry, material, count);
+    const transform = new THREE.Object3D();
+    const palette = ['#fbbf24', '#fb7185', '#38bdf8', '#a3e635', '#c084fc', '#f8fafc'];
+    for (let i = 0; i < count; i++) {
+      const tier = Math.floor(i / 8);
+      const slot = i % 8;
+      const angle = (slot / 8) * Math.PI * 2 + tier * 0.27;
+      const radius = 0.42 + tier * 0.07;
+      transform.position.set(Math.cos(angle) * radius, 0.72 + tier * 0.54 + (slot % 2) * 0.14, Math.sin(angle) * radius);
+      transform.scale.setScalar(0.88 + (slot % 3) * 0.12);
+      transform.updateMatrix();
+      bulbs.setMatrixAt(i, transform.matrix);
+      bulbs.setColorAt(i, new THREE.Color(palette[i % palette.length]));
+    }
+    bulbs.instanceMatrix.needsUpdate = true;
+    if (bulbs.instanceColor) bulbs.instanceColor.needsUpdate = true;
+    bulbs.castShadow = false;
+    bulbs.receiveShadow = false;
+    this.communityTreeGroup.add(bulbs);
+    this.communityTreeDecorationMesh = bulbs;
   }
 
   requestMapBuild(map, themeKey, roomSeed) {
@@ -241,9 +378,9 @@ export class World {
     this.scene.fog = new THREE.Fog(bg, key === 'tet' ? 38 : 34, key === 'tet' ? 120 : 92);
     this.hemi.color.set(key === 'halloween' ? '#a78bfa' : key === 'tet' ? '#fde68a' : key === 'valentine' ? '#fbcfe8' : '#e0f2fe');
     this.hemi.groundColor.set(key === 'tet' ? '#070617' : dark ? '#1e1b2e' : '#8a7f70');
-    this.hemi.intensity = key === 'halloween' ? 0.72 : key === 'tet' ? 0.78 : key === 'valentine' ? 0.88 : 0.92;
+    this.hemi.intensity = key === 'halloween' ? 0.72 : key === 'tet' ? 0.9 : key === 'valentine' ? 0.88 : 0.92;
     this.sun.color.set(key === 'halloween' ? '#c4b5fd' : key === 'tet' ? '#fef08a' : key === 'valentine' ? '#fecdd3' : '#fff1d6');
-    this.sun.intensity = key === 'halloween' ? 0.68 : key === 'tet' ? 0.85 : key === 'valentine' ? 0.96 : 1.15;
+    this.sun.intensity = key === 'halloween' ? 0.68 : key === 'tet' ? 0.98 : key === 'valentine' ? 0.96 : 1.15;
     this.dayHemiIntensity = this.hemi.intensity;
     this.daySunIntensity = this.sun.intensity;
     this.dayFogColor = bg.clone();
@@ -267,11 +404,11 @@ export class World {
         emissiveIntensity: 2.2,
         roughness: 0.2,
       });
-      const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(3.6, 24, 24), moonMat);
+      const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(4.0, 32, 32), moonMat);
       moonGroup.add(moonMesh);
 
       // Warm Moon Light
-      const moonLight = new THREE.PointLight(0xfef08a, 2.5, 75);
+      const moonLight = new THREE.PointLight(0xfef08a, 2.8, 85);
       moonGroup.add(moonLight);
       this.nightSkyGroup.add(moonGroup);
 
@@ -300,9 +437,17 @@ export class World {
 
   async buildMap(map, themeKey, roomSeed = 'lobby') {
     const th = THEMES[themeKey] || THEMES.christmas;
+    if (this.communityTreeDecorationMesh) {
+      this.communityTreeDecorationMesh.geometry.dispose();
+      this.communityTreeDecorationMesh.material.dispose();
+      this.communityTreeDecorationMesh = null;
+    }
     this.scene.remove(this.group);
     this.group = new THREE.Group();
     this.scene.add(this.group);
+    this.communityTreeGroup = null;
+    this.communityTreeDecorationMesh = null;
+    this.seasonalVisualKey = '';
     if (themeKey !== this.appliedThemeKey) {
       this.applyTheme(themeKey);
       this.appliedThemeKey = themeKey;
@@ -595,6 +740,11 @@ export class World {
         pub.position.set(h.x * TILE, 0, h.y * TILE);
         addMapModel(h.type, pub);
         this.casinoObjs.push(pub);
+      } else if (['community_tree', 'sled_race', 'haunted_mansion', 'costume_runway', 'photo_hunt', 'photo_spot', 'dance_stage'].includes(h.type)) {
+        const landmark = buildSeasonalLandmark(h.type);
+        landmark.position.set(h.x * TILE, 0, h.y * TILE);
+        this.group.add(landmark);
+        if (h.type === 'community_tree') this.communityTreeGroup = landmark;
       }
       if ((i + 1) % 2 === 0 && i + 1 < this.features.hotspots.length) {
         await this.yieldMapBuild(76 + ((i + 1) / this.features.hotspots.length) * 16, 'Dựng công trình và điểm tương tác...', themeKey);
