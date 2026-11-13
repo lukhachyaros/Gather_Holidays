@@ -20,6 +20,10 @@ let truongGiangCatchAudio = null;
 let bgmMuted = localStorage.getItem('gh_bgm_muted') === '1';
 let bgmVolume = parseFloat(localStorage.getItem('gh_bgm_vol') || '0.35');
 let audioUnlocked = false;
+let bgmGain = null;
+let bgmFallbackTimer = null;
+let bgmFallbackTheme = null;
+let bgmFallbackNodes = [];
 
 // Initialize Web Audio Context on user gesture
 export function getAudioContext() {
@@ -38,100 +42,148 @@ export function getAudioContext() {
 // ----------------------------------------------------------------------------
 // BGM PLAYBACK MANAGER
 // ----------------------------------------------------------------------------
+function stopFallbackMusic() {
+  if (bgmFallbackTimer) clearInterval(bgmFallbackTimer);
+  bgmFallbackTimer = null;
+  bgmFallbackTheme = null;
+  bgmFallbackNodes.forEach(node => { try { node.stop(); } catch {} });
+  bgmFallbackNodes = [];
+}
+function ensureFallbackGain() {
+  const ctx = getAudioContext();
+  if (!ctx) return null;
+  if (!bgmGain) {
+    bgmGain = ctx.createGain();
+    bgmGain.connect(ctx.destination);
+  }
+  bgmGain.gain.setTargetAtTime(bgmMuted ? 0 : bgmVolume * 0.52, ctx.currentTime, 0.08);
+  return bgmGain;
+}
+function playFallbackTone(frequency, duration = 0.46, level = 0.04) {
+  const ctx = audioCtx;
+  if (!ctx || !bgmGain || bgmMuted) return;
+  const now = ctx.currentTime;
+  const oscillator = ctx.createOscillator();
+  const envelope = ctx.createGain();
+  oscillator.type = currentTheme === 'halloween' ? 'triangle' : 'sine';
+  oscillator.frequency.setValueAtTime(frequency, now);
+  envelope.gain.setValueAtTime(0.0001, now);
+  envelope.gain.exponentialRampToValueAtTime(level, now + 0.035);
+  envelope.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  oscillator.connect(envelope);
+  envelope.connect(bgmGain);
+  oscillator.onended = () => { bgmFallbackNodes = bgmFallbackNodes.filter(node => node !== oscillator); };
+  bgmFallbackNodes.push(oscillator);
+  oscillator.start(now);
+  oscillator.stop(now + duration + 0.02);
+}
+function startFallbackMusic(themeKey) {
+  if (!audioUnlocked || bgmMuted) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  if (bgmFallbackTimer && bgmFallbackTheme === themeKey) return;
+  stopFallbackMusic();
+  bgmFallbackTheme = themeKey;
+  ensureFallbackGain();
+  const melodies = {
+    christmas: [659.25, 783.99, 987.77, 783.99, 698.46, 880, 1046.5, 880],
+    halloween: [220, 261.63, 293.66, 261.63, 196, 233.08, 261.63, 233.08],
+    tet: [523.25, 587.33, 659.25, 783.99, 659.25, 587.33, 523.25, 440],
+    valentine: [392, 493.88, 587.33, 493.88, 440, 523.25, 659.25, 523.25],
+    casino: [440, 523.25, 659.25, 783.99, 659.25, 523.25, 493.88, 587.33]
+  };
+  const notes = melodies[themeKey] || melodies.christmas;
+  let beat = 0;
+  const playBeat = () => {
+    const note = notes[beat % notes.length];
+    playFallbackTone(note, 0.48, 0.045);
+    if (beat % 4 === 0) playFallbackTone(note / 2, 0.82, 0.022);
+    beat++;
+  };
+  playBeat();
+  bgmFallbackTimer = setInterval(playBeat, 520);
+}
+function startBgmPlayback() {
+  if (!bgmAudio || !bgmAudio.src || bgmMuted) return;
+  try {
+    const playback = bgmAudio.play();
+    if (playback && typeof playback.then === 'function') {
+      playback.then(() => stopFallbackMusic()).catch(() => startFallbackMusic(currentTheme));
+    }
+  } catch { startFallbackMusic(currentTheme); }
+}
 export function initAudio() {
   if (typeof window === 'undefined' || bgmAudio) return;
-
   bgmAudio = new Audio();
-  bgmAudio.crossOrigin = 'anonymous';
+  // Avoid crossOrigin=anonymous: external MP3 hosts may not send CORS headers.
   bgmAudio.loop = true;
+  bgmAudio.preload = 'auto';
   bgmAudio.volume = bgmMuted ? 0 : bgmVolume;
-
-  // Modern browser autoplay unlock
+  bgmAudio.addEventListener('error', () => {
+    if (audioUnlocked && !bgmMuted && currentTheme) startFallbackMusic(currentTheme);
+  });
   const unlock = () => {
     if (audioUnlocked) return;
     audioUnlocked = true;
     getAudioContext();
-    if (!bgmMuted && bgmAudio && bgmAudio.src) {
-      bgmAudio.play().catch(() => {});
-    }
+    if (!bgmMuted && bgmAudio?.src) startBgmPlayback();
+    else if (!bgmMuted && currentTheme) startFallbackMusic(currentTheme);
+    window.removeEventListener('pointerdown', unlock);
     window.removeEventListener('click', unlock);
     window.removeEventListener('keydown', unlock);
     window.removeEventListener('touchstart', unlock);
   };
+  window.addEventListener('pointerdown', unlock, { once: true });
   window.addEventListener('click', unlock, { once: true });
   window.addEventListener('keydown', unlock, { once: true });
   window.addEventListener('touchstart', unlock, { once: true });
-
   updateBgmButtonUI();
 }
-
 export function playBgm(themeKey) {
+  if (!themeKey || !BGM_TRACKS[themeKey]) return false;
   if (!bgmAudio) initAudio();
-  if (!themeKey || !BGM_TRACKS[themeKey]) return;
-
+  if (!bgmAudio) return false;
   const targetUrl = BGM_TRACKS[themeKey];
-  if (currentTheme === themeKey && bgmAudio.src === targetUrl && !bgmAudio.paused) {
-    return;
-  }
-
+  const sameTrack = currentTheme === themeKey && bgmAudio.src.endsWith(targetUrl);
   currentTheme = themeKey;
-
-  // Smooth cross-fade transition
-  const oldVol = bgmMuted ? 0 : bgmVolume;
-  let cur = bgmAudio.volume;
-  const fadeOut = setInterval(() => {
-    cur = Math.max(0, cur - 0.05);
-    if (bgmAudio) bgmAudio.volume = cur;
-    if (cur <= 0.01) {
-      clearInterval(fadeOut);
-      try {
-        bgmAudio.src = targetUrl;
-        bgmAudio.volume = 0;
-        const p = bgmAudio.play();
-        if (p && p.catch) {
-          p.catch(() => {
-            // Autoplay waiting for user gesture
-          });
-        }
-        // Fade in
-        let inVol = 0;
-        const fadeIn = setInterval(() => {
-          inVol = Math.min(oldVol, inVol + 0.05);
-          if (bgmAudio) bgmAudio.volume = inVol;
-          if (inVol >= oldVol) clearInterval(fadeIn);
-        }, 50);
-      } catch (err) {
-        console.warn('[BGM] Error playing track:', err);
-      }
-    }
-  }, 40);
+  stopFallbackMusic();
+  if (!sameTrack) {
+    bgmAudio.pause();
+    bgmAudio.src = targetUrl;
+    bgmAudio.load();
+  }
+  bgmAudio.volume = bgmMuted ? 0 : bgmVolume;
+  if (!bgmMuted && audioUnlocked) startBgmPlayback();
+  return true;
 }
 
 export function toggleBgm() {
   if (!bgmAudio) initAudio();
   bgmMuted = !bgmMuted;
   localStorage.setItem('gh_bgm_muted', bgmMuted ? '1' : '0');
-
   if (bgmMuted) {
     if (bgmAudio) bgmAudio.volume = 0;
+    if (bgmGain && audioCtx) bgmGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.04);
+    stopFallbackMusic();
   } else {
+    audioUnlocked = true;
     getAudioContext();
-    if (bgmAudio) {
+    if (bgmAudio?.src) {
       bgmAudio.volume = bgmVolume;
-      if (bgmAudio.paused && bgmAudio.src) {
-        bgmAudio.play().catch(() => {});
-      }
-    }
+      startBgmPlayback();
+    } else if (currentTheme) startFallbackMusic(currentTheme);
   }
   updateBgmButtonUI();
   return !bgmMuted;
 }
 
 export function setBgmVolume(val) {
-  bgmVolume = Math.max(0, Math.min(1, val));
+  bgmVolume = Math.max(0, Math.min(1, Number(val) || 0));
   localStorage.setItem('gh_bgm_vol', bgmVolume.toFixed(2));
-  if (!bgmMuted && bgmAudio) {
-    bgmAudio.volume = bgmVolume;
+  if (!bgmMuted && bgmAudio) bgmAudio.volume = bgmVolume;
+  if (bgmGain && audioCtx) {
+    bgmGain.gain.setTargetAtTime(bgmMuted ? 0 : bgmVolume * 0.52, audioCtx.currentTime, 0.08);
   }
 }
 
