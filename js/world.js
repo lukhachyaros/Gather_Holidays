@@ -453,6 +453,11 @@ export class World {
 
   async buildMap(map, themeKey, roomSeed = 'lobby') {
     const th = THEMES[themeKey] || THEMES.christmas;
+    if (this.communityTreeDecorationMesh) {
+      this.communityTreeDecorationMesh.geometry.dispose();
+      this.communityTreeDecorationMesh.material.dispose();
+      this.communityTreeDecorationMesh = null;
+    }
     this.scene.remove(this.group);
     this.group = new THREE.Group();
     this.scene.add(this.group);

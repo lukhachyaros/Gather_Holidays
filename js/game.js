@@ -1750,6 +1750,8 @@ const handlers = {
     if (first) {
       start();
     } else {
+      seasonalActivities?.refresh();
+      world?.syncSeasonalEventVisuals(state.seasonalEvents, state.theme);
       if (state.passHash && state.hostId !== net.selfId && verifiedPassHash !== state.passHash) {
         promptRoomPassword({ id: roomName, title: state.roomTitle || roomName, passHash: state.passHash });
       }
@@ -2443,7 +2445,8 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'seasonal_event': {
-      seasonalActivities?.applyOperation(op, senderId);
+      const changed = seasonalActivities?.applyOperation(op, senderId);
+      if (changed) world?.syncSeasonalEventVisuals(state.seasonalEvents, state.theme);
       break;
     }
     case 'mg_snowball_throw':
