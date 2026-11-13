@@ -73,10 +73,14 @@ function buildSeasonalLandmark(type) {
   const white = mat('#f8fafc', { roughness: 0.55 });
 
   if (type === 'community_tree') {
+    const evergreen = mat('#0f766e', { roughness: 0.76 });
     addBox(0, 0.16, 0, 2.1, 0.32, 1.15, wood);
-    addBox(0, 0.42, 0, 1.7, 0.12, 0.92, warm);
-    [-0.55, 0, 0.55].forEach((x, i) => addBox(x, 0.82 + (i % 2) * 0.12, 0, 0.42, 0.65, 0.42, i === 1 ? warm : pink));
-    addCylinder(0, 1.34, 0, 0.11, 0.42, warm);
+    addBox(0, 0.36, 0, 1.7, 0.12, 0.92, warm);
+    addBox(0, 0.76, 0, 1.45, 0.92, 1.08, evergreen);
+    addBox(0, 1.32, 0, 1.08, 0.82, 0.84, evergreen);
+    addBox(0, 1.86, 0, 0.7, 0.68, 0.58, evergreen);
+    addCylinder(0, 2.3, 0, 0.13, 0.28, warm);
+    [-0.48, 0, 0.48].forEach((x, i) => addBox(x, 0.86 + (i % 2) * 0.22, 0.57, 0.16, 0.16, 0.12, i === 1 ? warm : pink));
   } else if (type === 'sled_race') {
     [-1.35, 1.35].forEach(x => {
       addCylinder(x, 1.25, 0, 0.12, 2.5, cool);
@@ -84,15 +88,30 @@ function buildSeasonalLandmark(type) {
     });
     addBox(0, 2.42, 0, 2.95, 0.16, 0.18, cool);
     addBox(0, 1.2, 0, 2.55, 0.08, 0.08, warm);
-  } else if (type === 'haunted_mansion') {
-    addBox(0, 1.55, 0, 5.6, 3.1, 4.4, dark);
-    addBox(0, 3.18, 0, 6.0, 0.28, 4.8, wood);
-    addBox(0, 0.82, 2.22, 1.05, 1.65, 0.18, wood);
-    [-1.65, 1.65].forEach(x => {
-      addBox(x, 2.0, 2.24, 0.8, 0.72, 0.16, warm);
-      addBox(x, 2.0, 2.13, 0.16, 0.9, 0.12, wood);
+    // A visible sled at the starting line gives the gate a clear race identity.
+    addBox(0, 0.46, 1.0, 1.12, 0.2, 1.5, wood);
+    addBox(0, 0.62, 0.86, 0.82, 0.22, 0.72, warm);
+    [-0.48, 0.48].forEach(x => {
+      const runner = addCylinder(x, 0.13, 1.0, 0.065, 1.72, cool);
+      runner.rotation.x = Math.PI / 2;
     });
-    addBox(0, 3.65, -0.5, 3.0, 0.2, 3.2, dark);
+    addBox(0, 0.8, 0.28, 0.84, 0.18, 0.18, white);
+  } else if (type === 'haunted_mansion') {
+    // Build an open-front shell so the entrance reads as a doorway, not a solid block.
+    addBox(-2.55, 1.55, 0, 0.5, 3.1, 4.4, dark);
+    addBox(2.55, 1.55, 0, 0.5, 3.1, 4.4, dark);
+    addBox(0, 1.55, 2.05, 5.6, 3.1, 0.35, dark);
+    addBox(-1.9, 1.55, -2.05, 1.8, 3.1, 0.35, dark);
+    addBox(1.9, 1.55, -2.05, 1.8, 3.1, 0.35, dark);
+    addBox(0, 2.95, -2.05, 2.1, 0.5, 0.35, dark);
+    addBox(0, 3.2, 0, 6.0, 0.32, 4.8, wood);
+    addBox(0, 0.08, 0, 5.35, 0.16, 4.15, wood);
+    [-1.02, 1.02].forEach(x => {
+      addBox(x, 1.2, -2.18, 0.18, 2.4, 0.22, warm);
+      addBox(x * 1.8, 2.0, -2.2, 0.7, 0.78, 0.12, warm);
+    });
+    addBox(0, 1.35, -1.98, 1.45, 0.12, 0.16, wood);
+    addBox(0, 2.78, -2.0, 1.75, 0.18, 0.2, warm);
   } else if (type === 'costume_runway') {
     addBox(0, 0.18, 0, 4.3, 0.36, 2.25, dark);
     addBox(0, 0.39, 0, 3.9, 0.08, 1.9, pink);
