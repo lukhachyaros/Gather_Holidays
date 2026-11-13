@@ -2037,3 +2037,31 @@ body.matrix-active::after {
 .seasonal-tap{min-height:74px;font-size:17px;letter-spacing:.08em}
 .is-complete{border-color:rgba(74,222,128,.3);color:#bbf7d0}
 @media(max-width:560px){.seasonal-overlay{padding:8px;align-items:flex-end}.seasonal-panel{max-height:92vh;border-radius:18px 18px 12px 12px}.seasonal-header{padding:14px}.seasonal-body{padding:14px}.seasonal-footer{padding:9px}.seasonal-list-item{font-size:11.5px}}
+
+/* Seasonal activity gameplay controls */
+.seasonal-track-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.seasonal-lane{display:flex;min-height:112px;flex-direction:column;align-items:center;justify-content:center;gap:7px;white-space:pre-line;font-size:14px;line-height:1.25}
+.seasonal-lane-shortcut{border-color:rgba(250,204,21,.55);background:linear-gradient(155deg,rgba(120,53,15,.55),rgba(51,65,85,.82))}
+.seasonal-lane-safe{border-color:rgba(56,189,248,.5);background:linear-gradient(155deg,rgba(7,89,133,.55),rgba(51,65,85,.82))}
+.seasonal-lane-obstacle{border-color:rgba(248,113,113,.48);background:linear-gradient(155deg,rgba(127,29,29,.5),rgba(51,65,85,.82))}
+.seasonal-collectible-row{display:flex;flex-direction:column;gap:5px;padding:11px 13px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(15,23,42,.5)}
+.seasonal-collectible-title{color:#f8fafc;font-size:13px}
+.seasonal-collectible-hint{color:#a5b4c5;font-size:12px;line-height:1.4}
+.seasonal-collectible-row.is-complete .seasonal-collectible-title{color:#bbf7d0}
+.seasonal-dance-cue{display:grid;min-height:105px;place-items:center;border:1px solid rgba(244,114,182,.45);border-radius:18px;background:radial-gradient(circle,rgba(236,72,153,.26),rgba(30,15,35,.7));font-size:clamp(44px,9vw,68px);text-shadow:0 0 24px rgba(244,114,182,.55)}
+.seasonal-move-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.seasonal-move{min-height:56px;font-size:16px}
+@media(max-width:420px){.seasonal-track-grid{gap:5px}.seasonal-lane{min-height:98px;padding:8px 4px;font-size:11px}}
+
+.seasonal-photo-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.seasonal-photo-card{display:flex;min-width:0;flex-direction:column;gap:6px;padding:8px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(15,23,42,.58)}
+.seasonal-photo-image{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:8px;background:#0f172a}
+.seasonal-photo-caption{overflow:hidden;color:#cbd5e1;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.seasonal-photo-download{align-self:flex-start;color:#93c5fd;font-size:12px;font-weight:750;text-decoration:none}
+.seasonal-photo-download:hover{text-decoration:underline}
+@media(max-width:420px){.seasonal-photo-gallery{grid-template-columns:1fr}}
+
+
+/* Reaction-race timer */
+.seasonal-race-timer{height:10px;overflow:hidden;border:1px solid rgba(255,255,255,.2);border-radius:99px;background:rgba(2,6,23,.8)}
+.seasonal-race-timer-fill{height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,#22c55e,#facc15,#ef4444);transition:width .06s linear}

@@ -7,7 +7,7 @@ import {
   CARD_STYLES,
   rollLixiReward,
 } from './themes.js';
-import { isSolid, buildThemeMap, validMap, migrateLegacyThemeMap } from './maps.js?v=2026111218';
+import { isSolid, buildThemeMap, validMap, migrateLegacyThemeMap } from './maps.js?v=20261113seasonal2';
 import { connect, connectLobby, hashPass } from './net.js';
 import {
   initPlayer,
@@ -29,7 +29,7 @@ import {
   seekPlayer,
   syncPlayback,
 } from './media.js';
-import { World, TILE } from './world.js?v=2026111221';
+import { World, TILE } from './world.js?v=20261113seasonal2';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=2026111208';
 import { emojiSprite, part, G, mat } from './props.js';
 import { RtcManager } from './rtc.js?v=20261112_livekit';
@@ -43,7 +43,7 @@ import {
   getBgmVolume,
 } from './audio.js';
 import { MinigameManager, DRAGON_SKINS, FLIGHT_QUESTS } from './minigames.js';
-import { SeasonalActivities } from './seasonal-activities.js?v=20261113';
+import { SeasonalActivities } from './seasonal-activities.js?v=20261113seasonal3';
 import {
   initCasino,
   openRoulette,
@@ -508,6 +508,14 @@ try {
     emitOp,
     toast,
     onCostumeSubmit: costumeKey => equipCostume(costumeKey),
+    onCapturePhoto: () => {
+      try {
+        renderer.render(scene, camera);
+        return renderer.domElement.toDataURL('image/png');
+      } catch {
+        return null;
+      }
+    },
   });
   initAudio();
   initCasino(world, toast, emitOp, () => me, () => peers, () => net?.selfId, logChat);
@@ -4343,6 +4351,12 @@ function triggerInteract(target = activeTarget) {
         break;
       case 'photo_spot':
         seasonalActivities?.capturePhotoSpot(h.spotId);
+        break;
+      case 'mansion_key':
+        seasonalActivities?.collectMansionKey(h.keyId);
+        break;
+      case 'photo_collectible':
+        seasonalActivities?.collectPhotoItem(h.itemId);
         break;
       case 'dance_stage':
         seasonalActivities?.open('dance_stage');

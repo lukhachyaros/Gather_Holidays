@@ -362,6 +362,11 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
   } else if (themeKey === 'halloween') {
     hotspots.push({ id: 'costume_runway', type: 'costume_runway', x: 30, y: 10.5, radius: 2.1, prompt: '🎭 Sàn Diễn Hóa Trang · [E] Trình diễn và bình chọn' });
     hotspots.push({ id: 'haunted_mansion', type: 'haunted_mansion', x: 30, y: 18.5, radius: 2.1, prompt: '🏚️ Dinh Thự Bí Ẩn · [E] Giải đố mở phòng bí mật' });
+    [
+      { id: 'mansion_key_candle', keyId: 'candle', x: 28.7, y: 17.2, prompt: '🗝️ Chìa Khóa Nến · [E] Thu thập' },
+      { id: 'mansion_key_bat', keyId: 'bat', x: 32.1, y: 17.4, prompt: '🗝️ Chìa Khóa Dơi · [E] Thu thập' },
+      { id: 'mansion_key_pumpkin', keyId: 'pumpkin', x: 32.1, y: 20.3, prompt: '🗝️ Chìa Khóa Bí Ngô · [E] Thu thập' },
+    ].forEach(key => hotspots.push({ ...key, type: 'mansion_key', radius: 1.05 }));
     colliders.push({ x: 28.72, y: 18.5, r: 0.15 }, { x: 31.28, y: 18.5, r: 0.15 }, { x: 30, y: 19.6, r: 0.15 });
     // Centerpiece: Giant Carved Jack-O'-Lantern
     hotspots.push({
@@ -593,6 +598,12 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       { id: 'photo_moon_bridge', spotId: 'moon_bridge', x: 29, y: 10, prompt: '🌙 Cầu Trăng · [E] Lưu ảnh kỷ niệm' },
       { id: 'photo_lantern_deck', spotId: 'lantern_deck', x: 33, y: 18.5, prompt: '🏮 Sân Đèn Lồng · [E] Lưu ảnh kỷ niệm' },
     ].forEach(spot => hotspots.push({ ...spot, type: 'photo_spot', radius: 1.25 }));
+    [
+      { id: 'hidden_rose_locket', itemId: 'rose_locket', x: 26.2, y: 11.7, prompt: '💗 Mặt Dây Hoa Hồng Ẩn · [E] Nhặt vật phẩm' },
+      { id: 'hidden_star_charm', itemId: 'star_charm', x: 33.1, y: 12.2, prompt: '⭐ Bùa Sao Lấp Lánh · [E] Nhặt vật phẩm' },
+      { id: 'hidden_moon_crystal', itemId: 'moon_crystal', x: 27.1, y: 19.1, prompt: '🌙 Pha Lê Ánh Trăng · [E] Nhặt vật phẩm' },
+      { id: 'hidden_heart_ribbon', itemId: 'heart_ribbon', x: 31.8, y: 20.2, prompt: '🎀 Dải Ruy Băng Trái Tim · [E] Nhặt vật phẩm' },
+    ].forEach(item => hotspots.push({ ...item, type: 'photo_collectible', radius: 1.05 }));
     // Centerpiece: a glowing heart tree where visitors can compose love notes.
     hotspots.push({
       id: 'valentine_heart_tree',

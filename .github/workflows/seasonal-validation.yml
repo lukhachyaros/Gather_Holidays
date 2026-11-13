@@ -9,6 +9,7 @@ on:
       - '.github/workflows/seasonal-validation.yml'
   push:
     branches:
+      - main
       - feature/adaptive-performance-and-retention
 
 jobs:

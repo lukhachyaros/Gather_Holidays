@@ -47,7 +47,7 @@ import {
 export const TILE = 2; // meters per grid tile
 export const WALL_H = 1.6; // parkour-friendly wall height
 
-function buildSeasonalLandmark(type) {
+function buildSeasonalLandmark(type, variant = '') {
   const group = new THREE.Group();
   const addBox = (x, y, z, sx, sy, sz, material) => {
     const mesh = new THREE.Mesh(G.box(), material);
@@ -132,6 +132,24 @@ function buildSeasonalLandmark(type) {
       addCylinder(x, 1.65, z, 0.1, 2.4, cool);
       addCylinder(x, 2.9, z, 0.22, 0.26, warm);
     });
+  } else if (type === 'mansion_key') {
+    const keyColor = variant === 'candle' ? '#fbbf24' : variant === 'bat' ? '#a78bfa' : '#fb7185';
+    const keyMat = mat(keyColor, { emissive: keyColor, emissiveIntensity: 0.85, metalness: 0.55, roughness: 0.25 });
+    const shaft = addCylinder(0, 0.38, 0, 0.09, 0.58, keyMat);
+    shaft.rotation.z = Math.PI / 2;
+    addCylinder(0.36, 0.38, 0, 0.2, 0.12, keyMat);
+    addBox(-0.32, 0.2, 0, 0.16, 0.22, 0.12, keyMat);
+    addBox(-0.08, 0.2, 0, 0.14, 0.22, 0.12, keyMat);
+    const gem = addBox(0, 0.78, 0, 0.22, 0.22, 0.22, warm);
+    gem.rotation.y = Math.PI / 4;
+  } else if (type === 'photo_collectible') {
+    const colors = { rose_locket: '#fb7185', star_charm: '#facc15', moon_crystal: '#a5b4fc', heart_ribbon: '#f472b6' };
+    const color = colors[variant] || '#f9a8d4';
+    const crystal = mat(color, { emissive: color, emissiveIntensity: 0.9, metalness: 0.35, roughness: 0.22 });
+    const core = addBox(0, 0.48, 0, 0.42, 0.42, 0.22, crystal);
+    core.rotation.y = Math.PI / 4;
+    addCylinder(0, 0.86, 0, 0.16, 0.1, warm);
+    addBox(0, 0.16, 0, 0.5, 0.08, 0.5, pink);
   }
   group.traverse(object => { if (object.isMesh) object.frustumCulled = true; });
   return group;
@@ -269,7 +287,7 @@ export class World {
   syncSeasonalEventVisuals(events, themeKey) {
     const contributors = themeKey === 'christmas' ? events?.christmas?.tree?.contributors || [] : [];
     const count = Math.min(24, contributors.length);
-    const key = themeKey + ':' + count;
+    const key = themeKey + ':' + contributors.slice(0, 24).map(item => item?.decorationType || 'bell').join(',');
     if (key === this.seasonalVisualKey) return;
     this.seasonalVisualKey = key;
 
@@ -288,17 +306,18 @@ export class World {
     });
     const bulbs = new THREE.InstancedMesh(geometry, material, count);
     const transform = new THREE.Object3D();
-    const palette = ['#fbbf24', '#fb7185', '#38bdf8', '#a3e635', '#c084fc', '#f8fafc'];
+    const palette = { star: '#fbbf24', bell: '#38bdf8', ribbon: '#f472b6' };
     for (let i = 0; i < count; i++) {
       const tier = Math.floor(i / 8);
       const slot = i % 8;
       const angle = (slot / 8) * Math.PI * 2 + tier * 0.27;
       const radius = 0.42 + tier * 0.07;
+      const decorationType = contributors[i]?.decorationType || 'bell';
       transform.position.set(Math.cos(angle) * radius, 0.72 + tier * 0.54 + (slot % 2) * 0.14, Math.sin(angle) * radius);
-      transform.scale.setScalar(0.88 + (slot % 3) * 0.12);
+      transform.scale.setScalar((decorationType === 'star' ? 1.22 : decorationType === 'ribbon' ? 0.92 : 1) * (0.88 + (slot % 3) * 0.12));
       transform.updateMatrix();
       bulbs.setMatrixAt(i, transform.matrix);
-      bulbs.setColorAt(i, new THREE.Color(palette[i % palette.length]));
+      bulbs.setColorAt(i, new THREE.Color(palette[decorationType] || palette.bell));
     }
     bulbs.instanceMatrix.needsUpdate = true;
     if (bulbs.instanceColor) bulbs.instanceColor.needsUpdate = true;
@@ -378,9 +397,9 @@ export class World {
     this.scene.fog = new THREE.Fog(bg, key === 'tet' ? 38 : 34, key === 'tet' ? 120 : 92);
     this.hemi.color.set(key === 'halloween' ? '#a78bfa' : key === 'tet' ? '#fde68a' : key === 'valentine' ? '#fbcfe8' : '#e0f2fe');
     this.hemi.groundColor.set(key === 'tet' ? '#070617' : dark ? '#1e1b2e' : '#8a7f70');
-    this.hemi.intensity = key === 'halloween' ? 0.72 : key === 'tet' ? 0.9 : key === 'valentine' ? 0.88 : 0.92;
+    this.hemi.intensity = key === 'halloween' ? 0.72 : key === 'tet' ? 1.02 : key === 'valentine' ? 0.88 : 0.92;
     this.sun.color.set(key === 'halloween' ? '#c4b5fd' : key === 'tet' ? '#fef08a' : key === 'valentine' ? '#fecdd3' : '#fff1d6');
-    this.sun.intensity = key === 'halloween' ? 0.68 : key === 'tet' ? 0.98 : key === 'valentine' ? 0.96 : 1.15;
+    this.sun.intensity = key === 'halloween' ? 0.68 : key === 'tet' ? 1.08 : key === 'valentine' ? 0.96 : 1.15;
     this.dayHemiIntensity = this.hemi.intensity;
     this.daySunIntensity = this.sun.intensity;
     this.dayFogColor = bg.clone();
@@ -401,14 +420,14 @@ export class World {
       const moonMat = new THREE.MeshStandardMaterial({
         color: 0xfffbeb,
         emissive: 0xfef08a,
-        emissiveIntensity: 2.2,
-        roughness: 0.2,
+        emissiveIntensity: 2.5,
+        roughness: 0.18,
       });
-      const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(4.0, 32, 32), moonMat);
+      const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(4.0, 48, 48), moonMat);
       moonGroup.add(moonMesh);
 
       // Warm Moon Light
-      const moonLight = new THREE.PointLight(0xfef08a, 2.8, 85);
+      const moonLight = new THREE.PointLight(0xfef08a, 3.1, 100);
       moonGroup.add(moonLight);
       this.nightSkyGroup.add(moonGroup);
 
@@ -740,8 +759,8 @@ export class World {
         pub.position.set(h.x * TILE, 0, h.y * TILE);
         addMapModel(h.type, pub);
         this.casinoObjs.push(pub);
-      } else if (['community_tree', 'sled_race', 'haunted_mansion', 'costume_runway', 'photo_hunt', 'photo_spot', 'dance_stage'].includes(h.type)) {
-        const landmark = buildSeasonalLandmark(h.type);
+      } else if (['community_tree', 'sled_race', 'haunted_mansion', 'costume_runway', 'photo_hunt', 'photo_spot', 'dance_stage', 'mansion_key', 'photo_collectible'].includes(h.type)) {
+        const landmark = buildSeasonalLandmark(h.type, h.keyId || h.itemId || '');
         landmark.position.set(h.x * TILE, 0, h.y * TILE);
         this.group.add(landmark);
         if (h.type === 'community_tree') this.communityTreeGroup = landmark;
