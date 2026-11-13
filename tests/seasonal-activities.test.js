@@ -9,10 +9,35 @@ function room(theme) {
 
 test('community tree contributions are unique per player', () => {
   const state = room('christmas');
-  const op = { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute' };
+  const op = { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: 'star' } };
   assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), false);
   assert.equal(state.seasonalEvents.christmas.tree.contributors.length, 1);
+});
+
+test('community tree requires a balanced set of three decoration types', () => {
+  const state = room('christmas');
+  for (const type of ['star', 'bell', 'ribbon']) {
+    for (let i = 0; i < 8; i++) {
+      assert.equal(applySeasonalEventOperation(
+        state,
+        { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: type } },
+        type + i,
+        'Người chơi ' + i
+      ), true);
+    }
+    assert.equal(applySeasonalEventOperation(
+      state,
+      { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: type } },
+      'extra-' + type,
+      'Người chơi thêm'
+    ), false);
+  }
+  assert.equal(state.seasonalEvents.christmas.tree.contributors.length, 24);
+  assert.deepEqual(
+    ['star', 'bell', 'ribbon'].map(type => state.seasonalEvents.christmas.tree.contributors.filter(item => item.decorationType === type).length),
+    [8, 8, 8]
+  );
 });
 
 test('sled leaderboard ranks 8 gates, shortcuts and collisions safely', () => {
