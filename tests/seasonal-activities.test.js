@@ -58,10 +58,13 @@ test('dance scores are bounded and only improve', () => {
 test('legacy seasonal room maps expand without losing existing tiles', () => {
   for (const theme of ['christmas', 'halloween', 'valentine']) {
     const modern = buildThemeMap(theme);
+    const legacyRows = modern.rows.slice(0, 22).map(row => row.slice(0, 29) + '#');
+    legacyRows[0] = '#'.repeat(30);
+    legacyRows[21] = '#'.repeat(30);
     const legacy = {
       w: 30,
       h: 22,
-      rows: modern.rows.slice(0, 22).map(row => row.slice(0, 30)),
+      rows: legacyRows,
       spawn: [13.5, 18.5],
     };
     // Simulate a player-built tile on the original side of the map.
@@ -73,6 +76,13 @@ test('legacy seasonal room maps expand without losing existing tiles', () => {
     assert.equal(migrated.rows[8][8], 'R');
     assert.deepEqual(migrated.spawn, legacy.spawn);
     assert.equal(migrated.rows[11][29], 'P');
+    assert.equal(migrated.rows[12][29], 'P');
+    assert.equal(migrated.rows[21].slice(0, 30), '#'.repeat(30));
+    if (theme === 'halloween' || theme === 'valentine') assert.equal(migrated.rows[18][29], 'P');
+    if (theme === 'valentine') {
+      assert.equal(migrated.rows[14][29], 'P');
+      assert.equal(migrated.rows[15][29], 'P');
+    }
   }
   const tet = buildThemeMap('tet');
   assert.equal(migrateLegacyThemeMap(tet, 'tet'), tet);
