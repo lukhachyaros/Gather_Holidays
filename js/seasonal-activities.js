@@ -55,10 +55,14 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
   const data = isObject(op.data) ? op.data : {};
 
   if (op.season === 'christmas' && op.action === 'tree_contribute') {
+    const decorationType = String(data.decorationType || 'bell');
+    if (!['star', 'bell', 'ribbon'].includes(decorationType)) return false;
     if (!isObject(season.tree)) season.tree = {};
     const contributors = ensureList(season.tree, 'contributors');
-    if (contributors.length >= 100 || findRecord(contributors, id)) return false;
-    contributors.push({ id, name, at: Date.now() });
+    if (contributors.length >= 24 || findRecord(contributors, id)) return false;
+    const typeCount = contributors.filter(item => item?.decorationType === decorationType).length;
+    if (typeCount >= 8) return false;
+    contributors.push({ id, name, decorationType, at: Date.now() });
     return true;
   }
 
@@ -467,22 +471,37 @@ export class SeasonalActivities {
   renderTree() {
     const contributors = this.stateBucket('christmas', 'tree', 'contributors');
     const mine = this.myRecord(contributors);
-    const target = 24;
-    const progress = Math.min(100, Math.round((contributors.length / target) * 100));
-    this.paragraph('Mỗi người có thể đóng góp một vật liệu trang trí. Khi cộng đồng đạt 24 lượt đóng góp, cây thông sẽ hoàn thành mục tiêu sự kiện.');
+    const types = [
+      { id: 'star', label: '🌟 Ngôi sao', hint: 'Ánh sáng trên đỉnh cây' },
+      { id: 'bell', label: '🔔 Chuông', hint: 'Âm thanh mùa lễ hội' },
+      { id: 'ribbon', label: '🎀 Ruy băng', hint: 'Dải màu quấn quanh cành' },
+    ];
+    const counts = Object.fromEntries(types.map(type => [type.id, contributors.filter(item => item?.decorationType === type.id).length]));
+    const total = contributors.length;
+    const complete = types.every(type => counts[type.id] >= 8);
+    const progress = Math.min(100, Math.round(total / 24 * 100));
+    this.paragraph('Đây là nhiệm vụ phối hợp: cả phòng cần trang trí đủ 8 ngôi sao, 8 chuông và 8 dải ruy băng. Mỗi người chỉ được góp một món. Khi một loại đã đủ, hãy chọn loại còn thiếu để hoàn thiện cây.');
     const meter = this.el('div', null, 'seasonal-progress');
     const fill = this.el('div', null, 'seasonal-progress-fill');
     fill.style.width = progress + '%';
     meter.appendChild(fill);
     this.body.appendChild(meter);
-    this.body.appendChild(this.el('p', contributors.length + ' / ' + target + ' vật liệu · ' + progress + '%', 'seasonal-stat'));
-    const action = this.button(mine ? '✓ Bạn đã đóng góp' : '🎁 Góp một vật liệu', 'tree-contribute');
-    action.disabled = !!mine;
-    this.body.appendChild(action);
+    this.body.appendChild(this.el('p', total + ' / 24 món trang trí · ' + progress + '%', 'seasonal-stat'));
+    const options = this.el('div', null, 'seasonal-actions seasonal-tree-options');
+    types.forEach(type => {
+      const button = this.button(type.label + ' · ' + counts[type.id] + '/8', 'tree-contribute', { decorationType: type.id }, 'seasonal-button seasonal-primary');
+      button.title = type.hint;
+      button.disabled = !!mine || counts[type.id] >= 8 || complete;
+      options.appendChild(button);
+    });
+    this.body.appendChild(options);
+    if (mine) this.body.appendChild(this.el('p', '✓ Bạn đã góp ' + (types.find(type => type.id === mine.decorationType)?.label || 'một món trang trí') + '. Cảm ơn bạn!', 'seasonal-result'));
+    if (complete) this.body.appendChild(this.el('p', '🎄 Cây thông đã hoàn thành! Cả phòng đã phối hợp đủ ba loại trang trí.', 'seasonal-result'));
     this.heading('Người tham gia');
     const list = this.el('div', null, 'seasonal-list');
-    contributors.slice(-8).reverse().forEach(item => list.appendChild(this.el('div', '🎄 ' + item.name, 'seasonal-list-item')));
-    if (!contributors.length) list.appendChild(this.el('div', 'Chưa có đóng góp nào. Hãy là người đầu tiên!', 'seasonal-empty'));
+    const icons = { star: '🌟', bell: '🔔', ribbon: '🎀' };
+    contributors.slice(-12).reverse().forEach(item => list.appendChild(this.el('div', (icons[item.decorationType] || '🎄') + ' ' + item.name, 'seasonal-list-item')));
+    if (!contributors.length) list.appendChild(this.el('div', 'Cây đang chờ những món trang trí đầu tiên.', 'seasonal-empty'));
     this.body.appendChild(list);
   }
 
@@ -864,8 +883,8 @@ export class SeasonalActivities {
   handleAction(action, data) {
     if (action === 'close') return this.close();
     if (action === 'tree-contribute') {
-      this.submit('tree_contribute');
-      this.toast?.('🎁 Đã gửi đóng góp cho cây thông cộng đồng!');
+      this.submit('tree_contribute', { decorationType: data.decorationType });
+      this.toast?.('🎁 Đã gửi món trang trí cho cây thông cộng đồng!');
     } else if (action === 'race-start') this.startRace();
     else if (action === 'race-choice') this.chooseRace(data.lane);
     else if (action === 'mansion-choice') this.chooseMansion(data.symbol);
