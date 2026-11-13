@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS } from '../js/seasonal-activities.js';
+import { applySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS } from '../js/seasonal-activities.js';
 import { buildThemeMap, getThemeFeatures, validMap, migrateLegacyThemeMap } from '../js/maps.js';
 
 function room(theme) {
@@ -15,19 +15,29 @@ test('community tree contributions are unique per player', () => {
   assert.equal(state.seasonalEvents.christmas.tree.contributors.length, 1);
 });
 
-test('sled leaderboard keeps a player best result and validates bounds', () => {
+test('sled leaderboard ranks 8 gates, shortcuts and collisions safely', () => {
   const state = room('christmas');
   const base = { k: 'seasonal_event', season: 'christmas', action: 'sled_record' };
-  assert.equal(applySeasonalEventOperation(state, { ...base, data: { timeMs: 18000, gatesHit: 5 } }, 'p1', 'An'), true);
-  assert.equal(applySeasonalEventOperation(state, { ...base, data: { timeMs: 19000, gatesHit: 5 } }, 'p1', 'An'), false);
-  assert.equal(applySeasonalEventOperation(state, { ...base, data: { timeMs: 15000, gatesHit: 5 } }, 'p1', 'An'), true);
-  assert.equal(applySeasonalEventOperation(state, { ...base, data: { timeMs: 10, gatesHit: 6 } }, 'p2', 'Bình'), false);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { timeMs: 18000, gatesHit: 7, shortcuts: 2, collisions: 1 } }, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { timeMs: 19000, gatesHit: 7, shortcuts: 2, collisions: 1 } }, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { timeMs: 15000, gatesHit: 8, shortcuts: 1, collisions: 0 } }, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { timeMs: 12000, gatesHit: 7, shortcuts: 2, collisions: 0 } }, 'p2', 'Bình'), false);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { timeMs: 12000, gatesHit: 9, shortcuts: 1, collisions: 0 } }, 'p3', 'Chi'), false);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { timeMs: 12000, gatesHit: 8, shortcuts: 9, collisions: 0 } }, 'p4', 'Dung'), false);
   assert.equal(state.seasonalEvents.christmas.sled.records[0].timeMs, 15000);
 });
 
-test('mansion clear is unique and votes cannot target self or repeat', () => {
+test('mansion requires all three hidden keys before unlocking; votes cannot repeat', () => {
   const state = room('halloween');
-  assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'halloween', action: 'mansion_clear' }, 'p1', 'An'), true);
+  const unlock = { k: 'seasonal_event', season: 'halloween', action: 'mansion_clear' };
+  assert.equal(applySeasonalEventOperation(state, unlock, 'p1', 'An'), false);
+  assert.deepEqual(MANSION_KEY_IDS, ['candle', 'bat', 'pumpkin']);
+  for (const keyId of MANSION_KEY_IDS) {
+    assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'halloween', action: 'mansion_key', data: { keyId } }, 'p1', 'An'), true);
+  }
+  assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'halloween', action: 'mansion_key', data: { keyId: 'candle' } }, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(state, unlock, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(state, unlock, 'p1', 'An'), false);
   const entry = { k: 'seasonal_event', season: 'halloween', action: 'costume_entry', data: { costumeKey: 'witch' } };
   assert.equal(applySeasonalEventOperation(state, entry, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, entry, 'p2', 'Bình'), true);
@@ -44,6 +54,16 @@ test('photo hunt accepts only known spots and deduplicates them', () => {
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { spotId: PHOTO_SPOT_IDS[0] } }, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { spotId: PHOTO_SPOT_IDS[0] } }, 'p1', 'An'), false);
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { spotId: 'not-a-spot' } }, 'p1', 'An'), false);
+});
+
+test('photo hunt tracks hidden keepsakes separately from photo spots', () => {
+  const state = room('valentine');
+  assert.equal(PHOTO_ITEM_IDS.length, 4);
+  const base = { k: 'seasonal_event', season: 'valentine', action: 'photo_item' };
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { itemId: PHOTO_ITEM_IDS[0] } }, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { itemId: PHOTO_ITEM_IDS[0] } }, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { itemId: 'fake_item' } }, 'p1', 'An'), false);
+  assert.deepEqual(state.seasonalEvents.valentine.photos.players[0].items, [PHOTO_ITEM_IDS[0]]);
 });
 
 test('dance scores are bounded and only improve', () => {
@@ -101,4 +121,6 @@ test('seasonal map expansions leave Tet layout unchanged', () => {
   assert.equal(getThemeFeatures('christmas').hotspots.some(item => item.type === 'sled_race'), true);
   assert.equal(getThemeFeatures('halloween').hotspots.some(item => item.type === 'haunted_mansion'), true);
   assert.equal(getThemeFeatures('valentine').hotspots.filter(item => item.type === 'photo_spot').length, 4);
+  assert.equal(getThemeFeatures('halloween').hotspots.filter(item => item.type === 'mansion_key').length, 3);
+  assert.equal(getThemeFeatures('valentine').hotspots.filter(item => item.type === 'photo_collectible').length, 4);
 });
