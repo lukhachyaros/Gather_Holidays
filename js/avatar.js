@@ -7,6 +7,10 @@ import { getFaceCanvasTexture } from './avatar_customizer.js';
 const HEIGHT = 1.72;
 const _headPos = new THREE.Vector3();
 const clothingMapMaterials = new Map();
+const SKIRT_GEOMETRIES = {
+  flared: new THREE.CylinderGeometry(0.22, 0.40, 0.38, 16, 1, false),
+  party: new THREE.CylinderGeometry(0.24, 0.43, 0.46, 18, 1, false),
+};
 export const loadCharacter = async () => true;
 
 function clothingMapMaterial(key, map, roughness) {
@@ -703,14 +707,14 @@ export class Avatar {
     this.torso = new THREE.Group();
     this.hips.add(this.torso);
 
-    this.shirtMesh = part(this.torso, G.box(), mat('#3b82f6'), [0, 0.28, 0], [0.46, 0.54, 0.25]);
-    this.pelvisMesh = part(this.hips, G.box(), mat('#2b3a4a'), [0, -0.04, 0], [0.44, 0.16, 0.24]);
+    this.shirtMesh = part(this.torso, G.sph(), mat('#3b82f6'), [0, 0.28, 0], [0.48, 0.55, 0.28]);
+    this.pelvisMesh = part(this.hips, G.sph(), mat('#2b3a4a'), [0, -0.04, 0], [0.40, 0.16, 0.23]);
 
     // Classic 2D T-Shirt Decal Mount on Chest
     const tDecalGeo = new THREE.PlaneGeometry(0.24, 0.24);
-    const tDecalMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.99, side: THREE.DoubleSide });
+    const tDecalMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.99, side: THREE.DoubleSide, depthTest: false, depthWrite: false });
     this.tshirtDecal = new THREE.Mesh(tDecalGeo, tDecalMat);
-    this.tshirtDecal.position.set(0, 0.28, 0.128);
+    this.tshirtDecal.position.set(0, 0.28, 0.29);
     this.tshirtDecal.visible = false;
     this.torso.add(this.tshirtDecal);
 
@@ -741,20 +745,21 @@ export class Avatar {
 
     // Face / Head (supports classic boxy or sphere)
     this.headMesh = part(this.headGroup, G.sph(), mat('#ffdbb5'), [0, 0.2, 0], [0.42, 0.44, 0.42]);
+    this.neckMesh = part(this.torso, G.cyl(), mat('#ffdbb5'), [0, 0.55, 0], [0.13, 0.16, 0.13]);
     // Eyes
-    this.leftEye = part(this.headGroup, G.sph(), mat('#111827'), [-0.085, 0.22, 0.19], [0.055, 0.065, 0.04]);
-    this.rightEye = part(this.headGroup, G.sph(), mat('#111827'), [0.085, 0.22, 0.19], [0.055, 0.065, 0.04]);
+    this.leftEye = part(this.headGroup, G.sph(), mat('#111827'), [-0.085, 0.22, 0.405], [0.05, 0.06, 0.035]);
+    this.rightEye = part(this.headGroup, G.sph(), mat('#111827'), [0.085, 0.22, 0.405], [0.05, 0.06, 0.035]);
     // Blush cheeks
-    this.blushLeft = part(this.headGroup, G.sph(), mat('#ff8fa3'), [-0.13, 0.16, 0.18], [0.055, 0.035, 0.03]);
-    this.blushRight = part(this.headGroup, G.sph(), mat('#ff8fa3'), [0.13, 0.16, 0.18], [0.055, 0.035, 0.03]);
+    this.blushLeft = part(this.headGroup, G.sph(), mat('#ff8fa3'), [-0.13, 0.16, 0.405], [0.05, 0.03, 0.025]);
+    this.blushRight = part(this.headGroup, G.sph(), mat('#ff8fa3'), [0.13, 0.16, 0.405], [0.05, 0.03, 0.025]);
     // Smile mouth
-    this.mouthMesh = part(this.headGroup, G.box(), mat('#7f1d1d'), [0, 0.12, 0.2], [0.09, 0.025, 0.03]);
+    this.mouthMesh = part(this.headGroup, G.box(), mat('#7f1d1d'), [0, 0.12, 0.405], [0.09, 0.025, 0.025]);
 
     // 2D Classic Face Decal Plane
     const faceDecalGeo = new THREE.PlaneGeometry(0.38, 0.38);
-    const faceDecalMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false });
+    const faceDecalMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthTest: false });
     this.faceDecalMesh = new THREE.Mesh(faceDecalGeo, faceDecalMat);
-    this.faceDecalMesh.position.set(0, 0.2, 0.222);
+    this.faceDecalMesh.position.set(0, 0.2, 0.43);
     this.faceDecalMesh.visible = false;
     this.headGroup.add(this.faceDecalMesh);
     this.leftCheek = this.blushLeft;
@@ -783,16 +788,16 @@ export class Avatar {
     this.leftArm = new THREE.Group();
     this.leftArm.position.set(-0.3, 0.48, 0);
     this.torso.add(this.leftArm);
-    this.leftSleeve = part(this.leftArm, G.cyl(), mat('#3b82f6'), [0, -0.13, 0], [0.14, 0.28, 0.14]);
-    this.leftForearm = part(this.leftArm, G.cyl(), mat('#ffdbb5'), [0, -0.34, 0], [0.12, 0.24, 0.12]);
+    this.leftSleeve = part(this.leftArm, G.sph(), mat('#3b82f6'), [0, -0.13, 0], [0.145, 0.17, 0.145]);
+    this.leftForearm = part(this.leftArm, G.sph(), mat('#ffdbb5'), [0, -0.34, 0], [0.12, 0.18, 0.12]);
     this.leftHand = part(this.leftArm, G.sph(), mat('#ffdbb5'), [0, -0.48, 0], [0.14, 0.14, 0.14]);
 
     // Right Arm (Shoulder pivot at [0.3, 0.48, 0])
     this.rightArm = new THREE.Group();
     this.rightArm.position.set(0.3, 0.48, 0);
     this.torso.add(this.rightArm);
-    this.rightSleeve = part(this.rightArm, G.cyl(), mat('#3b82f6'), [0, -0.13, 0], [0.14, 0.28, 0.14]);
-    this.rightForearm = part(this.rightArm, G.cyl(), mat('#ffdbb5'), [0, -0.34, 0], [0.12, 0.24, 0.12]);
+    this.rightSleeve = part(this.rightArm, G.sph(), mat('#3b82f6'), [0, -0.13, 0], [0.145, 0.17, 0.145]);
+    this.rightForearm = part(this.rightArm, G.sph(), mat('#ffdbb5'), [0, -0.34, 0], [0.12, 0.18, 0.12]);
     this.rightHand = part(this.rightArm, G.sph(), mat('#ffdbb5'), [0, -0.48, 0], [0.14, 0.14, 0.14]);
 
     // Held Item Mount on Right Hand
@@ -810,14 +815,14 @@ export class Avatar {
     this.leftLeg.position.set(-0.13, -0.08, 0);
     this.hips.add(this.leftLeg);
     this.leftThigh = part(this.leftLeg, G.cyl(), mat('#2b3a4a'), [0, -0.28, 0], [0.16, 0.56, 0.16]);
-    this.leftShoe = part(this.leftLeg, G.box(), mat('#1f242d'), [0, -0.62, 0.04], [0.17, 0.14, 0.26]);
+    this.leftShoe = part(this.leftLeg, G.sph(), mat('#1f242d'), [0, -0.62, 0.05], [0.18, 0.12, 0.28]);
 
     // Right Leg (Hip pivot at [0.13, -0.08, 0])
     this.rightLeg = new THREE.Group();
     this.rightLeg.position.set(0.13, -0.08, 0);
     this.hips.add(this.rightLeg);
     this.rightThigh = part(this.rightLeg, G.cyl(), mat('#2b3a4a'), [0, -0.28, 0], [0.16, 0.56, 0.16]);
-    this.rightShoe = part(this.rightLeg, G.box(), mat('#1f242d'), [0, -0.62, 0.04], [0.17, 0.14, 0.26]);
+    this.rightShoe = part(this.rightLeg, G.sph(), mat('#1f242d'), [0, -0.62, 0.05], [0.18, 0.12, 0.28]);
 
     // Layered 3D Clothing Containers (scaled automatically with body bones)
     this.layeredClothing = {
@@ -1307,22 +1312,24 @@ export class Avatar {
     // 2. Head Shape
     const hShape = cfg.headShape || 'classic_round';
     if (hShape === 'classic_block') {
-      this.headMesh.geometry = G.box();
-      this.headMesh.scale.set(0.42, 0.44, 0.42);
-      if (this.faceDecalMesh) this.faceDecalMesh.position.z = 0.215;
+      // Keep the classic silhouette, but soften the geometry so faces and hair
+      // do not intersect sharp corners when the head is resized.
+      this.headMesh.geometry = G.sph();
+      this.headMesh.scale.set(0.46, 0.44, 0.43);
+      if (this.faceDecalMesh) this.faceDecalMesh.position.z = 0.44;
     } else if (hShape === 'dynamic_head') {
       this.headMesh.geometry = G.cyl();
       this.headMesh.scale.set(0.38, 0.44, 0.38);
-      if (this.faceDecalMesh) this.faceDecalMesh.position.z = 0.222;
+      if (this.faceDecalMesh) this.faceDecalMesh.position.z = 0.39;
     } else if (hShape === 'chibi_head') {
       this.headMesh.geometry = G.sph();
       this.headMesh.scale.set(0.50, 0.48, 0.48);
-      if (this.faceDecalMesh) this.faceDecalMesh.position.z = 0.245;
+      if (this.faceDecalMesh) this.faceDecalMesh.position.z = 0.49;
     } else {
       // classic_round
       this.headMesh.geometry = G.sph();
       this.headMesh.scale.set(0.42, 0.44, 0.42);
-      if (this.faceDecalMesh) this.faceDecalMesh.position.z = 0.222;
+      if (this.faceDecalMesh) this.faceDecalMesh.position.z = 0.43;
     }
 
     // 3. Face Decal vs Default Eyes/Mouth
@@ -1425,6 +1432,12 @@ export class Avatar {
       hdScale *= 1.4;
     }
 
+    // Preset multipliers and saved sliders must not create proportions that
+    // make layers intersect or detach from their pivots.
+    hScale = Math.min(1.30, Math.max(0.72, hScale));
+    wScale = Math.min(1.30, Math.max(0.78, wScale));
+    hdScale = Math.min(1.28, Math.max(0.78, hdScale));
+
     this.body.scale.set(wScale, hScale, wScale);
     this.headGroup.scale.set(hdScale / wScale, hdScale / hScale, hdScale / wScale);
 
@@ -1473,50 +1486,50 @@ export class Avatar {
     const sleeveColor = jacketSleeveColors[lc.jacket] || sweaterSleeveColors[lc.sweater];
     if (sleeveColor) {
       const sleeveMat = mat(sleeveColor, { roughness: 0.72 });
-      part(this.layeredClothing.leftArm, G.cyl(), sleeveMat, [0, -0.15, 0], [0.17, 0.34, 0.17]);
-      part(this.layeredClothing.rightArm, G.cyl(), sleeveMat, [0, -0.15, 0], [0.17, 0.34, 0.17]);
+      part(this.layeredClothing.leftArm, G.sph(), sleeveMat, [0, -0.15, 0], [0.17, 0.19, 0.17]);
+      part(this.layeredClothing.rightArm, G.sph(), sleeveMat, [0, -0.15, 0], [0.17, 0.19, 0.17]);
     }
 
     if (lc.jacket && lc.jacket !== 'none') {
       if (lc.jacket === 'bomber_jacket') {
         const jMat = mat('#1e293b', { roughness: 0.4 });
-        part(jacketLayer, G.box(), jMat, [0, 0.28, 0], [0.5, 0.56, 0.28]);
-        part(jacketLayer, G.box(), mat('#ea580c'), [0, 0.48, 0.08], [0.24, 0.1, 0.14]);
+        part(jacketLayer, G.sph(), jMat, [0, 0.28, 0], [0.51, 0.57, 0.30]);
+        part(jacketLayer, G.box(), mat('#ea580c'), [0, 0.48, 0.30], [0.24, 0.1, 0.025]);
       } else if (lc.jacket === 'trench_coat') {
         const coatMat = mat('#78350f', { roughness: 0.7 });
-        part(jacketLayer, G.box(), coatMat, [0, 0.28, 0], [0.5, 0.56, 0.28]);
+        part(jacketLayer, G.sph(), coatMat, [0, 0.28, 0], [0.51, 0.57, 0.30]);
         part(jacketLayer, G.box(), coatMat, [0, -0.22, 0], [0.52, 0.48, 0.3]);
-        part(jacketLayer, G.box(), coatMat, [-0.15, 0.52, 0.08], [0.14, 0.14, 0.14], [0, 0, 0.3]);
-        part(jacketLayer, G.box(), coatMat, [0.15, 0.52, 0.08], [0.14, 0.14, 0.14], [0, 0, -0.3]);
+        part(jacketLayer, G.box(), coatMat, [-0.15, 0.52, 0.30], [0.14, 0.14, 0.025], [0, 0, 0.3]);
+        part(jacketLayer, G.box(), coatMat, [0.15, 0.52, 0.30], [0.14, 0.14, 0.025], [0, 0, -0.3]);
       } else if (lc.jacket === 'leather_jacket') {
         const lMat = mat('#0f172a', { roughness: 0.25, metalness: 0.15 });
-        part(jacketLayer, G.box(), lMat, [0, 0.28, 0], [0.49, 0.56, 0.27]);
-        part(jacketLayer, G.box(), mat('#cbd5e1', { metalness: 0.8 }), [0.03, 0.28, 0.14], [0.02, 0.54, 0.02]);
-        part(jacketLayer, G.sph(), mat('#cbd5e1', { metalness: 0.8 }), [-0.12, 0.48, 0.14], [0.03, 0.03, 0.03]);
-        part(jacketLayer, G.sph(), mat('#cbd5e1', { metalness: 0.8 }), [0.12, 0.48, 0.14], [0.03, 0.03, 0.03]);
+        part(jacketLayer, G.sph(), lMat, [0, 0.28, 0], [0.50, 0.57, 0.30]);
+        part(jacketLayer, G.box(), mat('#cbd5e1', { metalness: 0.8 }), [0.03, 0.28, 0.30], [0.02, 0.42, 0.02]);
+        part(jacketLayer, G.sph(), mat('#cbd5e1', { metalness: 0.8 }), [-0.12, 0.48, 0.30], [0.03, 0.03, 0.03]);
+        part(jacketLayer, G.sph(), mat('#cbd5e1', { metalness: 0.8 }), [0.12, 0.48, 0.30], [0.03, 0.03, 0.03]);
       } else if (lc.jacket === 'varsity_jacket') {
         const vBody = mat('#b91c1c');
         const vSleeve = mat('#f8fafc');
-        part(jacketLayer, G.box(), vBody, [0, 0.28, 0], [0.5, 0.56, 0.28]);
+        part(jacketLayer, G.sph(), vBody, [0, 0.28, 0], [0.51, 0.57, 0.30]);
         part(jacketLayer, G.box(), vSleeve, [0, 0.02, 0], [0.48, 0.05, 0.27]);
-        part(jacketLayer, G.box(), vSleeve, [-0.14, 0.38, 0.145], [0.08, 0.08, 0.02]);
+        part(jacketLayer, G.box(), vSleeve, [-0.14, 0.38, 0.30], [0.08, 0.08, 0.02]);
       }
     }
 
     if (lc.sweater && lc.sweater !== 'none') {
       if (lc.sweater === 'cozy_hoodie') {
         const hMat = mat('#334155');
-        part(sweaterLayer, G.box(), hMat, [0, 0.28, 0], [0.48, 0.55, 0.27]);
+        part(sweaterLayer, G.sph(), hMat, [0, 0.28, 0], [0.49, 0.56, 0.29]);
         part(sweaterLayer, G.sph(), hMat, [0, 0.54, -0.14], [0.3, 0.2, 0.18], [-0.3, 0, 0]);
-        part(sweaterLayer, G.box(), mat('#1e293b'), [0, 0.14, 0.14], [0.32, 0.16, 0.04]);
+        part(sweaterLayer, G.box(), mat('#1e293b'), [0, 0.14, 0.30], [0.32, 0.16, 0.025]);
       } else if (lc.sweater === 'xmas_sweater') {
         const xMat = mat('#047857');
-        part(sweaterLayer, G.box(), xMat, [0, 0.28, 0], [0.48, 0.55, 0.27]);
-        part(sweaterLayer, G.box(), mat('#dc2626'), [0, 0.32, 0], [0.49, 0.14, 0.28]);
-        part(sweaterLayer, G.box(), mat('#ffffff'), [0, 0.32, 0.145], [0.16, 0.1, 0.02]);
+        part(sweaterLayer, G.sph(), xMat, [0, 0.28, 0], [0.49, 0.56, 0.29]);
+        part(sweaterLayer, G.box(), mat('#dc2626'), [0, 0.32, 0.30], [0.49, 0.14, 0.02]);
+        part(sweaterLayer, G.box(), mat('#ffffff'), [0, 0.32, 0.32], [0.16, 0.1, 0.02]);
       } else if (lc.sweater === 'turtleneck') {
         const tMat = mat('#18181b');
-        part(sweaterLayer, G.box(), tMat, [0, 0.28, 0], [0.47, 0.55, 0.26]);
+        part(sweaterLayer, G.sph(), tMat, [0, 0.28, 0], [0.49, 0.56, 0.29]);
         part(sweaterLayer, G.cyl(), tMat, [0, 0.58, 0], [0.26, 0.16, 0.24]);
       }
     }
@@ -1524,11 +1537,11 @@ export class Avatar {
     if (lc.dressSkirt && lc.dressSkirt !== 'none') {
       if (lc.dressSkirt === 'flared_skirt') {
         const skirtMat = mat('#db2777');
-        part(this.layeredLegsClothingGroup, G.cone(), skirtMat, [0, -0.16, 0], [0.42, 0.38, 0.36], [Math.PI, 0, 0]);
+        part(this.layeredLegsClothingGroup, SKIRT_GEOMETRIES.flared, skirtMat, [0, -0.20, 0]);
       } else if (lc.dressSkirt === 'party_dress') {
         const dressMat = mat('#7c3aed');
-        part(dressLayer, G.box(), dressMat, [0, 0.24, 0], [0.48, 0.48, 0.26]);
-        part(this.layeredLegsClothingGroup, G.cone(), dressMat, [0, -0.22, 0], [0.46, 0.52, 0.4], [Math.PI, 0, 0]);
+        part(dressLayer, G.sph(), dressMat, [0, 0.24, 0], [0.49, 0.48, 0.28]);
+        part(this.layeredLegsClothingGroup, SKIRT_GEOMETRIES.party, dressMat, [0, -0.22, 0]);
       }
     }
 
