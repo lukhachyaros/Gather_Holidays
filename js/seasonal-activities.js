@@ -4,6 +4,9 @@ export const PHOTO_SPOT_IDS = ['snow_globe', 'rose_gate', 'moon_bridge', 'lanter
 export const PHOTO_ITEM_IDS = ['rose_locket', 'star_charm', 'moon_crystal', 'heart_ribbon'];
 export const MANSION_KEY_IDS = ['candle', 'bat', 'pumpkin'];
 export const MANSION_RIDDLE_SEQUENCE = ['moon', 'flame', 'star'];
+export function canApplySeasonalEventOperation(isRoomHost, senderId, hostId) {
+  return Boolean(hostId && (isRoomHost || senderId === hostId));
+}
 const DANCE_MOVES = ['left', 'right', 'up', 'down'];
 const COSTUME_KEYS = ['default', 'frankenstein', 'zombie', 'vampire', 'witch', 'skeleton'];
 const PHOTO_SPOTS = [

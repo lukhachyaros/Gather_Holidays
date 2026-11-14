@@ -1,11 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_RIDDLE_SEQUENCE } from '../js/seasonal-activities.js';
+import { applySeasonalEventOperation, canApplySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_RIDDLE_SEQUENCE } from '../js/seasonal-activities.js';
 import { buildThemeMap, getThemeFeatures, validMap, migrateLegacyThemeMap } from '../js/maps.js';
 
 function room(theme) {
   return { theme, kickedIds: [], seasonalEvents: createSeasonalEventsState() };
 }
+
+test('seasonal shared progress is reduced by the room host, while guests only accept host operations', () => {
+  assert.equal(canApplySeasonalEventOperation(true, 'guest-a', 'host-a'), true);
+  assert.equal(canApplySeasonalEventOperation(false, 'host-a', 'host-a'), true);
+  assert.equal(canApplySeasonalEventOperation(false, 'guest-a', 'host-a'), false);
+  assert.equal(canApplySeasonalEventOperation(true, 'guest-a', ''), false);
+});
 
 test('community tree contributions are unique per player', () => {
   const state = room('christmas');

@@ -43,7 +43,7 @@ import {
   getBgmVolume,
 } from './audio.js';
 import { MinigameManager, DRAGON_SKINS, FLIGHT_QUESTS } from './minigames.js';
-import { SeasonalActivities } from './seasonal-activities.js?v=20261113seasonal3';
+import { SeasonalActivities, canApplySeasonalEventOperation } from './seasonal-activities.js?v=20261113seasonal3';
 import {
   initCasino,
   openRoulette,
@@ -2483,7 +2483,7 @@ function applyOp(op, senderId = null) {
       // The room host owns shared seasonal progress. Guests submit operations
       // to the host and only apply the canonical snapshot it broadcasts back.
       // The reducer still validates every operation before it changes state.
-      if (!state?.hostId || (!isHost() && senderId !== state.hostId)) return;
+      if (!canApplySeasonalEventOperation(isHost(), senderId, state?.hostId)) return;
       const changed = seasonalActivities?.applyOperation(op, senderId);
       if (changed) world?.syncSeasonalEventVisuals(state.seasonalEvents, state.theme);
       break;
