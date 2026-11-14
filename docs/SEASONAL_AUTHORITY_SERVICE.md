@@ -12,6 +12,8 @@ npm run start:authority
 
 Set `PORT`, `GH_AUTHORITY_DATA`, and `GH_AUTHORITY_ORIGIN` for deployment. `GH_AUTHORITY_ORIGIN` should be the exact game origin when exposed to browsers. The default data file is `data/rooms.json`; it is intentionally ignored by Git because it contains live room records and token hashes.
 
+For a container host, deploy with `docker compose -f docker-compose.authority.yml up -d --build`. The named volume keeps room snapshots across container replacement.
+
 ## API
 
 `GET /health` returns service health and room count.
