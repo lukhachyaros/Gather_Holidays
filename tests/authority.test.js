@@ -108,6 +108,26 @@ test('costume runway rounds require the room host, two entries and one timed vot
   assert.equal(applyAuthoritativeEvent(room, host, event('costume_vote', { targetId: 'guest-1' }), round.endAt, at(30, 10.5, round.endAt)), false);
 });
 
+test('haunted mansion clues require all keys and a nearby physical clue hotspot', () => {
+  const room = { theme: 'halloween', roomId: 'halloween-room', seasonalEvents: {}, events: [], seq: 0 };
+  const user = { id: 'player-mansion', name: 'Explorer' };
+  const event = (action, data = {}) => ({ k: 'seasonal_event', season: 'halloween', action, data });
+  const keys = [
+    ['candle', 28.7, 17.2],
+    ['bat', 32.1, 17.4],
+    ['pumpkin', 32.1, 20.3],
+  ];
+  let now = 1000;
+  for (const [keyId, x, y] of keys) {
+    assert.equal(applyAuthoritativeEvent(room, user, event('mansion_key', { keyId }), now, at(x, y, now)), true);
+    now += 1000;
+  }
+  assert.equal(applyAuthoritativeEvent(room, user, event('mansion_clue', { clueId: 'library_note' }), now, at(8, 8, now)), false);
+  assert.equal(applyAuthoritativeEvent(room, user, event('mansion_clue', { clueId: 'forged_clue' }), now, at(29.2, 18.9, now)), false);
+  assert.equal(applyAuthoritativeEvent(room, user, event('mansion_clue', { clueId: 'library_note' }), now, at(29.2, 18.9, now)), true);
+  assert.equal(applyAuthoritativeEvent(room, user, event('mansion_clue', { clueId: 'library_note' }), now + 1000, at(29.2, 18.9, now + 1000)), false);
+});
+
 test('Tet fireworks launch from server-known stations with server seed and per-player cooldown', () => {
   const room = { theme: 'tet', roomId: 'tet-room', seasonalEvents: {}, events: [], seq: 0 };
   const user = { id: 'player-tet', name: 'Xuân' };
