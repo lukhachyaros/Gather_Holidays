@@ -8,7 +8,7 @@
 // ============================================================================
 
 import * as THREE from 'three';
-import { Avatar } from './avatar.js';
+import { Avatar } from './avatar.js?v=20261114avatarfit1';
 
 export const AVATAR_CUSTOM_STORAGE_KEY = 'gh_avatar_customization';
 
@@ -109,7 +109,7 @@ export const HAIR_COLORS = [
 
 export const HEAD_SHAPES = [
   { id: 'classic_round', name: 'Đầu Tròn Mịn', desc: 'Đầu tròn bo góc hiện đại dễ thương', icon: '👤' },
-  { id: 'classic_block', name: 'Đầu Khối Classic', desc: 'Đầu hộp vuông phong cách Roblox cổ điển', icon: '🟩' },
+  { id: 'classic_block', name: 'Đầu Khối Bo Mềm', desc: 'Dáng chibi đầy đặn, bo tròn để tóc và khuôn mặt không bị cấn', icon: '🟩' },
   { id: 'dynamic_head', name: 'Đầu Động Anime', desc: 'Đầu cằm V-line cách điệu Manga', icon: '✨' },
   { id: 'chibi_head', name: 'Đầu To Chibi', desc: 'Tỷ lệ đầu to ngộ nghĩnh cực kỳ đáng yêu', icon: '👶' },
 ];
@@ -877,20 +877,18 @@ export function initAvatarStudioScene(canvas) {
 
 export function updatePreviewAvatar(cfg) {
   if (!previewScene) return;
-  if (previewAvatar) {
-    previewScene.remove(previewAvatar.root);
+  if (!previewAvatar) {
+    previewAvatar = new Avatar(null, {
+      name: 'Preview',
+      hue: 200,
+    });
+    if (previewAvatar.label) previewAvatar.label.visible = false;
+    previewScene.add(previewAvatar.root);
   }
-
-  previewAvatar = new Avatar(null, {
-    name: 'Preview',
-    hue: 200,
-  });
-  if (previewAvatar.label) previewAvatar.label.visible = false;
 
   previewAvatar.applyCustomization(cfg);
   previewAvatar.root.position.set(0, 0, 0);
   previewAvatar.root.rotation.y = avatarRotY;
-  previewScene.add(previewAvatar.root);
   fitPreviewCamera();
 }
 

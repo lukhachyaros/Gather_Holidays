@@ -234,6 +234,16 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
   const extraProps = [];
 
   if (themeKey === 'christmas') {
+    [
+      ['gift_snow_cabin', 4.6, 8.4, '🎁 Hộp quà dưới mái hiên'],
+      ['gift_frozen_bridge', 26.1, 8.2, '🎁 Hộp quà bên cầu tuyết'],
+      ['gift_cocoa_corner', 8.0, 18.5, '🎁 Hộp quà gần lửa trại'],
+      ['gift_pine_lane', 21.2, 18.7, '✨ Quà vàng trong lối thông'],
+      ['gift_sleigh_depot', 33.2, 8.8, '💎 Quà hiếm gần bến xe trượt'],
+    ].forEach(([giftId, x, y, label]) => hotspots.push({
+      id: giftId, type: 'christmas_gift', giftId, x, y, radius: 1.1,
+      prompt: `${label} · [E] Tìm và cất vào bộ sưu tập`,
+    }));
     hotspots.push({ id: 'community_tree', type: 'community_tree', x: 14.5, y: 15.3, radius: 1.8, prompt: '🎄 Cây Thông Cộng Đồng · [E] Đóng góp vật liệu trang trí' });
     hotspots.push({ id: 'sled_race', type: 'sled_race', x: 31, y: 11.5, radius: 2.6, prompt: '🛷 Đường Đua Tuyết · [E] Tham gia đua xe trượt tuyết' });
     colliders.push({ x: 14.5, y: 15.3, r: 0.42 });
@@ -360,6 +370,16 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       }
     );
   } else if (themeKey === 'halloween') {
+    [
+      ['relic_graveyard', 4.8, 8.2, '🪙 Đồng xu nghĩa địa'],
+      ['relic_haunted_well', 25.8, 8.0, '🧪 Bình sương ma'],
+      ['relic_cemetery_gate', 4.4, 18.6, '🦇 Bùa dơi cổ'],
+      ['relic_witch_garden', 22.3, 18.4, '💀 Đầu lâu pha lê'],
+      ['relic_clocktower', 33.1, 8.4, '🕯️ Đèn lồng linh hồn'],
+    ].forEach(([treasureId, x, y, label]) => hotspots.push({
+      id: treasureId, type: 'halloween_treasure', treasureId, x, y, radius: 1.1,
+      prompt: `${label} · [E] Khám phá kho báu`,
+    }));
     hotspots.push({ id: 'costume_runway', type: 'costume_runway', x: 30, y: 10.5, radius: 2.1, prompt: '🎭 Sàn Diễn Hóa Trang · [E] Trình diễn và bình chọn' });
     hotspots.push({ id: 'haunted_mansion', type: 'haunted_mansion', x: 30, y: 18.5, radius: 2.1, prompt: '🏚️ Dinh Thự Bí Ẩn · [E] Giải đố mở phòng bí mật' });
     [
@@ -469,6 +489,14 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       }
     );
   } else if (themeKey === 'tet') {
+    [
+      ['tet_explore_gate', 4.6, 8.3], ['tet_explore_lantern', 26.2, 8.1],
+      ['tet_explore_market', 4.5, 18.6], ['tet_explore_boat', 22.1, 19.0],
+      ['tet_explore_scroll', 26.3, 18.2],
+    ].forEach(([itemId, x, y]) => hotspots.push({
+      id: itemId, type: 'tet_exploration_item', itemId, x, y, radius: 1.1,
+      prompt: '🧧 Dấu Ấn Du Xuân · [E] Khám phá và lưu vào hành trình',
+    }));
     // Centerpiece: Giant Golden Apricot Blossom Tree (Cây Mai Đại Thụ)
     hotspots.push({
       id: 'mai_tree',

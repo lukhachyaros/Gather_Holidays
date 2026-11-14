@@ -1,0 +1,15 @@
+services:
+  seasonal-authority:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: 8787
+      GH_AUTHORITY_DATA: /data/rooms.json
+      GH_AUTHORITY_ORIGIN: ${GH_AUTHORITY_ORIGIN:-https://lukhachyaros.github.io}
+    volumes:
+      - seasonal-authority-data:/data
+
+volumes:
+  seasonal-authority-data:

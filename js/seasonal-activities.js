@@ -4,7 +4,22 @@ export const PHOTO_SPOT_IDS = ['snow_globe', 'rose_gate', 'moon_bridge', 'lanter
 export const PHOTO_ITEM_IDS = ['rose_locket', 'star_charm', 'moon_crystal', 'heart_ribbon'];
 export const MANSION_KEY_IDS = ['candle', 'bat', 'pumpkin'];
 export const MANSION_RIDDLE_SEQUENCE = ['moon', 'flame', 'star'];
+export const CHRISTMAS_GIFT_IDS = ['gift_snow_cabin', 'gift_frozen_bridge', 'gift_cocoa_corner', 'gift_pine_lane', 'gift_sleigh_depot'];
+export const HALLOWEEN_TREASURE_IDS = ['relic_graveyard', 'relic_haunted_well', 'relic_cemetery_gate', 'relic_witch_garden', 'relic_clocktower'];
+export const TET_EXPLORATION_IDS = ['tet_explore_gate', 'tet_explore_lantern', 'tet_explore_market', 'tet_explore_boat', 'tet_explore_scroll'];
+export function getCommunityTreeStage(contributionCount) {
+  const count = Math.max(0, Math.min(24, Math.floor(Number(contributionCount) || 0)));
+  return Math.min(5, 1 + Math.floor(count / 6));
+}
+export function canApplySeasonalEventOperation(isRoomHost, senderId, hostId) {
+  return Boolean(hostId && (isRoomHost || senderId === hostId));
+}
 const DANCE_MOVES = ['left', 'right', 'up', 'down'];
+const DANCE_MODES = [
+  { id: 'rhythm', label: '🥁 Bắt nhịp', detail: 'Nhấn đúng hướng theo nhịp nhạc.' },
+  { id: 'memory', label: '🧠 Ghi nhớ', detail: 'Xem chuỗi động tác rồi lặp lại khi ký hiệu biến mất.' },
+  { id: 'copy', label: '🪞 Bắt chước', detail: 'Bắt chước chuỗi động tác đang hiện trên sàn.' },
+];
 const COSTUME_KEYS = ['default', 'frankenstein', 'zombie', 'vampire', 'witch', 'skeleton'];
 const PHOTO_SPOTS = [
   { id: 'snow_globe', name: 'Cổng Ánh Sao', icon: '✨' },
@@ -35,9 +50,10 @@ const findRecord = (list, id) => list.find(item => item && item.id === id);
 
 export function createSeasonalEventsState() {
   return {
-    christmas: { tree: { contributors: [] }, sled: { records: [] } },
-    halloween: { mansion: { players: [], solved: [] }, costume: { entries: [], votes: [] } },
+    christmas: { tree: { contributors: [] }, inventory: { players: [] }, sled: { records: [] }, gifts: { players: [] } },
+    halloween: { mansion: { players: [], solved: [] }, costume: { entries: [], votes: [] }, treasure: { players: [] } },
     valentine: { photos: { players: [] }, dance: { records: [] } },
+    tet: { exploration: { players: [] } },
   };
 }
 
@@ -54,15 +70,93 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
   const season = root[op.season];
   const data = isObject(op.data) ? op.data : {};
 
+  if (op.season === 'christmas' && op.action === 'gift_collect') {
+    const giftId = String(data.giftId || '');
+    if (!CHRISTMAS_GIFT_IDS.includes(giftId)) return false;
+    if (!isObject(season.gifts)) season.gifts = {};
+    const players = ensureList(season.gifts, 'players');
+    let player = findRecord(players, id);
+    if (!player) {
+      if (players.length >= 100) return false;
+      player = { id, name, gifts: [] };
+      players.push(player);
+    }
+    if (!Array.isArray(player.gifts)) player.gifts = [];
+    if (player.gifts.includes(giftId)) return false;
+    player.name = name;
+    player.gifts.push(giftId);
+    return true;
+  }
+
+  if (op.season === 'halloween' && op.action === 'treasure_collect') {
+    const treasureId = String(data.treasureId || '');
+    if (!HALLOWEEN_TREASURE_IDS.includes(treasureId)) return false;
+    if (!isObject(season.treasure)) season.treasure = {};
+    const players = ensureList(season.treasure, 'players');
+    let player = findRecord(players, id);
+    if (!player) {
+      if (players.length >= 100) return false;
+      player = { id, name, relics: [] };
+      players.push(player);
+    }
+    if (!Array.isArray(player.relics)) player.relics = [];
+    if (player.relics.includes(treasureId)) return false;
+    player.name = name;
+    player.relics.push(treasureId);
+    return true;
+  }
+
+  if (op.season === 'tet' && op.action === 'exploration_collect') {
+    const itemId = String(data.itemId || '');
+    if (!TET_EXPLORATION_IDS.includes(itemId)) return false;
+    if (!isObject(season.exploration)) season.exploration = {};
+    const players = ensureList(season.exploration, 'players');
+    let player = findRecord(players, id);
+    if (!player) {
+      if (players.length >= 100) return false;
+      player = { id, name, discoveries: [] };
+      players.push(player);
+    }
+    if (!Array.isArray(player.discoveries)) player.discoveries = [];
+    if (player.discoveries.includes(itemId)) return false;
+    player.name = name;
+    player.discoveries.push(itemId);
+    return true;
+  }
+
   if (op.season === 'christmas' && op.action === 'tree_contribute') {
     const decorationType = String(data.decorationType || 'bell');
-    if (!['star', 'bell', 'ribbon'].includes(decorationType)) return false;
+    const ornamentKey = String(data.ornamentKey || '');
+    const ornamentType = { star: 'star', bell: 'bell', cane: 'ribbon' }[ornamentKey];
+    if (!['star', 'bell', 'ribbon'].includes(decorationType) || ornamentType !== decorationType) return false;
     if (!isObject(season.tree)) season.tree = {};
     const contributors = ensureList(season.tree, 'contributors');
     if (contributors.length >= 24 || findRecord(contributors, id)) return false;
     const typeCount = contributors.filter(item => item?.decorationType === decorationType).length;
     if (typeCount >= 8) return false;
-    contributors.push({ id, name, decorationType, at: Date.now() });
+    const inventory = ensureList(season.inventory ||= {}, 'players');
+    const held = findRecord(inventory, id);
+    if (held?.heldKey !== ornamentKey) return false;
+    held.heldKey = null;
+    contributors.push({ id, name, decorationType, ornamentKey, at: Date.now() });
+    return true;
+  }
+
+  if (op.season === 'christmas' && ['ornament_pickup', 'ornament_spend'].includes(op.action)) {
+    const ornamentKey = String(data.ornamentKey || '');
+    if (!['star', 'bell', 'cane', 'ball_red', 'ball_gold', 'ball_blue', 'gift'].includes(ornamentKey)) return false;
+    if (!isObject(season.inventory)) season.inventory = {};
+    const players = ensureList(season.inventory, 'players');
+    let player = findRecord(players, id);
+    if (!player) { if (players.length >= 100) return false; player = { id, name, heldKey: null }; players.push(player); }
+    if (op.action === 'ornament_pickup') {
+      if (player.heldKey) return false;
+      player.heldKey = ornamentKey;
+    } else {
+      if (player.heldKey !== ornamentKey) return false;
+      player.heldKey = null;
+    }
+    player.name = name;
     return true;
   }
 
@@ -191,12 +285,13 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
 
   if (op.season === 'valentine' && op.action === 'dance_record') {
     const score = Number(data.score);
-    if (!Number.isFinite(score) || !Number.isInteger(score) || score < 0 || score > 100) return false;
+    const mode = String(data.mode || 'rhythm');
+    if (!DANCE_MODES.some(item => item.id === mode) || !Number.isFinite(score) || !Number.isInteger(score) || score < 0 || score > 100) return false;
     if (!isObject(season.dance)) season.dance = {};
     const records = ensureList(season.dance, 'records');
-    const previous = findRecord(records, id);
+    const previous = records.find(item => item?.id === id && (item.mode || 'rhythm') === mode);
     if (previous && score <= previous.score) return false;
-    const next = { id, name, score, at: Date.now() };
+    const next = { id, name, mode, score, at: Date.now() };
     if (previous) Object.assign(previous, next);
     else {
       if (records.length >= 100) return false;
@@ -209,7 +304,7 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
 }
 
 export class SeasonalActivities {
-  constructor({ getState, getSelfId, getPlayerName, emitOp, toast, onCostumeSubmit, onCapturePhoto }) {
+  constructor({ getState, getSelfId, getPlayerName, emitOp, toast, onCostumeSubmit, onCapturePhoto, getHeldItem, consumeHeldItem, getAuthorityEnabled, getServerNow }) {
     this.getState = getState;
     this.getSelfId = getSelfId;
     this.getPlayerName = getPlayerName;
@@ -217,6 +312,10 @@ export class SeasonalActivities {
     this.toast = toast;
     this.onCostumeSubmit = onCostumeSubmit;
     this.onCapturePhoto = onCapturePhoto;
+    this.getHeldItem = getHeldItem || (() => null);
+    this.consumeHeldItem = consumeHeldItem || (() => {});
+    this.getAuthorityEnabled = getAuthorityEnabled || (() => false);
+    this.getServerNow = getServerNow || Date.now;
     this.photoShots = [];
     this.mansionRoomId = '';
     this.theme = null;
@@ -288,7 +387,7 @@ export class SeasonalActivities {
   }
 
   setTheme(theme) {
-    const next = ['christmas', 'halloween', 'valentine'].includes(theme) ? theme : null;
+    const next = ['christmas', 'halloween', 'valentine', 'tet'].includes(theme) ? theme : null;
     if (next !== this.theme) this.close();
     this.theme = next;
     this.refresh();
@@ -296,9 +395,10 @@ export class SeasonalActivities {
 
   open(activity) {
     const valid = {
-      christmas: ['community_tree', 'sled_race'],
-      halloween: ['haunted_mansion', 'costume_runway'],
+      christmas: ['community_tree', 'sled_race', 'gift_hunt'],
+      halloween: ['haunted_mansion', 'costume_runway', 'treasure_hunt'],
       valentine: ['photo_hunt', 'dance_stage'],
+      tet: ['tet_exploration'],
     };
     if (!valid[this.theme]?.includes(activity)) return;
     this.ensureOverlay();
@@ -344,8 +444,7 @@ export class SeasonalActivities {
       this.toast?.('Bạn cần vào phòng trước khi tham gia hoạt động.');
       return false;
     }
-    this.emitOp?.({ k: 'seasonal_event', season: this.theme, action, data });
-    return true;
+    return this.emitOp?.({ k: 'seasonal_event', season: this.theme, action, data }) ?? false;
   }
 
   takePhoto(label = 'Khoảnh khắc lễ hội') {
@@ -423,6 +522,15 @@ export class SeasonalActivities {
     return Array.isArray(value) ? value : [];
   }
 
+  stateValue(season, key, valueName) {
+    return this.getState?.()?.seasonalEvents?.[season]?.[key]?.[valueName] ?? null;
+  }
+
+  serverRace() {
+    const id = this.getSelfId?.();
+    return this.stateBucket('christmas', 'sled', 'runs').find(run => run?.idOwner === id && run.active) || null;
+  }
+
   myRecord(list) {
     const id = this.getSelfId?.();
     return list.find(item => item?.id === id) || null;
@@ -457,6 +565,9 @@ export class SeasonalActivities {
       photo_hunt: '📸 Photo Scavenger Hunt',
       mansion_room: '🚪 Phòng Bí Mật',
       dance_stage: '🎶 Sàn Nhảy Tương Tác',
+      gift_hunt: '🎁 Hành Trình Tìm Quà Noel',
+      treasure_hunt: '🎃 Kho Báu Thị Trấn Ma',
+      tet_exploration: '🧧 Hành Trình Du Xuân',
     };
     this.title.textContent = titles[this.active] || 'Hoạt động lễ hội';
     if (this.active === 'community_tree') this.renderTree();
@@ -466,11 +577,79 @@ export class SeasonalActivities {
     else if (this.active === 'costume_runway') this.renderCostumeRunway();
     else if (this.active === 'photo_hunt') this.renderPhotoHunt();
     else if (this.active === 'dance_stage') this.renderDanceStage();
+    else if (this.active === 'gift_hunt') this.renderCollectibleHunt('christmas', 'gifts');
+    else if (this.active === 'treasure_hunt') this.renderCollectibleHunt('halloween', 'treasure');
+    else if (this.active === 'tet_exploration') this.renderTetExploration();
+  }
+
+  renderCollectibleHunt(season, bucket) {
+    const christmas = season === 'christmas';
+    const items = christmas
+      ? [['gift_snow_cabin', '🎁 Hộp quà dưới mái hiên'], ['gift_frozen_bridge', '🎁 Hộp quà bên cầu tuyết'], ['gift_cocoa_corner', '🎁 Hộp quà gần lửa trại'], ['gift_pine_lane', '✨ Quà vàng trong lối thông'], ['gift_sleigh_depot', '💎 Quà hiếm gần bến xe trượt']]
+      : [['relic_graveyard', '🪙 Đồng xu nghĩa địa'], ['relic_haunted_well', '🧪 Bình sương ma'], ['relic_cemetery_gate', '🦇 Bùa dơi cổ'], ['relic_witch_garden', '💀 Đầu lâu pha lê'], ['relic_clocktower', '🕯️ Đèn lồng linh hồn']];
+    const mine = this.myRecord(this.stateBucket(season, bucket, 'players'));
+    const found = new Set(christmas ? mine?.gifts || [] : mine?.relics || []);
+    this.paragraph(christmas
+      ? 'Khám phá các góc của thị trấn để tìm quà thường, vàng và hiếm. Mỗi món được ghi nhận một lần cho mỗi người chơi.'
+      : 'Lần theo các góc khuất để tìm di vật Halloween. Bộ sưu tập được chia sẻ trong room và không thể nhặt trùng.');
+    this.body.appendChild(this.el('div', found.size + ' / ' + items.length + ' vật phẩm', 'seasonal-stat'));
+    const meter = this.el('div', null, 'seasonal-progress');
+    const fill = this.el('div', null, 'seasonal-progress-fill');
+    fill.style.width = Math.round(found.size / items.length * 100) + '%';
+    meter.appendChild(fill);
+    this.body.appendChild(meter);
+    const list = this.el('div', null, 'seasonal-list');
+    items.forEach(([id, label]) => list.appendChild(this.el('div', (found.has(id) ? '✓ ' : '○ ') + label, 'seasonal-list-item' + (found.has(id) ? ' is-complete' : ''))));
+    this.body.appendChild(list);
+    const people = this.stateBucket(season, bucket, 'players');
+    const completed = people.filter(player => (christmas ? player.gifts : player.relics)?.length === items.length).length;
+    this.body.appendChild(this.el('p', '🏆 ' + completed + ' người đã hoàn thành bộ sưu tập.', 'seasonal-copy'));
+  }
+
+  collectChristmasGift(giftId) {
+    if (this.theme !== 'christmas' || !CHRISTMAS_GIFT_IDS.includes(giftId)) return false;
+    if (this.myRecord(this.stateBucket('christmas', 'gifts', 'players'))?.gifts?.includes(giftId)) return false;
+    return this.submit('gift_collect', { giftId });
+  }
+
+  collectHalloweenTreasure(treasureId) {
+    if (this.theme !== 'halloween' || !HALLOWEEN_TREASURE_IDS.includes(treasureId)) return false;
+    if (this.myRecord(this.stateBucket('halloween', 'treasure', 'players'))?.relics?.includes(treasureId)) return false;
+    return this.submit('treasure_collect', { treasureId });
+  }
+
+  renderTetExploration() {
+    const labels = [
+      ['tet_explore_gate', '🏮 Cổng làng đầu xuân'], ['tet_explore_lantern', '🧧 Dãy đèn lồng may mắn'],
+      ['tet_explore_market', '🌸 Chợ hoa ngày Tết'], ['tet_explore_boat', '🚣 Bến thuyền du xuân'],
+      ['tet_explore_scroll', '📜 Câu đối khai xuân'],
+    ];
+    const mine = this.myRecord(this.stateBucket('tet', 'exploration', 'players'));
+    const found = new Set(mine?.discoveries || []);
+    this.paragraph('Đi bộ qua năm địa danh trong hội xuân. Mỗi dấu ấn mở rộng nhật ký du xuân của bạn và được đồng bộ trong phòng.');
+    this.body.appendChild(this.el('div', found.size + ' / ' + labels.length + ' địa danh đã khám phá', 'seasonal-stat'));
+    const meter = this.el('div', null, 'seasonal-progress');
+    const fill = this.el('div', null, 'seasonal-progress-fill');
+    fill.style.width = Math.round(found.size / labels.length * 100) + '%';
+    meter.appendChild(fill);
+    this.body.appendChild(meter);
+    const list = this.el('div', null, 'seasonal-list');
+    labels.forEach(([id, label]) => list.appendChild(this.el('div', (found.has(id) ? '✓ ' : '○ ') + label, 'seasonal-list-item' + (found.has(id) ? ' is-complete' : ''))));
+    this.body.appendChild(list);
+    if (found.size === labels.length) this.body.appendChild(this.el('p', '🎊 Bạn đã khám phá trọn vẹn hội xuân!', 'seasonal-result'));
+  }
+
+  collectTetDiscovery(itemId) {
+    if (this.theme !== 'tet' || !TET_EXPLORATION_IDS.includes(itemId)) return false;
+    if (this.myRecord(this.stateBucket('tet', 'exploration', 'players'))?.discoveries?.includes(itemId)) return false;
+    return this.submit('exploration_collect', { itemId });
   }
 
   renderTree() {
     const contributors = this.stateBucket('christmas', 'tree', 'contributors');
     const mine = this.myRecord(contributors);
+    const heldItem = this.myRecord(this.stateBucket('christmas', 'inventory', 'players'))?.heldKey || this.getHeldItem?.();
+    const heldType = { star: 'star', bell: 'bell', cane: 'ribbon' }[heldItem] || '';
     const types = [
       { id: 'star', label: '🌟 Ngôi sao', hint: 'Ánh sáng trên đỉnh cây' },
       { id: 'bell', label: '🔔 Chuông', hint: 'Âm thanh mùa lễ hội' },
@@ -478,20 +657,24 @@ export class SeasonalActivities {
     ];
     const counts = Object.fromEntries(types.map(type => [type.id, contributors.filter(item => item?.decorationType === type.id).length]));
     const total = contributors.length;
+    const stage = getCommunityTreeStage(total);
+    const stageNames = ['Cây non', 'Dây đèn', 'Quả châu & ruy băng', 'Ánh sáng lễ hội', 'Cây thông rực rỡ'];
     const complete = types.every(type => counts[type.id] >= 8);
     const progress = Math.min(100, Math.round(total / 24 * 100));
-    this.paragraph('Đây là nhiệm vụ phối hợp: cả phòng cần trang trí đủ 8 ngôi sao, 8 chuông và 8 dải ruy băng. Mỗi người chỉ được góp một món. Khi một loại đã đủ, hãy chọn loại còn thiếu để hoàn thiện cây.');
+    this.paragraph('Lấy một món ở bàn đồ trang trí rồi mang đến cây thông cộng đồng. Cả phòng cần góp đủ 8 ngôi sao, 8 chuông và 8 kẹo gậy (tính như ruy băng). Mỗi người chỉ góp một món; vật phẩm sẽ bị tiêu thụ khi đóng góp.');
+    this.body.appendChild(this.el('div', heldItem ? '🎒 Đang cầm: ' + heldItem : '🎒 Chưa có đồ trang trí · Hãy ghé bàn đồ trang trí', 'seasonal-stat'));
     const meter = this.el('div', null, 'seasonal-progress');
     const fill = this.el('div', null, 'seasonal-progress-fill');
     fill.style.width = progress + '%';
     meter.appendChild(fill);
     this.body.appendChild(meter);
     this.body.appendChild(this.el('p', total + ' / 24 món trang trí · ' + progress + '%', 'seasonal-stat'));
+    this.body.appendChild(this.el('p', 'Giai đoạn ' + stage + ' / 5 · ' + stageNames[stage - 1], 'seasonal-result'));
     const options = this.el('div', null, 'seasonal-actions seasonal-tree-options');
     types.forEach(type => {
       const button = this.button(type.label + ' · ' + counts[type.id] + '/8', 'tree-contribute', { decorationType: type.id }, 'seasonal-button seasonal-primary');
       button.title = type.hint;
-      button.disabled = !!mine || counts[type.id] >= 8 || complete;
+      button.disabled = !!mine || counts[type.id] >= 8 || complete || heldType !== type.id;
       options.appendChild(button);
     });
     this.body.appendChild(options);
@@ -506,6 +689,7 @@ export class SeasonalActivities {
   }
 
   renderSledRace() {
+    if (this.getAuthorityEnabled?.()) this.race = this.serverRace();
     const records = this.stateBucket('christmas', 'sled', 'records').slice()
       .sort((a, b) => (b.gatesHit - a.gatesHit) || ((b.shortcuts || 0) - (a.shortcuts || 0)) ||
         ((a.collisions || 0) - (b.collisions || 0)) || (a.timeMs - b.timeMs));
@@ -518,7 +702,8 @@ export class SeasonalActivities {
       this.raceTimer.appendChild(this.raceTimerFill);
       this.body.appendChild(this.raceTimer);
       this.body.appendChild(this.el('div', '❄️ An toàn · ⚡ Đường tắt · 🪨 Chướng ngại', 'seasonal-race-cue'));
-      const gate = this.race.sequence[this.race.step];
+      const gate = this.race.currentGate || this.race.sequence?.[this.race.step];
+      if (!gate) return;
       const row = this.el('div', null, 'seasonal-track-grid');
       [
         { id: 'left', label: 'TRÁI' },
@@ -546,6 +731,16 @@ export class SeasonalActivities {
   }
 
   startRace() {
+    if (this.getAuthorityEnabled?.()) {
+      const result = this.submit('sled_start');
+      if (result?.then) result.then(accepted => {
+        if (!accepted) return;
+        this.race = this.serverRace();
+        this.render();
+        if (this.race) this.tickRace();
+      });
+      return;
+    }
     if (this.raceFrame) cancelAnimationFrame(this.raceFrame);
     const lanes = ['left', 'center', 'right'];
     const sequence = Array.from({ length: 8 }, () => {
@@ -567,6 +762,19 @@ export class SeasonalActivities {
 
   tickRace() {
     if (!this.race) return;
+    if (this.getAuthorityEnabled?.()) {
+      this.race = this.serverRace();
+      if (!this.race) { this.raceFrame = 0; this.refresh(); return; }
+      const now = this.getServerNow();
+      const untilStart = this.race.startAt - now;
+      const remaining = this.race.startAt + (this.race.step + 1) * 1450 - now;
+      if (this.racePrompt) this.racePrompt.textContent = untilStart > 0
+        ? 'CHUẨN BỊ XUẤT PHÁT · ' + (untilStart / 1000).toFixed(1) + ' giây'
+        : 'CỔNG ' + Math.min(8, this.race.step + 1) + ' / 8 · ' + Math.max(0, remaining / 1000).toFixed(1) + ' giây';
+      if (this.raceTimerFill) this.raceTimerFill.style.width = untilStart > 0 ? '100%' : Math.max(0, Math.min(100, remaining / 1450 * 100)) + '%';
+      this.raceFrame = requestAnimationFrame(() => this.tickRace());
+      return;
+    }
     const remaining = this.race.gateDurationMs - (performance.now() - this.race.gateStartedAt);
     if (remaining <= 0) {
       this.race.collisions++;
@@ -581,6 +789,16 @@ export class SeasonalActivities {
 
   chooseRace(lane) {
     if (!this.race || !['left', 'center', 'right'].includes(lane)) return false;
+    if (this.getAuthorityEnabled?.()) {
+      const result = this.submit('sled_checkpoint', { runId: this.race.id, lane });
+      if (result?.then) result.then(accepted => {
+        if (!accepted) return;
+        this.race = this.serverRace();
+        this.render();
+        if (this.race) this.tickRace();
+      });
+      return true;
+    }
     if (performance.now() - this.race.gateStartedAt > this.race.gateDurationMs) return false;
     const gate = this.race.sequence[this.race.step];
     if (lane === gate.obstacleLane) {
@@ -715,12 +933,17 @@ export class SeasonalActivities {
   }
 
   renderCostumeRunway() {
-    const entries = this.stateBucket('halloween', 'costume', 'entries');
-    const votes = this.stateBucket('halloween', 'costume', 'votes');
+    const round = this.stateValue('halloween', 'costume', 'round');
+    const allEntries = this.stateBucket('halloween', 'costume', 'entries');
+    const entries = round?.participantIds ? allEntries.filter(entry => round.participantIds.includes(entry.id)) : allEntries;
+    const allVotes = this.stateBucket('halloween', 'costume', 'votes');
+    const votes = this.getAuthorityEnabled?.() && round ? allVotes.filter(vote => vote.roundId === round.id) : allVotes;
     const id = this.getSelfId?.();
     const mine = this.myRecord(entries);
     const myVote = this.myRecord(votes);
-    this.paragraph('Chọn một bộ trang phục, bước lên sân khấu và gửi bài dự thi. Mỗi người có một phiếu bình chọn; không thể tự bình chọn cho mình.');
+    this.paragraph(this.getAuthorityEnabled?.()
+      ? 'Đăng ký trang phục trước khi chủ phòng mở phiên. Khi sân khấu bắt đầu, khán giả có 45 giây để bỏ một phiếu; server khóa phiếu khi hết giờ.'
+      : 'Chọn một bộ trang phục, bước lên sân khấu và gửi bài dự thi. Mỗi người có một phiếu bình chọn; không thể tự bình chọn cho mình.');
     const label = this.el('label', 'Trang phục dự thi', 'seasonal-label');
     const select = this.el('select', null, 'seasonal-select');
     COSTUMES.forEach(item => {
@@ -732,8 +955,20 @@ export class SeasonalActivities {
     label.appendChild(select);
     this.body.appendChild(label);
     const submit = this.button(mine ? '↻ Cập nhật trang phục' : '✨ Gửi bài dự thi', 'costume-submit');
+    if (this.getAuthorityEnabled?.() && round && round.status !== 'complete') submit.disabled = true;
     this.body.appendChild(submit);
     this.body.appendChild(this.el('p', entries.length + ' bài dự thi · ' + votes.length + ' lượt bình chọn', 'seasonal-stat'));
+    if (this.getAuthorityEnabled?.()) {
+      if (round?.status === 'ready') this.body.appendChild(this.el('p', '⏳ Sân khấu mở sau ' + Math.ceil(round.remainingMs / 1000) + ' giây.', 'seasonal-result'));
+      else if (round?.status === 'voting') this.body.appendChild(this.el('p', '🗳️ Đang bình chọn · còn ' + Math.ceil(round.remainingMs / 1000) + ' giây.', 'seasonal-result'));
+      else if (round?.status === 'complete') this.body.appendChild(this.el('p', '🏆 Phiên đã kết thúc. Có thể đăng ký lượt tiếp theo.', 'seasonal-result'));
+      if (!round || round.status === 'complete') {
+        const start = this.button('🎬 Mở phiên bình chọn · Chủ phòng', 'costume-round-start', {}, 'seasonal-button seasonal-primary');
+        start.disabled = entries.length < 2;
+        start.title = entries.length < 2 ? 'Cần ít nhất hai bài dự thi.' : '';
+        this.body.appendChild(start);
+      }
+    }
     this.body.appendChild(this.button('📸 Chụp ảnh trên sàn diễn', 'costume-photo', {}, 'seasonal-button seasonal-primary'));
     this.heading('Sân khấu & bình chọn');
     const list = this.el('div', null, 'seasonal-list');
@@ -742,7 +977,11 @@ export class SeasonalActivities {
       card.appendChild(this.el('div', entry.name + ' · ' + (COSTUMES.find(item => item.key === entry.costumeKey)?.label || entry.costumeKey), 'seasonal-list-item'));
       const count = votes.filter(vote => vote.targetId === entry.id).length;
       card.appendChild(this.el('span', '⭐ ' + count + ' phiếu', 'seasonal-vote-count'));
-      if (entry.id !== id && !myVote) card.appendChild(this.button('Bình chọn', 'costume-vote', { targetId: entry.id }, 'seasonal-button seasonal-small'));
+      if (entry.id !== id && !myVote) {
+        const vote = this.button('Bình chọn', 'costume-vote', { targetId: entry.id }, 'seasonal-button seasonal-small');
+        if (this.getAuthorityEnabled?.() && round?.status !== 'voting') vote.disabled = true;
+        card.appendChild(vote);
+      }
       list.appendChild(card);
     });
     if (!entries.length) list.appendChild(this.el('div', 'Chưa có bài dự thi. Hãy mở màn lễ hội!', 'seasonal-empty'));
@@ -793,6 +1032,7 @@ export class SeasonalActivities {
   }
 
   renderDanceStage() {
+    if (this.getAuthorityEnabled?.()) this.dance = this.serverDance();
     const records = this.stateBucket('valentine', 'dance', 'records').slice().sort((a, b) => b.score - a.score);
     const roomScore = records.reduce((sum, record) => sum + (Number(record.score) || 0), 0);
     this.paragraph('Bắt chước 8 động tác theo nhịp: trái, phải, lên hoặc xuống. Chọn đúng hướng và đúng thời điểm để ghi điểm. Tổng điểm tốt nhất của mọi người tạo thành thử thách cộng đồng của căn phòng.');
@@ -810,55 +1050,119 @@ export class SeasonalActivities {
       this.body.appendChild(moves);
     } else {
       if (this.lastDanceScore !== null) this.body.appendChild(this.el('p', '🎶 Lượt vừa rồi: ' + this.lastDanceScore + '/100 điểm.', 'seasonal-result'));
-      this.body.appendChild(this.button('▶ Bắt đầu nhảy', 'dance-start', {}, 'seasonal-button seasonal-primary'));
+      DANCE_MODES.forEach(mode => {
+        const card = this.el('div', null, 'seasonal-dance-mode');
+        card.append(this.el('strong', mode.label), this.el('span', mode.detail));
+        card.appendChild(this.button('▶ Chơi chế độ này', 'dance-start', { mode: mode.id }, 'seasonal-button seasonal-primary'));
+        this.body.appendChild(card);
+      });
     }
     this.heading('Bảng điểm vũ đạo');
     const list = this.el('div', null, 'seasonal-list');
-    records.slice(0, 8).forEach((record, index) => list.appendChild(this.el('div', (index + 1) + '. ' + record.name + ' · ' + record.score + '/100', 'seasonal-list-item')));
+    records.slice(0, 8).forEach((record, index) => {
+      const modeName = DANCE_MODES.find(mode => mode.id === (record.mode || 'rhythm'))?.label || 'Bắt nhịp';
+      list.appendChild(this.el('div', (index + 1) + '. ' + record.name + ' · ' + modeName + ' · ' + record.score + '/100', 'seasonal-list-item'));
+    });
     if (!records.length) list.appendChild(this.el('div', 'Chưa có điểm vũ đạo nào.', 'seasonal-empty'));
     this.body.appendChild(list);
   }
 
-  startDance() {
+  startDance(mode = 'rhythm') {
     this.stopDance();
-    const sequence = Array.from({ length: 8 }, () => DANCE_MOVES[Math.floor(Math.random() * DANCE_MOVES.length)]);
-    this.dance = { sequence, startAt: performance.now() + 1500, hits: new Set(), score: 0, correct: 0 };
+    if (!DANCE_MODES.some(item => item.id === mode)) mode = 'rhythm';
+    if (this.getAuthorityEnabled?.()) {
+      this.danceMode = mode;
+      const result = this.submit('dance_start', { mode });
+      if (result?.then) result.then(accepted => {
+        if (!accepted) return;
+        this.dance = this.serverDance();
+        this.render();
+        if (this.dance) this.tickDance();
+      });
+      return;
+    }
+    this.danceMode = mode;
+    const sequence = Array.from({ length: mode === 'memory' ? 5 : 8 }, () => DANCE_MOVES[Math.floor(Math.random() * DANCE_MOVES.length)]);
+    const playbackMs = mode === 'memory' ? sequence.length * 520 : 0;
+    this.dance = { mode, sequence, playbackMs, startAt: performance.now() + 1200, hits: new Set(), score: 0, correct: 0, timingPenalty: 0 };
     this.render();
     this.tickDance();
   }
 
   tickDance() {
     if (!this.dance) return;
+    if (this.getAuthorityEnabled?.()) {
+      const run = this.serverDance();
+      if (!run) {
+        this.dance = null;
+        this.danceFrame = 0;
+        this.refresh();
+        return;
+      }
+      this.dance = run;
+      const symbols = { left: '⬅️', right: '➡️', up: '⬆️', down: '⬇️' };
+      const now = this.getServerNow();
+      if (this.dancePrompt) this.dancePrompt.textContent = now < run.startAt
+        ? 'CHUẨN BỊ… ' + Math.ceil((run.startAt - now) / 500)
+        : run.mode === 'memory' && now < run.inputStartAt
+          ? 'GHI NHỚ CHUỖI · ' + (run.previewCue ? 'LÀM THEO MŨI TÊN' : 'CHUẨN BỊ')
+          : (run.mode === 'rhythm' ? 'NHỊP ' : run.mode === 'memory' ? 'LẶP LẠI ' : 'BẮT CHƯỚC ') + Math.min(run.length, run.step + 1) + ' / ' + run.length;
+      if (this.danceCue) this.danceCue.textContent = symbols[run.previewCue || run.currentCue] || '❔';
+      if (this.danceScoreLabel) this.danceScoreLabel.textContent = 'Điểm: ' + run.score + ' / 100 · Đúng: ' + run.correct + '/' + run.length;
+      this.danceFrame = requestAnimationFrame(() => this.tickDance());
+      return;
+    }
     const elapsed = performance.now() - this.dance.startAt;
-    if (elapsed >= 8 * 650) {
+    const tempoMs = this.dance.mode === 'copy' ? 820 : 650;
+    const inputStart = this.dance.playbackMs;
+    if (elapsed >= inputStart + this.dance.sequence.length * tempoMs) {
       this.finishDance();
       return;
     }
-    const beat = Math.max(0, Math.min(7, Math.floor(elapsed / 650)));
+    const isMemoryPlayback = this.dance.mode === 'memory' && elapsed < inputStart;
+    const beat = Math.max(0, Math.min(this.dance.sequence.length - 1, Math.floor((elapsed - inputStart) / tempoMs)));
     const symbols = { left: '⬅️', right: '➡️', up: '⬆️', down: '⬇️' };
     if (this.dancePrompt) {
       if (elapsed < 0) this.dancePrompt.textContent = 'Chuẩn bị… ' + Math.ceil(-elapsed / 500);
-      else this.dancePrompt.textContent = 'NHỊP ' + (beat + 1) + ' / 8';
+      else if (isMemoryPlayback) this.dancePrompt.textContent = 'GHI NHỚ CHUỖI · ' + (Math.floor(elapsed / 520) + 1) + ' / ' + this.dance.sequence.length;
+      else this.dancePrompt.textContent = (this.dance.mode === 'rhythm' ? 'NHỊP ' : this.dance.mode === 'memory' ? 'LẶP LẠI ' : 'BẮT CHƯỚC ') + (beat + 1) + ' / ' + this.dance.sequence.length;
     }
-    if (this.danceCue) this.danceCue.textContent = elapsed < 0 ? '🎵' : symbols[this.dance.sequence[beat]];
-    if (this.danceScoreLabel) this.danceScoreLabel.textContent = 'Điểm: ' + this.dance.score + ' / 100 · Đúng: ' + this.dance.correct + '/8';
+    if (this.danceCue) this.danceCue.textContent = elapsed < 0 || (this.dance.mode === 'memory' && !isMemoryPlayback) ? '❔' : symbols[this.dance.sequence[beat]];
+    if (this.danceScoreLabel) this.danceScoreLabel.textContent = 'Điểm: ' + this.dance.score + ' / 100 · Đúng: ' + this.dance.correct + '/' + this.dance.sequence.length;
     this.danceFrame = requestAnimationFrame(() => this.tickDance());
   }
 
   moveDance(direction) {
     if (!this.dance || !DANCE_MOVES.includes(direction)) return;
+    if (this.getAuthorityEnabled?.()) {
+      const result = this.submit('dance_input', { runId: this.dance.id, direction });
+      if (result?.then) result.then(accepted => {
+        if (!accepted) this.toast?.('🎵 Chưa đúng nhịp hoặc lượt đã kết thúc.');
+        this.dance = this.serverDance();
+        if (this.active) { this.render(); if (this.dance) this.tickDance(); }
+      });
+      return;
+    }
     const elapsed = performance.now() - this.dance.startAt;
-    const beat = Math.round(elapsed / 650);
-    if (beat < 0 || beat > 7 || this.dance.hits.has(beat)) return;
-    const delta = Math.abs(elapsed - beat * 650);
-    if (delta > 250) {
+    const tempoMs = this.dance.mode === 'copy' ? 820 : 650;
+    if (this.dance.mode === 'memory' && elapsed < this.dance.playbackMs) {
+      this.toast?.('🧠 Đợi chuỗi kết thúc rồi lặp lại nhé!');
+      return;
+    }
+    const phaseElapsed = elapsed - this.dance.playbackMs;
+    const beat = Math.round(phaseElapsed / tempoMs);
+    if (beat < 0 || beat >= this.dance.sequence.length || this.dance.hits.has(beat)) return;
+    const delta = Math.abs(phaseElapsed - beat * tempoMs);
+    const windowMs = this.dance.mode === 'memory' ? 440 : this.dance.mode === 'copy' ? 300 : 250;
+    if (delta > windowMs) {
       this.toast?.('🎵 Lệch nhịp rồi — chờ động tác tiếp theo nhé!');
       return;
     }
     this.dance.hits.add(beat);
     if (direction === this.dance.sequence[beat]) {
       this.dance.correct++;
-      this.dance.score = Math.min(100, this.dance.score + (delta <= 110 ? 13 : 9));
+      if (delta > 110) this.dance.timingPenalty += 4;
+      this.dance.score = Math.min(100, Math.max(0, Math.round(this.dance.correct * 100 / this.dance.sequence.length) - this.dance.timingPenalty));
     } else this.toast?.('↔️ Sai động tác! Hãy bắt chước mũi tên đang sáng.');
   }
 
@@ -867,8 +1171,14 @@ export class SeasonalActivities {
     const score = Math.min(100, this.dance.score);
     this.stopDance();
     this.lastDanceScore = score;
-    this.submit('dance_record', { score });
+    this.submit('dance_record', { score, mode: this.danceMode || 'rhythm' });
     this.render();
+  }
+
+  serverDance() {
+    const runs = this.stateBucket('valentine', 'dance', 'runs');
+    const run = runs.find(item => item.idOwner === this.getSelfId?.() && item.active);
+    return run ? { ...run, length: run.length || (run.mode === 'memory' ? 5 : 8) } : null;
   }
 
   stopDance() {
@@ -883,8 +1193,13 @@ export class SeasonalActivities {
   handleAction(action, data) {
     if (action === 'close') return this.close();
     if (action === 'tree-contribute') {
-      this.submit('tree_contribute', { decorationType: data.decorationType });
-      this.toast?.('🎁 Đã gửi món trang trí cho cây thông cộng đồng!');
+      const ornamentKey = this.myRecord(this.stateBucket('christmas', 'inventory', 'players'))?.heldKey || this.getHeldItem?.();
+      const expected = { star: 'star', bell: 'bell', cane: 'ribbon' }[ornamentKey];
+      if (!ornamentKey || expected !== data.decorationType) { this.toast?.('🎒 Hãy cầm đúng món trang trí trước khi đóng góp.'); return; }
+      const result = this.submit('tree_contribute', { decorationType: data.decorationType, ornamentKey });
+      if (result?.then) result.then(accepted => { if (accepted) this.consumeHeldItem?.(ornamentKey); }).catch(() => {});
+      else if (result) this.consumeHeldItem?.(ornamentKey);
+      this.toast?.('🎁 Đã gửi yêu cầu đóng góp cho cây thông cộng đồng!');
     } else if (action === 'race-start') this.startRace();
     else if (action === 'race-choice') this.chooseRace(data.lane);
     else if (action === 'mansion-choice') this.chooseMansion(data.symbol);
@@ -894,15 +1209,20 @@ export class SeasonalActivities {
       this.submit('costume_entry', { costumeKey });
       this.toast?.('🎭 Đã đổi trang phục và gửi bài dự thi!');
     } else if (action === 'costume-vote') {
-      this.submit('costume_vote', { targetId: data.targetId });
-      this.toast?.('⭐ Đã gửi bình chọn của bạn!');
+      const result = this.submit('costume_vote', { targetId: data.targetId });
+      if (result?.then) result.then(accepted => this.toast?.(accepted ? '⭐ Đã ghi nhận phiếu bình chọn.' : '⏱️ Phiên chưa mở hoặc đã kết thúc.'));
+      else if (result) this.toast?.('⭐ Đã gửi bình chọn của bạn!');
+      else this.toast?.('⏱️ Phiên chưa mở hoặc bạn đã bình chọn.');
+    } else if (action === 'costume-round-start') {
+      const result = this.submit('costume_round_start');
+      if (result?.then) result.then(accepted => this.toast?.(accepted ? '🎬 Phiên diễn bắt đầu sau 5 giây.' : 'Cần là chủ phòng và có ít nhất hai bài dự thi để mở sân khấu.'));
     } else if (action === 'mansion-symbol') this.chooseMansionSymbol(data.symbol);
     else if (action === 'mansion-room') this.openMansionRoom(data.roomId);
     else if (action === 'mansion-back') {
       this.active = 'haunted_mansion';
       this.render();
     } else if (action === 'costume-photo') this.takePhoto('Sàn diễn hóa trang Halloween');
-    else if (action === 'dance-start') this.startDance();
+    else if (action === 'dance-start') this.startDance(data.mode);
     else if (action === 'dance-move') this.moveDance(data.direction);
   }
 }

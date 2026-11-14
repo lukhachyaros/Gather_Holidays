@@ -1,0 +1,146 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { applyAuthoritativeEvent, createAuthorityServer } from '../server/authority.js';
+
+async function withServer(dataPath, fn) {
+  const server = await createAuthorityServer({ dataPath, allowedOrigin: 'https://game.test' });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try { return await fn(base); } finally { await new Promise(resolve => server.close(resolve)); }
+}
+
+const post = (url, body, token) => fetch(url, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+  body: JSON.stringify(body),
+});
+
+test('sled checkpoint results use server-generated gates and server time, not submitted finish scores', () => {
+  const room = { theme: 'christmas', seasonalEvents: {}, events: [], seq: 0 };
+  const user = { id: 'player-1', name: 'Racer' };
+  const start = { k: 'seasonal_event', season: 'christmas', action: 'sled_start', data: {} };
+  assert.equal(applyAuthoritativeEvent(room, user, start, 1000), true);
+  const run = room.seasonalEvents.christmas.sled.runs[0];
+  assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'sled_record', data: { timeMs: 5000, gatesHit: 8 } }, 2000), false);
+  assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'sled_checkpoint', data: { runId: 'forged', lane: 'left' } }, run.startAt + 100), false);
+  for (let gateIndex = 0; gateIndex < 8; gateIndex++) {
+    const gate = run.sequence[gateIndex];
+    assert.equal(applyAuthoritativeEvent(room, user, {
+      ...start, action: 'sled_checkpoint', data: { runId: run.id, lane: gate.safeLane },
+    }, run.startAt + gateIndex * 1450 + 200), true);
+  }
+  const record = room.seasonalEvents.christmas.sled.records[0];
+  assert.equal(record.gatesHit, 8);
+  assert.equal(record.collisions, 0);
+  assert.equal(record.timeMs, run.startAt + 7 * 1450 + 200 - run.startAt);
+});
+
+test('dance modes score server-validated timed inputs and reject client score submissions', () => {
+  for (const mode of ['rhythm', 'memory', 'copy']) {
+    const room = { theme: 'valentine', seasonalEvents: {}, events: [], seq: 0 };
+    const user = { id: `player-${mode}`, name: 'Dancer' };
+    const start = { k: 'seasonal_event', season: 'valentine', action: 'dance_start', data: { mode } };
+    assert.equal(applyAuthoritativeEvent(room, user, start, 1000), true);
+    const run = room.seasonalEvents.valentine.dance.runs[0];
+    assert.equal('sequence' in run, true, 'the authority retains the input sequence');
+    assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'dance_record', data: { score: 100, mode } }, 1500), false);
+    assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'dance_input', data: { runId: run.id, direction: run.sequence[0] } }, run.inputStartAt - 1), false);
+    const tempo = mode === 'copy' || mode === 'memory' ? (mode === 'copy' ? 820 : 900) : 650;
+    for (let step = 0; step < run.sequence.length; step++) {
+      assert.equal(applyAuthoritativeEvent(room, user, {
+        ...start, action: 'dance_input', data: { runId: run.id, direction: run.sequence[step] },
+      }, run.inputStartAt + step * tempo + 100), true);
+    }
+    assert.equal(run.active, false);
+    assert.equal(run.score, 100);
+    assert.deepEqual(room.seasonalEvents.valentine.dance.records[0], {
+      id: user.id, name: user.name, mode, score: 100, correct: run.sequence.length, at: run.finishedAt,
+    });
+    assert.equal(applyAuthoritativeEvent(room, user, {
+      ...start, action: 'dance_input', data: { runId: run.id, direction: 'left' },
+    }, run.finishedAt + 100), false);
+  }
+});
+
+test('costume runway rounds require the room host, two entries and one timed vote per player', () => {
+  const room = { theme: 'halloween', hostId: 'host-1', seasonalEvents: {}, events: [], seq: 0 };
+  const host = { id: 'host-1', name: 'Host' };
+  const guest = { id: 'guest-1', name: 'Guest' };
+  const event = (action, data = {}) => ({ k: 'seasonal_event', season: 'halloween', action, data });
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_entry', { costumeKey: 'vampire' }), 1000), true);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_round_start'), 1100), false);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_entry', { costumeKey: 'witch' }), 1200), true);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_round_start'), 1300), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_round_start'), 1400), true);
+  const round = room.seasonalEvents.halloween.costume.round;
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt - 1), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_vote', { targetId: 'host-1' }), round.startAt + 100), false);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt + 100), true);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt + 200), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_entry', { costumeKey: 'zombie' }), round.startAt + 300), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_vote', { targetId: 'guest-1' }), round.endAt), false);
+});
+
+test('authority validates member events and restores saved progress after restart', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'gh-authority-'));
+  const dataPath = join(directory, 'rooms.json');
+  try {
+    let hostToken;
+    let guestToken;
+    await withServer(dataPath, async base => {
+      const created = await post(`${base}/v1/rooms`, { roomId: 'winter-room', theme: 'christmas', name: 'Host' });
+      assert.equal(created.status, 201);
+      const host = await created.json();
+      hostToken = host.token;
+      const joinedResponse = await post(`${base}/v1/rooms/winter-room/join`, { name: 'Guest' });
+      const guest = await joinedResponse.json();
+      guestToken = guest.token;
+      const valid = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'gift_collect', data: { giftId: 'gift_snow_cabin' } } }, guestToken);
+      assert.equal(valid.status, 200);
+      const duplicate = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'gift_collect', data: { giftId: 'gift_snow_cabin' } } }, guestToken);
+      assert.equal(duplicate.status, 422);
+      const forged = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'gift_collect', data: { giftId: 'fake' } } }, hostToken);
+      assert.equal(forged.status, 422);
+      const clientScore = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'sled_record', data: { timeMs: 5000, gatesHit: 8, shortcuts: 0, collisions: 0 } } }, hostToken);
+      assert.equal(clientScore.status, 422);
+      const lateJoinResponse = await post(`${base}/v1/rooms/winter-room/join`, { name: 'Late join' });
+      const lateJoin = await lateJoinResponse.json();
+      assert.equal(lateJoin.state.seasonalEvents.christmas.gifts.players[0].gifts[0], 'gift_snow_cabin');
+      await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'sled_start', data: {} } }, guestToken);
+      const guestStateResponse = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } });
+      const guestState = await guestStateResponse.json();
+      const ownRun = guestState.seasonalEvents.christmas.sled.runs[0];
+      assert.ok(ownRun.currentGate);
+      assert.equal('sequence' in ownRun, false);
+      const lateState = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${lateJoin.token}` } }).then(response => response.json());
+      assert.deepEqual(lateState.seasonalEvents.christmas.sled.runs, []);
+      const guestThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'tet' }, guestToken);
+      assert.equal(guestThemeChange.status, 403);
+      const valentineThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'valentine' }, hostToken);
+      assert.equal(valentineThemeChange.status, 200);
+      const danceStart = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'valentine', action: 'dance_start', data: { mode: 'rhythm' } } }, hostToken);
+      assert.equal(danceStart.status, 200);
+      const hostDanceState = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${hostToken}` } }).then(response => response.json());
+      assert.equal('sequence' in hostDanceState.seasonalEvents.valentine.dance.runs[0], false);
+      const guestDanceState = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } }).then(response => response.json());
+      assert.deepEqual(guestDanceState.seasonalEvents.valentine.dance.runs, []);
+      const hostThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'halloween' }, hostToken);
+      assert.equal(hostThemeChange.status, 200);
+    });
+    await withServer(dataPath, async base => {
+      const state = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } });
+      assert.equal(state.status, 200);
+      const saved = await state.json();
+      assert.equal(saved.seq, 5);
+      assert.equal(saved.seasonalEvents.christmas.gifts.players[0].gifts[0], 'gift_snow_cabin');
+      assert.equal(saved.theme, 'halloween');
+      const unauthorized = await fetch(`${base}/v1/rooms/winter-room/state`);
+      assert.equal(unauthorized.status, 401);
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

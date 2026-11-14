@@ -1,34 +1,78 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_RIDDLE_SEQUENCE } from '../js/seasonal-activities.js';
-import { buildThemeMap, getThemeFeatures, validMap, migrateLegacyThemeMap } from '../js/maps.js';
+import { applySeasonalEventOperation, canApplySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_RIDDLE_SEQUENCE, CHRISTMAS_GIFT_IDS, HALLOWEEN_TREASURE_IDS, TET_EXPLORATION_IDS, getCommunityTreeStage } from '../js/seasonal-activities.js';
+import { buildThemeMap, getThemeFeatures, validMap, migrateLegacyThemeMap, isSolid } from '../js/maps.js';
 
 function room(theme) {
   return { theme, kickedIds: [], seasonalEvents: createSeasonalEventsState() };
 }
 
+test('seasonal shared progress is reduced by the room host, while guests only accept host operations', () => {
+  assert.equal(canApplySeasonalEventOperation(true, 'guest-a', 'host-a'), true);
+  assert.equal(canApplySeasonalEventOperation(false, 'host-a', 'host-a'), true);
+  assert.equal(canApplySeasonalEventOperation(false, 'guest-a', 'host-a'), false);
+  assert.equal(canApplySeasonalEventOperation(true, 'guest-a', ''), false);
+});
+
 test('community tree contributions are unique per player', () => {
   const state = room('christmas');
-  const op = { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: 'star' } };
+  const pickup = { k: 'seasonal_event', season: 'christmas', action: 'ornament_pickup', data: { ornamentKey: 'star' } };
+  assert.equal(applySeasonalEventOperation(state, pickup, 'p1', 'An'), true);
+  const op = { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: 'star', ornamentKey: 'star' } };
   assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), false);
   assert.equal(state.seasonalEvents.christmas.tree.contributors.length, 1);
+});
+
+test('community Christmas tree advances through five contribution stages', () => {
+  assert.deepEqual([0, 5, 6, 11, 12, 17, 18, 23, 24].map(getCommunityTreeStage), [1, 1, 2, 2, 3, 3, 4, 4, 5]);
+  assert.equal(getCommunityTreeStage(100), 5);
+});
+
+test('tree contribution consumes a server-validated ornament from the player inventory', () => {
+  const state = room('christmas');
+  const contribution = { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: 'star', ornamentKey: 'star' } };
+  assert.equal(applySeasonalEventOperation(state, contribution, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'christmas', action: 'ornament_pickup', data: { ornamentKey: 'star' } }, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(state, { ...contribution, data: { decorationType: 'bell', ornamentKey: 'star' } }, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(state, contribution, 'p1', 'An'), true);
+  assert.equal(state.seasonalEvents.christmas.inventory.players[0].heldKey, null);
+  assert.equal(applySeasonalEventOperation(state, contribution, 'p2', 'Bình'), false);
+});
+
+test('Christmas gifts and Halloween relics are known, unique per player, and room-shared', () => {
+  const xmas = room('christmas');
+  const giftOp = { k: 'seasonal_event', season: 'christmas', action: 'gift_collect', data: { giftId: CHRISTMAS_GIFT_IDS[0] } };
+  assert.equal(applySeasonalEventOperation(xmas, giftOp, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(xmas, giftOp, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(xmas, { ...giftOp, data: { giftId: 'forged' } }, 'p2', 'Bình'), false);
+  assert.deepEqual(xmas.seasonalEvents.christmas.gifts.players[0].gifts, [CHRISTMAS_GIFT_IDS[0]]);
+
+  const halloween = room('halloween');
+  const relicOp = { k: 'seasonal_event', season: 'halloween', action: 'treasure_collect', data: { treasureId: HALLOWEEN_TREASURE_IDS[2] } };
+  assert.equal(applySeasonalEventOperation(halloween, relicOp, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(halloween, relicOp, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(halloween, { ...relicOp, data: { treasureId: 'forged' } }, 'p2', 'Bình'), false);
 });
 
 test('community tree requires a balanced set of three decoration types', () => {
   const state = room('christmas');
   for (const type of ['star', 'bell', 'ribbon']) {
     for (let i = 0; i < 8; i++) {
+      const ornamentKey = type === 'ribbon' ? 'cane' : type;
+      assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'christmas', action: 'ornament_pickup', data: { ornamentKey } }, type + i, 'Người chơi ' + i), true);
       assert.equal(applySeasonalEventOperation(
         state,
-        { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: type } },
+        { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: type, ornamentKey } },
         type + i,
         'Người chơi ' + i
       ), true);
     }
+    const extraOrnamentKey = type === 'ribbon' ? 'cane' : type;
+    assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'christmas', action: 'ornament_pickup', data: { ornamentKey: extraOrnamentKey } }, 'extra-' + type, 'Người chơi thêm'), true);
     assert.equal(applySeasonalEventOperation(
       state,
-      { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: type } },
+      { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: type, ornamentKey: extraOrnamentKey } },
       'extra-' + type,
       'Người chơi thêm'
     ), false);
@@ -99,6 +143,9 @@ test('dance scores are bounded and only improve', () => {
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 75 } }, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 65 } }, 'p1', 'An'), false);
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 101 } }, 'p2', 'Bình'), false);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 72, mode: 'memory' } }, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 99, mode: 'invented' } }, 'p1', 'An'), false);
+  assert.deepEqual(state.seasonalEvents.valentine.dance.records.map(record => record.mode), ['rhythm', 'memory']);
 });
 
 
@@ -150,4 +197,26 @@ test('seasonal map expansions leave Tet layout unchanged', () => {
   assert.equal(getThemeFeatures('valentine').hotspots.filter(item => item.type === 'photo_spot').length, 4);
   assert.equal(getThemeFeatures('halloween').hotspots.filter(item => item.type === 'mansion_key').length, 3);
   assert.equal(getThemeFeatures('valentine').hotspots.filter(item => item.type === 'photo_collectible').length, 4);
+});
+
+test('all seasonal collectible hunt locations are reachable inside their map boundaries', () => {
+  for (const [theme, type] of [['christmas', 'christmas_gift'], ['halloween', 'halloween_treasure'], ['tet', 'tet_exploration_item']]) {
+    const map = buildThemeMap(theme);
+    const spots = getThemeFeatures(theme).hotspots.filter(item => item.type === type);
+    assert.equal(spots.length, 5);
+    for (const spot of spots) {
+      const tile = map.rows[Math.floor(spot.y)]?.[Math.floor(spot.x)];
+      assert.equal(isSolid(tile), false, `${theme} pickup ${spot.id} is not blocked`);
+      assert.equal(spot.x < map.w && spot.y < map.h, true, `${theme} pickup ${spot.id} is inside the map`);
+    }
+  }
+});
+
+test('Tet exploration tracks unique discoveries and provides five map locations', () => {
+  const state = room('tet');
+  const op = { k: 'seasonal_event', season: 'tet', action: 'exploration_collect', data: { itemId: TET_EXPLORATION_IDS[0] } };
+  assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(state, { ...op, data: { itemId: 'forged' } }, 'p1', 'An'), false);
+  assert.equal(getThemeFeatures('tet').hotspots.filter(item => item.type === 'tet_exploration_item').length, 5);
 });

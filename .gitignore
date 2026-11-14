@@ -211,6 +211,11 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 
+# Persistent multiplayer authority data
+/data/rooms.json
+/data/rooms.json.tmp
+/node_modules/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
