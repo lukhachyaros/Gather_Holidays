@@ -108,6 +108,21 @@ test('costume runway rounds require the room host, two entries and one timed vot
   assert.equal(applyAuthoritativeEvent(room, host, event('costume_vote', { targetId: 'guest-1' }), round.endAt, at(30, 10.5, round.endAt)), false);
 });
 
+test('Tet fireworks launch from server-known stations with server seed and per-player cooldown', () => {
+  const room = { theme: 'tet', roomId: 'tet-room', seasonalEvents: {}, events: [], seq: 0 };
+  const user = { id: 'player-tet', name: 'Xuân' };
+  const launch = { k: 'seasonal_event', season: 'tet', action: 'firework_launch', data: { kind: 'launcher', stationId: 'fw_launcher_right' } };
+  assert.equal(applyAuthoritativeEvent(room, user, launch, 1000), false, 'client cannot launch from an unreported location');
+  assert.equal(applyAuthoritativeEvent(room, user, launch, 1000, at(22.5, 14.5, 1000)), true);
+  const event = room.seasonalEvents.tet.fireworks.events[0];
+  assert.deepEqual({ x: event.x, y: event.y, by: event.by, startAt: event.startAt }, { x: 22.5, y: 14.5, by: 'Xuân', startAt: 1000 });
+  assert.ok(Number.isInteger(event.seed));
+  assert.equal(applyAuthoritativeEvent(room, user, launch, 1500, at(22.5, 14.5, 1500)), false);
+  assert.equal(applyAuthoritativeEvent(room, user, launch, 3000, at(22.5, 14.5, 3000)), true);
+  const fakeStation = { ...launch, data: { kind: 'launcher', stationId: 'not-a-station' } };
+  assert.equal(applyAuthoritativeEvent(room, user, fakeStation, 5000, at(22.5, 14.5, 5000)), false);
+});
+
 test('authority validates member events and restores saved progress after restart', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'gh-authority-'));
   const dataPath = join(directory, 'rooms.json');
@@ -170,6 +185,13 @@ test('authority validates member events and restores saved progress after restar
       const teamState = await teamStart.json();
       assert.equal('sequence' in teamState.seasonalEvents.valentine.dance.teamSession, false);
       assert.equal(teamState.seasonalEvents.valentine.dance.teamSession.participants.length, 2);
+      const tetThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'tet' }, hostToken);
+      assert.equal(tetThemeChange.status, 200);
+      assert.equal((await post(`${base}/v1/rooms/winter-room/position`, { x: 22.5, y: 14.5 }, hostToken)).status, 200);
+      const fireworks = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'tet', action: 'firework_launch', data: { kind: 'launcher', stationId: 'fw_launcher_right' } } }, hostToken);
+      assert.equal(fireworks.status, 200);
+      const lateFireworksState = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${lateJoin.token}` } }).then(response => response.json());
+      assert.equal(lateFireworksState.seasonalEvents.tet.fireworks.events[0].kind, 'launcher');
       const hostThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'halloween' }, hostToken);
       assert.equal(hostThemeChange.status, 200);
     });
@@ -177,7 +199,7 @@ test('authority validates member events and restores saved progress after restar
       const state = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } });
       assert.equal(state.status, 200);
       const saved = await state.json();
-      assert.equal(saved.seq, 8);
+      assert.equal(saved.seq, 10);
       assert.equal(saved.seasonalEvents.christmas.gifts.players[0].gifts[0], 'gift_snow_cabin');
       assert.equal(saved.theme, 'halloween');
       const unauthorized = await fetch(`${base}/v1/rooms/winter-room/state`);

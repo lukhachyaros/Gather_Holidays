@@ -29,7 +29,7 @@ import {
   seekPlayer,
   syncPlayback,
 } from './media.js';
-import { World, TILE } from './world.js?v=20261114seasonalphase2';
+import { World, TILE } from './world.js?v=20261114seasonalphase9';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=20261114avatarfit1';
 import { emojiSprite, part, G, mat } from './props.js';
 import { RtcManager } from './rtc.js?v=20261112_livekit';
@@ -43,8 +43,8 @@ import {
   getBgmVolume,
 } from './audio.js';
 import { MinigameManager, DRAGON_SKINS, FLIGHT_QUESTS } from './minigames.js';
-import { SeasonalActivities, canApplySeasonalEventOperation } from './seasonal-activities.js?v=20261114seasonalphase8';
-import { SeasonalAuthorityClient } from './authority-client.js?v=20261114seasonalphase8';
+import { SeasonalActivities, canApplySeasonalEventOperation } from './seasonal-activities.js?v=20261114seasonalphase9';
+import { SeasonalAuthorityClient } from './authority-client.js?v=20261114seasonalphase9';
 import {
   initCasino,
   openRoulette,
@@ -336,12 +336,23 @@ let net,
   pendingRoomTarget = null,
   activeLobbyFilter = 'all';
 const authorityUrl = new URLSearchParams(location.search).get('authority') || document.querySelector('meta[name="gh-authority"]')?.content || '';
+const seenAuthorityFireworkIds = new Set();
 const authorityClient = new SeasonalAuthorityClient({
   baseUrl: authorityUrl,
   onState: snapshot => {
     if (!state || snapshot.theme !== state.theme) return;
     state.seasonalEvents = snapshot.seasonalEvents || {};
     state.v = Math.max(state.v || 0, snapshot.seq || 0);
+    for (const event of state.seasonalEvents?.tet?.fireworks?.events || []) {
+      if (seenAuthorityFireworkIds.has(event.id)) continue;
+      seenAuthorityFireworkIds.add(event.id);
+      const elapsed = authorityClient.serverNow() - event.startAt;
+      if (elapsed < 0 || elapsed > 9000) continue;
+      if (event.kind === 'launcher') world?.spawnFireworksShow?.(event.x, event.y, event.seed, elapsed);
+      else if (event.kind === 'cracker' && elapsed < 900) world?.spawnFirecrackers?.(event.x, event.y, event.seed);
+      if (elapsed < 600) playSfx(event.kind === 'cracker' ? 'firecracker' : 'firework_rocket', 'tet');
+      if (event.by && event.kind === 'launcher') toast(`🎆 ${event.by} đã khởi động giàn pháo hoa cộng đồng!`);
+    }
     seasonalActivities?.refresh();
     world?.syncSeasonalEventVisuals(state.seasonalEvents, state.theme);
   },
@@ -2559,6 +2570,17 @@ function emitOp(op) {
       return false;
     });
   }
+  if (op?.k === 'firework' && authorityClient.enabled) {
+    if (!authorityClient.connected) return false;
+    return authorityClient.submit({
+      k: 'seasonal_event', season: 'tet', action: 'firework_launch',
+      data: { kind: op.kind, stationId: op.stationId },
+    }).then(() => true).catch(error => {
+      console.error('[Authority] Fireworks event rejected:', error);
+      toast('⚠️ Pháo hoa chưa được server xác nhận.');
+      return false;
+    });
+  }
   if (op?.k === 'theme' && authorityClient.enabled) {
     authorityClient.changeTheme(op.theme).catch(error => {
       console.error('[Authority] Theme change rejected:', error);
@@ -4501,13 +4523,13 @@ function triggerInteract(target = activeTarget) {
         if (!checkCooldown()) return;
         playSfx('firework_rocket', 'tet');
         me.av?.playEmote('interact');
-        emitOp({ k: 'firework', x: h.x, y: h.y, kind: 'launcher', by: me.name });
+        emitOp({ k: 'firework', x: h.x, y: h.y, kind: 'launcher', stationId: h.id, by: me.name });
         break;
       case 'firecracker_table':
         if (!checkCooldown()) return;
         playSfx('firecracker', 'tet');
         me.av?.playEmote('interact');
-        emitOp({ k: 'firework', x: h.x, y: h.y, kind: 'cracker', by: me.name });
+        emitOp({ k: 'firework', x: h.x, y: h.y, kind: 'cracker', stationId: h.id, by: me.name });
         toast('🧨 Pháo nổ lách tách rộn ràng góc sân!');
         break;
       case 'roulette':

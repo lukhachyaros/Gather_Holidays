@@ -44,6 +44,11 @@ import {
   G,
 } from './props.js';
 
+const seededRandom = seed => {
+  let value = (Number(seed) >>> 0) || 1;
+  return () => { value = (Math.imul(value, 1664525) + 1013904223) >>> 0; return value / 4294967296; };
+};
+
 export const TILE = 2; // meters per grid tile
 export const WALL_H = 1.6; // parkour-friendly wall height
 
@@ -1010,62 +1015,76 @@ export class World {
     this.tomatoes.push({ mesh, sx, sz, ex, ez, t: 0, dur: 0.55, onHit });
   }
 
-  spawnFireworksShow(tileX, tileZ) {
+  spawnFireworksShow(tileX, tileZ, seed = Date.now(), elapsedMs = 0) {
     const bx = tileX * TILE,
       bz = tileZ * TILE;
     const colors = ['#f43f5e', '#facc15', '#10b981', '#38bdf8', '#c084fc', '#fb923c', '#ffffff'];
     const shapes = ['classic', 'heart', 'star', 'blossom', 'ring', 'willow'];
     const count = 9;
+    const random = seededRandom(seed);
     for (let i = 0; i < count; i++) {
+      const col = colors[i % colors.length];
+      const shape = shapes[Math.floor(random() * shapes.length)];
+      const rx = bx + (random() - 0.5) * 1.8;
+      const rz = bz + (random() - 0.5) * 1.8;
+      const vx = (random() - 0.5) * 3.2;
+      const vy = 14 + random() * 5.5;
+      const vz = (random() - 0.5) * 3.2;
+      const maxAge = 0.95 + random() * 0.35;
+      const launchAt = i * 280;
+      if (launchAt + maxAge * 1000 < elapsedMs) continue;
+      const age = Math.max(0, elapsedMs - launchAt) / 1000;
+      const rocketSeed = (Number(seed) + Math.imul(i + 1, 0x9e3779b1)) >>> 0;
       setTimeout(() => {
-        const col = colors[i % colors.length];
-        const shape = shapes[Math.floor(Math.random() * shapes.length)];
+        if (age >= maxAge) {
+          this.explodeRocket(rx + vx * age, 1.2 + vy * age, rz + vz * age, col, shape, rocketSeed);
+          return;
+        }
         const rocket = new THREE.Mesh(G.sph(), mat(col, { emissive: col, emissiveIntensity: 2.5 }));
         rocket.scale.setScalar(0.28);
-        const rx = bx + (Math.random() - 0.5) * 1.8;
-        const rz = bz + (Math.random() - 0.5) * 1.8;
-        rocket.position.set(rx, 1.2, rz);
+        rocket.position.set(rx + vx * age, 1.2 + vy * age, rz + vz * age);
         this.fxGroup.add(rocket);
         this.fireworks.push({
           kind: 'rocket',
           mesh: rocket,
-          vx: (Math.random() - 0.5) * 3.2,
-          vy: 14 + Math.random() * 5.5,
-          vz: (Math.random() - 0.5) * 3.2,
+          vx, vy, vz,
           color: col,
           shape,
-          age: 0,
-          maxAge: 0.95 + Math.random() * 0.35,
+          age,
+          seed: rocketSeed,
+          maxAge,
         });
-      }, i * 280);
+      }, Math.max(0, launchAt - elapsedMs));
     }
   }
 
-  spawnFirecrackers(tileX, tileZ) {
+  spawnFirecrackers(tileX, tileZ, seed = Date.now()) {
     const bx = tileX * TILE,
       bz = tileZ * TILE;
     const colors = ['#ff2a2a', '#ffd166', '#ff9f1c'];
+    const random = seededRandom(seed);
     for (let i = 0; i < 26; i++) {
       const col = colors[i % colors.length];
       const spark = new THREE.Mesh(G.box(), mat(col, { emissive: col, emissiveIntensity: 2.2 }));
       spark.scale.setScalar(0.11);
-      spark.position.set(bx + (Math.random() - 0.5) * 0.8, 1.05, bz + (Math.random() - 0.5) * 0.8);
+      spark.position.set(bx + (random() - 0.5) * 0.8, 1.05, bz + (random() - 0.5) * 0.8);
       this.fxGroup.add(spark);
-      const a = Math.random() * Math.PI * 2;
-      const sp = 1.5 + Math.random() * 3.5;
+      const a = random() * Math.PI * 2;
+      const sp = 1.5 + random() * 3.5;
       this.fireworks.push({
         kind: 'spark',
         mesh: spark,
         vx: Math.cos(a) * sp,
-        vy: 2.5 + Math.random() * 4.0,
+        vy: 2.5 + random() * 4.0,
         vz: Math.sin(a) * sp,
         age: 0,
-        maxAge: 0.55 + Math.random() * 0.4,
+        maxAge: 0.55 + random() * 0.4,
       });
     }
   }
 
-  explodeRocket(x, y, z, color, shape = 'classic') {
+  explodeRocket(x, y, z, color, shape = 'classic', seed = Date.now()) {
+    const random = seededRandom(seed);
     const m = mat(color, { emissive: color, emissiveIntensity: 2.6 });
     const flash = new THREE.PointLight(color, 12, 38);
     flash.position.set(x, y, z);
@@ -1098,10 +1117,10 @@ export class World {
         const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
         const sp = 0.48;
         makeSpark(
-          hx * sp + (Math.random() - 0.5) * 0.8,
-          hy * sp + (Math.random() - 0.5) * 0.8,
-          (Math.random() - 0.5) * 1.8,
-          1.5 + Math.random() * 0.35,
+          hx * sp + (random() - 0.5) * 0.8,
+          hy * sp + (random() - 0.5) * 0.8,
+          (random() - 0.5) * 1.8,
+          1.5 + random() * 0.35,
           0.7,
           0.26
         );
@@ -1111,12 +1130,12 @@ export class World {
       const num = 45;
       for (let i = 0; i < num; i++) {
         const t = (i / num) * Math.PI * 2;
-        const r = (i % 2 === 0 ? 8.5 : 3.4) * (0.85 + Math.random() * 0.3);
+        const r = (i % 2 === 0 ? 8.5 : 3.4) * (0.85 + random() * 0.3);
         makeSpark(
           Math.cos(t) * r,
           Math.sin(t) * r,
-          (Math.random() - 0.5) * 1.8,
-          1.4 + Math.random() * 0.3,
+          (random() - 0.5) * 1.8,
+          1.4 + random() * 0.3,
           0.8,
           0.25
         );
@@ -1126,12 +1145,12 @@ export class World {
       const num = 50;
       for (let i = 0; i < num; i++) {
         const t = (i / num) * Math.PI * 2;
-        const r = (6.2 + 2.8 * Math.cos(5 * t)) * (0.9 + Math.random() * 0.2);
+        const r = (6.2 + 2.8 * Math.cos(5 * t)) * (0.9 + random() * 0.2);
         makeSpark(
           Math.cos(t) * r,
           Math.sin(t) * r,
-          (Math.random() - 0.5) * 2.2,
-          1.5 + Math.random() * 0.3,
+          (random() - 0.5) * 2.2,
+          1.5 + random() * 0.3,
           0.75,
           0.24
         );
@@ -1139,7 +1158,7 @@ export class World {
     } else if (shape === 'ring') {
       // Saturn Concentric Expanding Ring ⭕️
       const num = 44;
-      const tilt = Math.random() * Math.PI;
+      const tilt = random() * Math.PI;
       for (let i = 0; i < num; i++) {
         const t = (i / num) * Math.PI * 2;
         const speed = 7.5 + (i % 2 === 0 ? 0 : -2.8);
@@ -1147,9 +1166,9 @@ export class World {
         const rz = Math.sin(t) * speed;
         makeSpark(
           rx,
-          Math.sin(tilt) * rz * 0.45 + (Math.random() - 0.5) * 1.2,
+          Math.sin(tilt) * rz * 0.45 + (random() - 0.5) * 1.2,
           Math.cos(tilt) * rz,
-          1.4 + Math.random() * 0.3,
+          1.4 + random() * 0.3,
           0.85,
           0.23
         );
@@ -1158,13 +1177,13 @@ export class World {
       // Golden Brocade Waterfall ✨
       const num = 42;
       for (let i = 0; i < num; i++) {
-        const theta = Math.random() * Math.PI * 2;
-        const sp = 2.5 + Math.random() * 5.0;
+        const theta = random() * Math.PI * 2;
+        const sp = 2.5 + random() * 5.0;
         makeSpark(
           Math.cos(theta) * sp,
-          3.8 + Math.random() * 3.5,
+          3.8 + random() * 3.5,
           Math.sin(theta) * sp,
-          2.2 + Math.random() * 0.6,
+          2.2 + random() * 0.6,
           0.4, // Slow graceful downward drift
           0.2
         );
@@ -1172,14 +1191,14 @@ export class World {
     } else {
       // Classic Spherical Fireworks Burst
       for (let i = 0; i < 38; i++) {
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.acos(2 * Math.random() - 1);
-        const speed = 5.2 + Math.random() * 5.8;
+        const theta = random() * Math.PI * 2;
+        const phi = Math.acos(2 * random() - 1);
+        const speed = 5.2 + random() * 5.8;
         makeSpark(
           Math.sin(phi) * Math.cos(theta) * speed,
           Math.cos(phi) * speed,
           Math.sin(phi) * Math.sin(theta) * speed,
-          1.25 + Math.random() * 0.4,
+          1.25 + random() * 0.4,
           1.0,
           0.22
         );
@@ -1343,7 +1362,7 @@ export class World {
       }
       if (fw.age >= fw.maxAge) {
         if (fw.kind === 'rocket') {
-          this.explodeRocket(fw.mesh.position.x, fw.mesh.position.y, fw.mesh.position.z, fw.color, fw.shape);
+          this.explodeRocket(fw.mesh.position.x, fw.mesh.position.y, fw.mesh.position.z, fw.color, fw.shape, fw.seed);
         }
         this.fxGroup.remove(fw.mesh);
         this.fireworks.splice(i, 1);

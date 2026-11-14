@@ -159,8 +159,10 @@ export class SeasonalAuthorityClient {
       const teamSession = dance?.teamSession;
       const runway = state.seasonalEvents?.halloween?.costume?.round;
       const now = state.serverNow || this.serverNow();
+      const fireworks = state.seasonalEvents?.tet?.fireworks?.events || [];
       const needsFastRefresh = dance?.runs?.some(run => run.active || (run.endAt && now <= run.endAt + 3000)) ||
-        (teamSession?.id && now <= teamSession.endAt + 3000) || (runway?.id && now <= runway.endAt + 3000);
+        (teamSession?.id && now <= teamSession.endAt + 3000) || (runway?.id && now <= runway.endAt + 3000) ||
+        fireworks.some(event => now >= event.startAt && now <= event.startAt + 9000);
       this.setPollInterval(needsFastRefresh ? 250 : 1500);
       this.onStatus('connected');
     } catch { this.onStatus('reconnecting'); }

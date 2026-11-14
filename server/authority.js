@@ -38,15 +38,17 @@ const INTERACTION_TARGETS = {
   dance_team_join: ['dance_stage', null],
   dance_team_start: ['dance_stage', null],
   dance_team_input: ['dance_stage', null],
+  firework_launch: ['firework_launcher', null],
 };
 
 function validateInteractionPosition(room, op, now, position) {
-  const targetRule = INTERACTION_TARGETS[op?.action];
+  const fireworkType = op?.data?.kind === 'cracker' ? 'firecracker_table' : op?.data?.kind === 'launcher' ? 'firework_launcher' : '';
+  const targetRule = op?.action === 'firework_launch' ? (fireworkType ? [fireworkType, null] : null) : INTERACTION_TARGETS[op?.action];
   if (!targetRule) return true;
   if (!position || now - position.at > 4000) return false;
   const [type, field] = targetRule;
   const targetId = field ? String(op.data?.[field] || '') : '';
-  const hotspot = getThemeFeatures(room.theme, room.roomId).hotspots.find(item => item.type === type && (!field || String(item[field] || '') === targetId));
+  const hotspot = getThemeFeatures(room.theme, room.roomId).hotspots.find(item => item.type === type && (!field || String(item[field] || '') === targetId) && (!op.data?.stationId || item.id === op.data.stationId));
   if (!hotspot) return false;
   return Math.hypot(position.x - hotspot.x, position.y - hotspot.y) <= hotspot.radius + 0.55;
 }
@@ -283,6 +285,24 @@ function applyServerSledEvent(room, user, op, now) {
   return true;
 }
 
+function applyServerFireworkEvent(room, user, op, now) {
+  const kind = op.data?.kind;
+  if (!['launcher', 'cracker'].includes(kind)) return false;
+  const hotspotType = kind === 'launcher' ? 'firework_launcher' : 'firecracker_table';
+  const hotspot = getThemeFeatures(room.theme, room.roomId).hotspots.find(item => item.type === hotspotType && (!op.data?.stationId || item.id === op.data.stationId));
+  if (!hotspot) return false;
+  const fireworks = (room.seasonalEvents.tet ||= {}).fireworks ||= { events: [], lastByUser: {} };
+  fireworks.events ||= [];
+  fireworks.lastByUser ||= {};
+  const previousAt = fireworks.lastByUser[user.id];
+  if (Number.isFinite(previousAt) && now - previousAt < 1800) return false;
+  fireworks.lastByUser[user.id] = now;
+  fireworks.events.push({ id: randomBytes(12).toString('hex'), by: user.name, kind, x: hotspot.x, y: hotspot.y, seed: randomInt(1, 0x7fffffff), startAt: now });
+  fireworks.events = fireworks.events.slice(-24);
+  recordServerEvent(room, user, op.action, now);
+  return true;
+}
+
 export function applyAuthoritativeEvent(room, user, op, now = Date.now(), position = user?.position) {
   if (!room || !user || !op || op.k !== 'seasonal_event' || op.season !== room.theme || !THEMES.has(room.theme)) return false;
   room.kickedIds ||= [];
@@ -294,6 +314,7 @@ export function applyAuthoritativeEvent(room, user, op, now = Date.now(), positi
     const runwayResult = applyServerRunwayEvent(room, user, op, now);
     if (runwayResult !== null) return runwayResult;
   }
+  if (op.season === 'tet' && op.action === 'firework_launch') return applyServerFireworkEvent(room, user, op, now);
   if (op.action === 'sled_record' || op.action === 'dance_record') return false;
   if (!applySeasonalEventOperation(room, op, user.id, user.name)) return false;
   room.seq++;
