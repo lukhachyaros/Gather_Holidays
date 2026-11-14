@@ -167,6 +167,14 @@ function buildSeasonalLandmark(type, variant = '') {
     addBox(0, 0.29, 0.3, 0.12, 0.5, 0.04, relic);
     addBox(0, 0.32, 0.34, 0.18, 0.18, 0.05, gold);
     addCylinder(0, 0.88, 0, 0.08, 0.45, relic);
+  } else if (type === 'tet_exploration_item') {
+    const jade = mat('#34d399', { emissive: '#10b981', emissiveIntensity: 0.7, metalness: 0.35, roughness: 0.28 });
+    const paper = mat('#fef3c7', { roughness: 0.68 });
+    addBox(0, 0.38, 0, 0.48, 0.58, 0.16, paper);
+    addBox(0, 0.4, 0.1, 0.1, 0.42, 0.035, mat('#dc2626', { roughness: 0.55 }));
+    const seal = addBox(0, 0.42, 0.13, 0.18, 0.18, 0.05, jade);
+    seal.rotation.y = Math.PI / 4;
+    addCylinder(0, 0.07, 0, 0.48, 0.05, warm);
   }
   group.traverse(object => { if (object.isMesh) object.frustumCulled = true; });
   return group;
@@ -776,7 +784,7 @@ export class World {
         pub.position.set(h.x * TILE, 0, h.y * TILE);
         addMapModel(h.type, pub);
         this.casinoObjs.push(pub);
-      } else if (['community_tree', 'sled_race', 'haunted_mansion', 'costume_runway', 'photo_hunt', 'photo_spot', 'dance_stage', 'mansion_key', 'photo_collectible', 'christmas_gift', 'halloween_treasure'].includes(h.type)) {
+      } else if (['community_tree', 'sled_race', 'haunted_mansion', 'costume_runway', 'photo_hunt', 'photo_spot', 'dance_stage', 'mansion_key', 'photo_collectible', 'christmas_gift', 'halloween_treasure', 'tet_exploration_item'].includes(h.type)) {
         const landmark = buildSeasonalLandmark(h.type, h.keyId || h.itemId || h.giftId || h.treasureId || '');
         landmark.position.set(h.x * TILE, 0, h.y * TILE);
         this.group.add(landmark);

@@ -4376,6 +4376,10 @@ function triggerInteract(target = activeTarget) {
         seasonalActivities?.collectHalloweenTreasure(h.treasureId);
         seasonalActivities?.open('treasure_hunt');
         break;
+      case 'tet_exploration_item':
+        seasonalActivities?.collectTetDiscovery(h.itemId);
+        seasonalActivities?.open('tet_exploration');
+        break;
       case 'photo_collectible':
         seasonalActivities?.collectPhotoItem(h.itemId);
         break;

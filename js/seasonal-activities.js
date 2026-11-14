@@ -6,6 +6,7 @@ export const MANSION_KEY_IDS = ['candle', 'bat', 'pumpkin'];
 export const MANSION_RIDDLE_SEQUENCE = ['moon', 'flame', 'star'];
 export const CHRISTMAS_GIFT_IDS = ['gift_snow_cabin', 'gift_frozen_bridge', 'gift_cocoa_corner', 'gift_pine_lane', 'gift_sleigh_depot'];
 export const HALLOWEEN_TREASURE_IDS = ['relic_graveyard', 'relic_haunted_well', 'relic_cemetery_gate', 'relic_witch_garden', 'relic_clocktower'];
+export const TET_EXPLORATION_IDS = ['tet_explore_gate', 'tet_explore_lantern', 'tet_explore_market', 'tet_explore_boat', 'tet_explore_scroll'];
 export function canApplySeasonalEventOperation(isRoomHost, senderId, hostId) {
   return Boolean(hostId && (isRoomHost || senderId === hostId));
 }
@@ -48,6 +49,7 @@ export function createSeasonalEventsState() {
     christmas: { tree: { contributors: [] }, sled: { records: [] }, gifts: { players: [] } },
     halloween: { mansion: { players: [], solved: [] }, costume: { entries: [], votes: [] }, treasure: { players: [] } },
     valentine: { photos: { players: [] }, dance: { records: [] } },
+    tet: { exploration: { players: [] } },
   };
 }
 
@@ -97,6 +99,24 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
     if (player.relics.includes(treasureId)) return false;
     player.name = name;
     player.relics.push(treasureId);
+    return true;
+  }
+
+  if (op.season === 'tet' && op.action === 'exploration_collect') {
+    const itemId = String(data.itemId || '');
+    if (!TET_EXPLORATION_IDS.includes(itemId)) return false;
+    if (!isObject(season.exploration)) season.exploration = {};
+    const players = ensureList(season.exploration, 'players');
+    let player = findRecord(players, id);
+    if (!player) {
+      if (players.length >= 100) return false;
+      player = { id, name, discoveries: [] };
+      players.push(player);
+    }
+    if (!Array.isArray(player.discoveries)) player.discoveries = [];
+    if (player.discoveries.includes(itemId)) return false;
+    player.name = name;
+    player.discoveries.push(itemId);
     return true;
   }
 
@@ -335,7 +355,7 @@ export class SeasonalActivities {
   }
 
   setTheme(theme) {
-    const next = ['christmas', 'halloween', 'valentine'].includes(theme) ? theme : null;
+    const next = ['christmas', 'halloween', 'valentine', 'tet'].includes(theme) ? theme : null;
     if (next !== this.theme) this.close();
     this.theme = next;
     this.refresh();
@@ -346,6 +366,7 @@ export class SeasonalActivities {
       christmas: ['community_tree', 'sled_race', 'gift_hunt'],
       halloween: ['haunted_mansion', 'costume_runway', 'treasure_hunt'],
       valentine: ['photo_hunt', 'dance_stage'],
+      tet: ['tet_exploration'],
     };
     if (!valid[this.theme]?.includes(activity)) return;
     this.ensureOverlay();
@@ -506,6 +527,7 @@ export class SeasonalActivities {
       dance_stage: '🎶 Sàn Nhảy Tương Tác',
       gift_hunt: '🎁 Hành Trình Tìm Quà Noel',
       treasure_hunt: '🎃 Kho Báu Thị Trấn Ma',
+      tet_exploration: '🧧 Hành Trình Du Xuân',
     };
     this.title.textContent = titles[this.active] || 'Hoạt động lễ hội';
     if (this.active === 'community_tree') this.renderTree();
@@ -517,6 +539,7 @@ export class SeasonalActivities {
     else if (this.active === 'dance_stage') this.renderDanceStage();
     else if (this.active === 'gift_hunt') this.renderCollectibleHunt('christmas', 'gifts');
     else if (this.active === 'treasure_hunt') this.renderCollectibleHunt('halloween', 'treasure');
+    else if (this.active === 'tet_exploration') this.renderTetExploration();
   }
 
   renderCollectibleHunt(season, bucket) {
@@ -553,6 +576,33 @@ export class SeasonalActivities {
     if (this.theme !== 'halloween' || !HALLOWEEN_TREASURE_IDS.includes(treasureId)) return false;
     if (this.myRecord(this.stateBucket('halloween', 'treasure', 'players'))?.relics?.includes(treasureId)) return false;
     return this.submit('treasure_collect', { treasureId });
+  }
+
+  renderTetExploration() {
+    const labels = [
+      ['tet_explore_gate', '🏮 Cổng làng đầu xuân'], ['tet_explore_lantern', '🧧 Dãy đèn lồng may mắn'],
+      ['tet_explore_market', '🌸 Chợ hoa ngày Tết'], ['tet_explore_boat', '🚣 Bến thuyền du xuân'],
+      ['tet_explore_scroll', '📜 Câu đối khai xuân'],
+    ];
+    const mine = this.myRecord(this.stateBucket('tet', 'exploration', 'players'));
+    const found = new Set(mine?.discoveries || []);
+    this.paragraph('Đi bộ qua năm địa danh trong hội xuân. Mỗi dấu ấn mở rộng nhật ký du xuân của bạn và được đồng bộ trong phòng.');
+    this.body.appendChild(this.el('div', found.size + ' / ' + labels.length + ' địa danh đã khám phá', 'seasonal-stat'));
+    const meter = this.el('div', null, 'seasonal-progress');
+    const fill = this.el('div', null, 'seasonal-progress-fill');
+    fill.style.width = Math.round(found.size / labels.length * 100) + '%';
+    meter.appendChild(fill);
+    this.body.appendChild(meter);
+    const list = this.el('div', null, 'seasonal-list');
+    labels.forEach(([id, label]) => list.appendChild(this.el('div', (found.has(id) ? '✓ ' : '○ ') + label, 'seasonal-list-item' + (found.has(id) ? ' is-complete' : ''))));
+    this.body.appendChild(list);
+    if (found.size === labels.length) this.body.appendChild(this.el('p', '🎊 Bạn đã khám phá trọn vẹn hội xuân!', 'seasonal-result'));
+  }
+
+  collectTetDiscovery(itemId) {
+    if (this.theme !== 'tet' || !TET_EXPLORATION_IDS.includes(itemId)) return false;
+    if (this.myRecord(this.stateBucket('tet', 'exploration', 'players'))?.discoveries?.includes(itemId)) return false;
+    return this.submit('exploration_collect', { itemId });
   }
 
   renderTree() {

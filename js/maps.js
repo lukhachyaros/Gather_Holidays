@@ -489,6 +489,14 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       }
     );
   } else if (themeKey === 'tet') {
+    [
+      ['tet_explore_gate', 4.6, 8.3], ['tet_explore_lantern', 26.2, 8.1],
+      ['tet_explore_market', 4.5, 18.6], ['tet_explore_boat', 22.1, 19.0],
+      ['tet_explore_scroll', 26.3, 18.2],
+    ].forEach(([itemId, x, y]) => hotspots.push({
+      id: itemId, type: 'tet_exploration_item', itemId, x, y, radius: 1.1,
+      prompt: '🧧 Dấu Ấn Du Xuân · [E] Khám phá và lưu vào hành trình',
+    }));
     // Centerpiece: Giant Golden Apricot Blossom Tree (Cây Mai Đại Thụ)
     hotspots.push({
       id: 'mai_tree',
