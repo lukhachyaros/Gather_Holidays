@@ -4,6 +4,8 @@ export const PHOTO_SPOT_IDS = ['snow_globe', 'rose_gate', 'moon_bridge', 'lanter
 export const PHOTO_ITEM_IDS = ['rose_locket', 'star_charm', 'moon_crystal', 'heart_ribbon'];
 export const MANSION_KEY_IDS = ['candle', 'bat', 'pumpkin'];
 export const MANSION_RIDDLE_SEQUENCE = ['moon', 'flame', 'star'];
+export const CHRISTMAS_GIFT_IDS = ['gift_snow_cabin', 'gift_frozen_bridge', 'gift_cocoa_corner', 'gift_pine_lane', 'gift_sleigh_depot'];
+export const HALLOWEEN_TREASURE_IDS = ['relic_graveyard', 'relic_haunted_well', 'relic_cemetery_gate', 'relic_witch_garden', 'relic_clocktower'];
 export function canApplySeasonalEventOperation(isRoomHost, senderId, hostId) {
   return Boolean(hostId && (isRoomHost || senderId === hostId));
 }
@@ -43,8 +45,8 @@ const findRecord = (list, id) => list.find(item => item && item.id === id);
 
 export function createSeasonalEventsState() {
   return {
-    christmas: { tree: { contributors: [] }, sled: { records: [] } },
-    halloween: { mansion: { players: [], solved: [] }, costume: { entries: [], votes: [] } },
+    christmas: { tree: { contributors: [] }, sled: { records: [] }, gifts: { players: [] } },
+    halloween: { mansion: { players: [], solved: [] }, costume: { entries: [], votes: [] }, treasure: { players: [] } },
     valentine: { photos: { players: [] }, dance: { records: [] } },
   };
 }
@@ -61,6 +63,42 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
   if (!isObject(root[op.season])) root[op.season] = {};
   const season = root[op.season];
   const data = isObject(op.data) ? op.data : {};
+
+  if (op.season === 'christmas' && op.action === 'gift_collect') {
+    const giftId = String(data.giftId || '');
+    if (!CHRISTMAS_GIFT_IDS.includes(giftId)) return false;
+    if (!isObject(season.gifts)) season.gifts = {};
+    const players = ensureList(season.gifts, 'players');
+    let player = findRecord(players, id);
+    if (!player) {
+      if (players.length >= 100) return false;
+      player = { id, name, gifts: [] };
+      players.push(player);
+    }
+    if (!Array.isArray(player.gifts)) player.gifts = [];
+    if (player.gifts.includes(giftId)) return false;
+    player.name = name;
+    player.gifts.push(giftId);
+    return true;
+  }
+
+  if (op.season === 'halloween' && op.action === 'treasure_collect') {
+    const treasureId = String(data.treasureId || '');
+    if (!HALLOWEEN_TREASURE_IDS.includes(treasureId)) return false;
+    if (!isObject(season.treasure)) season.treasure = {};
+    const players = ensureList(season.treasure, 'players');
+    let player = findRecord(players, id);
+    if (!player) {
+      if (players.length >= 100) return false;
+      player = { id, name, relics: [] };
+      players.push(player);
+    }
+    if (!Array.isArray(player.relics)) player.relics = [];
+    if (player.relics.includes(treasureId)) return false;
+    player.name = name;
+    player.relics.push(treasureId);
+    return true;
+  }
 
   if (op.season === 'christmas' && op.action === 'tree_contribute') {
     const decorationType = String(data.decorationType || 'bell');
@@ -305,8 +343,8 @@ export class SeasonalActivities {
 
   open(activity) {
     const valid = {
-      christmas: ['community_tree', 'sled_race'],
-      halloween: ['haunted_mansion', 'costume_runway'],
+      christmas: ['community_tree', 'sled_race', 'gift_hunt'],
+      halloween: ['haunted_mansion', 'costume_runway', 'treasure_hunt'],
       valentine: ['photo_hunt', 'dance_stage'],
     };
     if (!valid[this.theme]?.includes(activity)) return;
@@ -466,6 +504,8 @@ export class SeasonalActivities {
       photo_hunt: '📸 Photo Scavenger Hunt',
       mansion_room: '🚪 Phòng Bí Mật',
       dance_stage: '🎶 Sàn Nhảy Tương Tác',
+      gift_hunt: '🎁 Hành Trình Tìm Quà Noel',
+      treasure_hunt: '🎃 Kho Báu Thị Trấn Ma',
     };
     this.title.textContent = titles[this.active] || 'Hoạt động lễ hội';
     if (this.active === 'community_tree') this.renderTree();
@@ -475,6 +515,44 @@ export class SeasonalActivities {
     else if (this.active === 'costume_runway') this.renderCostumeRunway();
     else if (this.active === 'photo_hunt') this.renderPhotoHunt();
     else if (this.active === 'dance_stage') this.renderDanceStage();
+    else if (this.active === 'gift_hunt') this.renderCollectibleHunt('christmas', 'gifts');
+    else if (this.active === 'treasure_hunt') this.renderCollectibleHunt('halloween', 'treasure');
+  }
+
+  renderCollectibleHunt(season, bucket) {
+    const christmas = season === 'christmas';
+    const items = christmas
+      ? [['gift_snow_cabin', '🎁 Hộp quà dưới mái hiên'], ['gift_frozen_bridge', '🎁 Hộp quà bên cầu tuyết'], ['gift_cocoa_corner', '🎁 Hộp quà gần lửa trại'], ['gift_pine_lane', '✨ Quà vàng trong lối thông'], ['gift_sleigh_depot', '💎 Quà hiếm gần bến xe trượt']]
+      : [['relic_graveyard', '🪙 Đồng xu nghĩa địa'], ['relic_haunted_well', '🧪 Bình sương ma'], ['relic_cemetery_gate', '🦇 Bùa dơi cổ'], ['relic_witch_garden', '💀 Đầu lâu pha lê'], ['relic_clocktower', '🕯️ Đèn lồng linh hồn']];
+    const mine = this.myRecord(this.stateBucket(season, bucket, 'players'));
+    const found = new Set(christmas ? mine?.gifts || [] : mine?.relics || []);
+    this.paragraph(christmas
+      ? 'Khám phá các góc của thị trấn để tìm quà thường, vàng và hiếm. Mỗi món được ghi nhận một lần cho mỗi người chơi.'
+      : 'Lần theo các góc khuất để tìm di vật Halloween. Bộ sưu tập được chia sẻ trong room và không thể nhặt trùng.');
+    this.body.appendChild(this.el('div', found.size + ' / ' + items.length + ' vật phẩm', 'seasonal-stat'));
+    const meter = this.el('div', null, 'seasonal-progress');
+    const fill = this.el('div', null, 'seasonal-progress-fill');
+    fill.style.width = Math.round(found.size / items.length * 100) + '%';
+    meter.appendChild(fill);
+    this.body.appendChild(meter);
+    const list = this.el('div', null, 'seasonal-list');
+    items.forEach(([id, label]) => list.appendChild(this.el('div', (found.has(id) ? '✓ ' : '○ ') + label, 'seasonal-list-item' + (found.has(id) ? ' is-complete' : ''))));
+    this.body.appendChild(list);
+    const people = this.stateBucket(season, bucket, 'players');
+    const completed = people.filter(player => (christmas ? player.gifts : player.relics)?.length === items.length).length;
+    this.body.appendChild(this.el('p', '🏆 ' + completed + ' người đã hoàn thành bộ sưu tập.', 'seasonal-copy'));
+  }
+
+  collectChristmasGift(giftId) {
+    if (this.theme !== 'christmas' || !CHRISTMAS_GIFT_IDS.includes(giftId)) return false;
+    if (this.myRecord(this.stateBucket('christmas', 'gifts', 'players'))?.gifts?.includes(giftId)) return false;
+    return this.submit('gift_collect', { giftId });
+  }
+
+  collectHalloweenTreasure(treasureId) {
+    if (this.theme !== 'halloween' || !HALLOWEEN_TREASURE_IDS.includes(treasureId)) return false;
+    if (this.myRecord(this.stateBucket('halloween', 'treasure', 'players'))?.relics?.includes(treasureId)) return false;
+    return this.submit('treasure_collect', { treasureId });
   }
 
   renderTree() {

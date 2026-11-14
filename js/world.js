@@ -150,6 +150,23 @@ function buildSeasonalLandmark(type, variant = '') {
     core.rotation.y = Math.PI / 4;
     addCylinder(0, 0.86, 0, 0.16, 0.1, warm);
     addBox(0, 0.16, 0, 0.5, 0.08, 0.5, pink);
+  } else if (type === 'christmas_gift') {
+    const rare = String(variant).includes('sleigh');
+    const goldGift = String(variant).includes('pine');
+    const ribbon = mat(rare ? '#facc15' : goldGift ? '#ef4444' : '#38bdf8', { metalness: 0.2, roughness: 0.36 });
+    const boxMat = mat(rare ? '#7c3aed' : goldGift ? '#047857' : '#dc2626', { roughness: 0.56 });
+    addBox(0, 0.38, 0, 0.68, 0.62, 0.58, boxMat);
+    addBox(0, 0.4, 0.3, 0.12, 0.66, 0.035, ribbon);
+    addBox(0, 0.4, 0, 0.72, 0.11, 0.62, ribbon);
+    [-0.16, 0.16].forEach(x => { const bow = addCylinder(x, 0.75, 0, 0.13, 0.08, ribbon); bow.rotation.z = x < 0 ? -0.4 : 0.4; });
+    addCylinder(0, 0.06, 0, 0.5, 0.05, warm);
+  } else if (type === 'halloween_treasure') {
+    const relic = mat('#a78bfa', { emissive: '#7c3aed', emissiveIntensity: 0.8, metalness: 0.45, roughness: 0.25 });
+    addBox(0, 0.26, 0, 0.78, 0.46, 0.55, wood);
+    addBox(0, 0.5, 0, 0.82, 0.16, 0.6, warm);
+    addBox(0, 0.29, 0.3, 0.12, 0.5, 0.04, relic);
+    addBox(0, 0.32, 0.34, 0.18, 0.18, 0.05, gold);
+    addCylinder(0, 0.88, 0, 0.08, 0.45, relic);
   }
   group.traverse(object => { if (object.isMesh) object.frustumCulled = true; });
   return group;
@@ -759,8 +776,8 @@ export class World {
         pub.position.set(h.x * TILE, 0, h.y * TILE);
         addMapModel(h.type, pub);
         this.casinoObjs.push(pub);
-      } else if (['community_tree', 'sled_race', 'haunted_mansion', 'costume_runway', 'photo_hunt', 'photo_spot', 'dance_stage', 'mansion_key', 'photo_collectible'].includes(h.type)) {
-        const landmark = buildSeasonalLandmark(h.type, h.keyId || h.itemId || '');
+      } else if (['community_tree', 'sled_race', 'haunted_mansion', 'costume_runway', 'photo_hunt', 'photo_spot', 'dance_stage', 'mansion_key', 'photo_collectible', 'christmas_gift', 'halloween_treasure'].includes(h.type)) {
+        const landmark = buildSeasonalLandmark(h.type, h.keyId || h.itemId || h.giftId || h.treasureId || '');
         landmark.position.set(h.x * TILE, 0, h.y * TILE);
         this.group.add(landmark);
         if (h.type === 'community_tree') this.communityTreeGroup = landmark;

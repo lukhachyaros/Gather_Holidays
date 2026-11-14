@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applySeasonalEventOperation, canApplySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_RIDDLE_SEQUENCE } from '../js/seasonal-activities.js';
+import { applySeasonalEventOperation, canApplySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_RIDDLE_SEQUENCE, CHRISTMAS_GIFT_IDS, HALLOWEEN_TREASURE_IDS } from '../js/seasonal-activities.js';
 import { buildThemeMap, getThemeFeatures, validMap, migrateLegacyThemeMap } from '../js/maps.js';
 
 function room(theme) {
@@ -20,6 +20,21 @@ test('community tree contributions are unique per player', () => {
   assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), false);
   assert.equal(state.seasonalEvents.christmas.tree.contributors.length, 1);
+});
+
+test('Christmas gifts and Halloween relics are known, unique per player, and room-shared', () => {
+  const xmas = room('christmas');
+  const giftOp = { k: 'seasonal_event', season: 'christmas', action: 'gift_collect', data: { giftId: CHRISTMAS_GIFT_IDS[0] } };
+  assert.equal(applySeasonalEventOperation(xmas, giftOp, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(xmas, giftOp, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(xmas, { ...giftOp, data: { giftId: 'forged' } }, 'p2', 'Bình'), false);
+  assert.deepEqual(xmas.seasonalEvents.christmas.gifts.players[0].gifts, [CHRISTMAS_GIFT_IDS[0]]);
+
+  const halloween = room('halloween');
+  const relicOp = { k: 'seasonal_event', season: 'halloween', action: 'treasure_collect', data: { treasureId: HALLOWEEN_TREASURE_IDS[2] } };
+  assert.equal(applySeasonalEventOperation(halloween, relicOp, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(halloween, relicOp, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(halloween, { ...relicOp, data: { treasureId: 'forged' } }, 'p2', 'Bình'), false);
 });
 
 test('community tree requires a balanced set of three decoration types', () => {
@@ -160,4 +175,9 @@ test('seasonal map expansions leave Tet layout unchanged', () => {
   assert.equal(getThemeFeatures('valentine').hotspots.filter(item => item.type === 'photo_spot').length, 4);
   assert.equal(getThemeFeatures('halloween').hotspots.filter(item => item.type === 'mansion_key').length, 3);
   assert.equal(getThemeFeatures('valentine').hotspots.filter(item => item.type === 'photo_collectible').length, 4);
+});
+
+test('Christmas and Halloween maps expose all five collectible hunt locations', () => {
+  assert.equal(getThemeFeatures('christmas').hotspots.filter(item => item.type === 'christmas_gift').length, 5);
+  assert.equal(getThemeFeatures('halloween').hotspots.filter(item => item.type === 'halloween_treasure').length, 5);
 });

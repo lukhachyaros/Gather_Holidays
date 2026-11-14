@@ -4350,6 +4350,10 @@ function triggerInteract(target = activeTarget) {
       case 'community_tree':
         seasonalActivities?.open('community_tree');
         break;
+      case 'christmas_gift':
+        seasonalActivities?.collectChristmasGift(h.giftId);
+        seasonalActivities?.open('gift_hunt');
+        break;
       case 'sled_race':
         seasonalActivities?.open('sled_race');
         break;
@@ -4367,6 +4371,10 @@ function triggerInteract(target = activeTarget) {
         break;
       case 'mansion_key':
         seasonalActivities?.collectMansionKey(h.keyId);
+        break;
+      case 'halloween_treasure':
+        seasonalActivities?.collectHalloweenTreasure(h.treasureId);
+        seasonalActivities?.open('treasure_hunt');
         break;
       case 'photo_collectible':
         seasonalActivities?.collectPhotoItem(h.itemId);
