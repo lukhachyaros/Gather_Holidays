@@ -7,7 +7,7 @@ import {
   CARD_STYLES,
   rollLixiReward,
 } from './themes.js';
-import { isSolid, buildThemeMap, validMap, migrateLegacyThemeMap } from './maps.js?v=20261114seasonalphase2';
+import { isSolid, buildThemeMap, validMap, migrateLegacyThemeMap } from './maps.js?v=20261114seasonalphase10';
 import { connect, connectLobby, hashPass } from './net.js';
 import {
   initPlayer,
@@ -29,7 +29,7 @@ import {
   seekPlayer,
   syncPlayback,
 } from './media.js';
-import { World, TILE } from './world.js?v=20261114seasonalphase9';
+import { World, TILE } from './world.js?v=20261114seasonalphase10';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=20261114avatarfit1';
 import { emojiSprite, part, G, mat } from './props.js';
 import { RtcManager } from './rtc.js?v=20261112_livekit';
@@ -43,7 +43,7 @@ import {
   getBgmVolume,
 } from './audio.js';
 import { MinigameManager, DRAGON_SKINS, FLIGHT_QUESTS } from './minigames.js';
-import { SeasonalActivities, canApplySeasonalEventOperation } from './seasonal-activities.js?v=20261114seasonalphase9';
+import { SeasonalActivities, canApplySeasonalEventOperation } from './seasonal-activities.js?v=20261114seasonalphase10';
 import { SeasonalAuthorityClient } from './authority-client.js?v=20261114seasonalphase9';
 import {
   initCasino,
@@ -4453,6 +4453,10 @@ function triggerInteract(target = activeTarget) {
         break;
       case 'mansion_key':
         seasonalActivities?.collectMansionKey(h.keyId);
+        break;
+      case 'mansion_clue':
+        seasonalActivities?.collectMansionClue(h.clueId);
+        seasonalActivities?.open('haunted_mansion');
         break;
       case 'halloween_treasure':
         seasonalActivities?.collectHalloweenTreasure(h.treasureId);

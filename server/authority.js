@@ -22,6 +22,7 @@ const INTERACTION_TARGETS = {
   gift_collect: ['christmas_gift', 'giftId'],
   treasure_collect: ['halloween_treasure', 'treasureId'],
   mansion_key: ['mansion_key', 'keyId'],
+  mansion_clue: ['mansion_clue', 'clueId'],
   exploration_collect: ['tet_exploration_item', 'itemId'],
   photo_spot: ['photo_spot', 'spotId'],
   photo_item: ['photo_collectible', 'itemId'],

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applySeasonalEventOperation, canApplySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_RIDDLE_SEQUENCE, CHRISTMAS_GIFT_IDS, HALLOWEEN_TREASURE_IDS, TET_EXPLORATION_IDS, getCommunityTreeStage } from '../js/seasonal-activities.js';
+import { applySeasonalEventOperation, canApplySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_CLUE_IDS, MANSION_RIDDLE_SEQUENCE, CHRISTMAS_GIFT_IDS, HALLOWEEN_TREASURE_IDS, TET_EXPLORATION_IDS, getCommunityTreeStage } from '../js/seasonal-activities.js';
 import { buildThemeMap, getThemeFeatures, validMap, migrateLegacyThemeMap, isSolid } from '../js/maps.js';
 
 function room(theme) {
@@ -96,16 +96,24 @@ test('sled leaderboard ranks 8 gates, shortcuts and collisions safely', () => {
   assert.equal(state.seasonalEvents.christmas.sled.records[0].timeMs, 15000);
 });
 
-test('mansion requires all three hidden keys before unlocking; votes cannot repeat', () => {
+test('mansion requires keys and physical clues before solving; votes cannot repeat', () => {
   const state = room('halloween');
   const unlock = { k: 'seasonal_event', season: 'halloween', action: 'mansion_clear' };
   assert.equal(applySeasonalEventOperation(state, unlock, 'p1', 'An'), false);
   assert.deepEqual(MANSION_KEY_IDS, ['candle', 'bat', 'pumpkin']);
+  assert.deepEqual(MANSION_CLUE_IDS, ['library_note', 'dining_clock', 'storage_ledger']);
   for (const keyId of MANSION_KEY_IDS) {
     assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'halloween', action: 'mansion_key', data: { keyId } }, 'p1', 'An'), true);
   }
   assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'halloween', action: 'mansion_key', data: { keyId: 'candle' } }, 'p1', 'An'), false);
+  const clue = { k: 'seasonal_event', season: 'halloween', action: 'mansion_clue' };
+  assert.equal(applySeasonalEventOperation(state, { ...clue, data: { clueId: MANSION_CLUE_IDS[0] } }, 'p2', 'Bình'), false);
   assert.equal(applySeasonalEventOperation(state, unlock, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(state, { ...unlock, data: { code: MANSION_RIDDLE_SEQUENCE.join('-') } }, 'p1', 'An'), false);
+  for (const clueId of MANSION_CLUE_IDS) {
+    assert.equal(applySeasonalEventOperation(state, { ...clue, data: { clueId } }, 'p1', 'An'), true);
+  }
+  assert.equal(applySeasonalEventOperation(state, { ...clue, data: { clueId: MANSION_CLUE_IDS[0] } }, 'p1', 'An'), false);
   assert.equal(applySeasonalEventOperation(state, { ...unlock, data: { code: 'moon-star-flame' } }, 'p1', 'An'), false);
   assert.equal(applySeasonalEventOperation(state, { ...unlock, data: { code: MANSION_RIDDLE_SEQUENCE.join('-') } }, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, { ...unlock, data: { code: MANSION_RIDDLE_SEQUENCE.join('-') } }, 'p1', 'An'), false);

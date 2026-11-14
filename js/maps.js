@@ -387,6 +387,11 @@ export function getThemeFeatures(themeKey = 'christmas', seedStr = 'room') {
       { id: 'mansion_key_bat', keyId: 'bat', x: 32.1, y: 17.4, prompt: '🗝️ Chìa Khóa Dơi · [E] Thu thập' },
       { id: 'mansion_key_pumpkin', keyId: 'pumpkin', x: 32.1, y: 20.3, prompt: '🗝️ Chìa Khóa Bí Ngô · [E] Thu thập' },
     ].forEach(key => hotspots.push({ ...key, type: 'mansion_key', radius: 1.05 }));
+    [
+      { clueId: 'library_note', x: 29.2, y: 18.9, prompt: '📖 Nhật Ký Thư Viện · [E] Đọc manh mối' },
+      { clueId: 'dining_clock', x: 30.8, y: 18.9, prompt: '🕰️ Đồng Hồ Phòng Ăn · [E] Kiểm tra kim đồng hồ' },
+      { clueId: 'storage_ledger', x: 30, y: 17.55, prompt: '📜 Sổ Kho Bí Mật · [E] Tìm ký hiệu trên trang giấy' },
+    ].forEach(clue => hotspots.push({ ...clue, id: clue.clueId, type: 'mansion_clue', radius: 0.82 }));
     colliders.push({ x: 28.72, y: 18.5, r: 0.15 }, { x: 31.28, y: 18.5, r: 0.15 }, { x: 30, y: 19.6, r: 0.15 });
     // Centerpiece: Giant Carved Jack-O'-Lantern
     hotspots.push({

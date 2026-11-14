@@ -1,7 +1,7 @@
 // Builds the 3D scene, themed centerpieces, seats, Vampire NPC, fireworks, and tomato projectiles.
 import * as THREE from 'three';
 import { THEMES } from './themes.js';
-import { getThemeFeatures } from './maps.js?v=20261114seasonalphase2';
+import { getThemeFeatures } from './maps.js?v=20261114seasonalphase10';
 import { instantiateReplacement } from './model-library.js?v=2026111217';
 import {
   buildProp,
@@ -103,18 +103,63 @@ function buildSeasonalLandmark(type, variant = '') {
   } else if (type === 'haunted_mansion') {
     addBox(-2.55, 1.55, 0, 0.5, 3.1, 4.4, dark);
     addBox(2.55, 1.55, 0, 0.5, 3.1, 4.4, dark);
+    addBox(-1.7, 1.55, 0.85, 1.8, 3.1, 0.35, dark);
+    addBox(1.7, 1.55, 0.85, 1.8, 3.1, 0.35, dark);
+    addBox(0, 2.95, 0.85, 1.6, 0.3, 0.35, dark);
     addBox(0, 1.55, 2.05, 5.6, 3.1, 0.35, dark);
     addBox(-1.9, 1.55, -2.05, 1.8, 3.1, 0.35, dark);
     addBox(1.9, 1.55, -2.05, 1.8, 3.1, 0.35, dark);
     addBox(0, 2.95, -2.05, 2.1, 0.5, 0.35, dark);
-    addBox(0, 3.2, 0, 6.0, 0.32, 4.8, wood);
     addBox(0, 0.08, 0, 5.35, 0.16, 4.15, wood);
+    addBox(0, 3.05, -1.65, 5.8, 0.3, 0.8, wood);
+    addBox(0, 3.05, 1.65, 5.8, 0.3, 0.8, wood);
+    addBox(-2.3, 3.05, 0, 0.8, 0.3, 2.55, wood);
+    addBox(2.3, 3.05, 0, 0.8, 0.3, 2.55, wood);
+    addBox(0, 1.9, 1.28, 4.65, 0.16, 1.0, wood);
+    addBox(-1.7, 0.68, -0.05, 0.32, 1.15, 1.65, wood);
+    addBox(1.45, 0.48, 0.58, 1.25, 0.16, 0.88, wood);
+    addBox(1.45, 0.83, 0.58, 0.12, 0.58, 0.12, warm);
+    for (let step = 0; step < 5; step++) addBox(1.72, 0.28 + step * 0.24, 1.72 - step * 0.36, 0.78, 0.12, 0.36, wood);
     [-1.02, 1.02].forEach(x => {
       addBox(x, 1.2, -2.18, 0.18, 2.4, 0.22, warm);
       addBox(x * 1.8, 2.0, -2.2, 0.7, 0.78, 0.12, warm);
     });
     addBox(0, 1.35, -1.98, 1.45, 0.12, 0.16, wood);
     addBox(0, 2.78, -2.0, 1.75, 0.18, 0.2, warm);
+    const doorPivot = new THREE.Group();
+    doorPivot.name = 'MansionDoorPivot';
+    doorPivot.position.set(-0.96, 0, -2.08);
+    const door = new THREE.Mesh(G.box(), dark);
+    door.position.set(0.96, 1.15, 0);
+    door.scale.set(1.9, 2.3, 0.14);
+    door.castShadow = true;
+    doorPivot.add(door);
+    group.add(doorPivot);
+    const secretDoorPivot = new THREE.Group();
+    secretDoorPivot.name = 'MansionSecretDoorPivot';
+    secretDoorPivot.position.set(-0.72, 0, 0.68);
+    const secretDoor = new THREE.Mesh(G.box(), wood);
+    secretDoor.position.set(0.72, 1.13, 0);
+    secretDoor.scale.set(1.4, 2.25, 0.12);
+    secretDoor.castShadow = true;
+    secretDoorPivot.add(secretDoor);
+    group.add(secretDoorPivot);
+  } else if (type === 'mansion_clue') {
+    addBox(0, 0.34, 0, 0.72, 0.12, 0.58, wood);
+    if (variant === 'library_note') {
+      addBox(-0.32, 0.95, 0, 0.24, 1.12, 0.82, dark);
+      addBox(0.02, 0.78, -0.02, 0.34, 0.05, 0.26, white);
+      addBox(0.02, 0.83, -0.02, 0.28, 0.02, 0.2, warm);
+    } else if (variant === 'dining_clock') {
+      addBox(0, 0.74, 0, 0.2, 0.68, 0.16, wood);
+      const face = addCylinder(0, 1.15, -0.02, 0.24, 0.08, warm);
+      face.rotation.x = Math.PI / 2;
+    } else {
+      addBox(0, 0.58, 0, 0.64, 0.36, 0.48, dark);
+      addBox(0, 0.79, 0, 0.68, 0.08, 0.52, wood);
+      addBox(0, 0.86, 0.1, 0.22, 0.02, 0.3, white);
+      addBox(0, 0.88, 0.1, 0.12, 0.02, 0.08, pink);
+    }
   } else if (type === 'costume_runway') {
     addBox(0, 0.18, 0, 4.3, 0.36, 2.25, dark);
     addBox(0, 0.39, 0, 3.9, 0.08, 1.9, pink);
@@ -240,6 +285,7 @@ export class World {
     this.communityTreeGroup = null;
     this.communityTreeDecorationMesh = null;
     this.communityTreeProgressGroup = null;
+    this.mansionDoors = [];
     this.seasonalVisualKey = '';
     this.particles = [];
     this.particleBatches = [];
@@ -316,6 +362,10 @@ export class World {
   }
 
   syncSeasonalEventVisuals(events, themeKey) {
+    const mansion = events?.halloween?.mansion || {};
+    const entryOpen = (mansion.players || []).some(player => ['candle', 'bat', 'pumpkin'].every(key => player.keys?.includes(key)));
+    const secretOpen = (mansion.solved || []).length > 0;
+    this.mansionDoors.forEach(door => { door.userData.targetAngle = door.name === 'MansionDoorPivot' ? (entryOpen ? -1.32 : 0) : (secretOpen ? -1.32 : 0); });
     const contributors = themeKey === 'christmas' ? events?.christmas?.tree?.contributors || [] : [];
     const count = Math.min(24, contributors.length);
     const key = themeKey + ':' + contributors.slice(0, 24).map(item => item?.decorationType || 'bell').join(',');
@@ -564,6 +614,7 @@ export class World {
     this.scene.add(this.group);
     this.communityTreeGroup = null;
     this.communityTreeDecorationMesh = null;
+    this.mansionDoors = [];
     this.seasonalVisualKey = '';
     if (themeKey !== this.appliedThemeKey) {
       this.applyTheme(themeKey);
@@ -857,11 +908,17 @@ export class World {
         pub.position.set(h.x * TILE, 0, h.y * TILE);
         addMapModel(h.type, pub);
         this.casinoObjs.push(pub);
-      } else if (['community_tree', 'sled_race', 'haunted_mansion', 'costume_runway', 'photo_hunt', 'photo_spot', 'dance_stage', 'mansion_key', 'photo_collectible', 'christmas_gift', 'halloween_treasure', 'tet_exploration_item'].includes(h.type)) {
-        const landmark = buildSeasonalLandmark(h.type, h.keyId || h.itemId || h.giftId || h.treasureId || '');
+      } else if (['community_tree', 'sled_race', 'haunted_mansion', 'mansion_clue', 'costume_runway', 'photo_hunt', 'photo_spot', 'dance_stage', 'mansion_key', 'photo_collectible', 'christmas_gift', 'halloween_treasure', 'tet_exploration_item'].includes(h.type)) {
+        const landmark = buildSeasonalLandmark(h.type, h.keyId || h.clueId || h.itemId || h.giftId || h.treasureId || '');
         landmark.position.set(h.x * TILE, 0, h.y * TILE);
         this.group.add(landmark);
         if (h.type === 'community_tree') this.communityTreeGroup = landmark;
+        if (h.type === 'haunted_mansion') {
+          for (const name of ['MansionDoorPivot', 'MansionSecretDoorPivot']) {
+            const door = landmark.getObjectByName(name);
+            if (door) this.mansionDoors.push(door);
+          }
+        }
       }
       if ((i + 1) % 2 === 0 && i + 1 < this.features.hotspots.length) {
         await this.yieldMapBuild(76 + ((i + 1) / this.features.hotspots.length) * 16, 'Dựng công trình và điểm tương tác...', themeKey);
@@ -1268,6 +1325,11 @@ export class World {
 
   update(dt, center, camera) {
     this.t += dt;
+    for (const door of this.mansionDoors) {
+      const target = door.userData.targetAngle || 0;
+      const delta = target - door.rotation.y;
+      door.rotation.y += Math.sign(delta) * Math.min(Math.abs(delta), dt * 1.6);
+    }
     for (const animation of this.animatedModels) animation.update.call(animation.model.userData, this.t, dt);
     const now = performance.now();
 
