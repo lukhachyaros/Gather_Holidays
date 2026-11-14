@@ -7,7 +7,7 @@ import {
   CARD_STYLES,
   rollLixiReward,
 } from './themes.js';
-import { isSolid, buildThemeMap, validMap, migrateLegacyThemeMap } from './maps.js?v=20261113seasonal2';
+import { isSolid, buildThemeMap, validMap, migrateLegacyThemeMap } from './maps.js?v=20261114seasonalphase2';
 import { connect, connectLobby, hashPass } from './net.js';
 import {
   initPlayer,
@@ -29,7 +29,7 @@ import {
   seekPlayer,
   syncPlayback,
 } from './media.js';
-import { World, TILE } from './world.js?v=20261113seasonal2';
+import { World, TILE } from './world.js?v=20261114seasonalphase2';
 import { Avatar, loadCharacter, EMOTE_CLIP, hueFor, isAdminUser } from './avatar.js?v=20261114avatarfit1';
 import { emojiSprite, part, G, mat } from './props.js';
 import { RtcManager } from './rtc.js?v=20261112_livekit';
@@ -43,7 +43,8 @@ import {
   getBgmVolume,
 } from './audio.js';
 import { MinigameManager, DRAGON_SKINS, FLIGHT_QUESTS } from './minigames.js';
-import { SeasonalActivities, canApplySeasonalEventOperation } from './seasonal-activities.js?v=20261113seasonal3';
+import { SeasonalActivities, canApplySeasonalEventOperation } from './seasonal-activities.js?v=20261114seasonalphase2';
+import { SeasonalAuthorityClient } from './authority-client.js?v=20261114seasonalphase2';
 import {
   initCasino,
   openRoulette,
@@ -334,6 +335,18 @@ let net,
   verifiedPassHash = '',
   pendingRoomTarget = null,
   activeLobbyFilter = 'all';
+const authorityUrl = new URLSearchParams(location.search).get('authority') || document.querySelector('meta[name="gh-authority"]')?.content || '';
+const authorityClient = new SeasonalAuthorityClient({
+  baseUrl: authorityUrl,
+  onState: snapshot => {
+    if (!state || snapshot.theme !== state.theme) return;
+    state.seasonalEvents = snapshot.seasonalEvents || {};
+    state.v = Math.max(state.v || 0, snapshot.seq || 0);
+    seasonalActivities?.refresh();
+    world?.syncSeasonalEventVisuals(state.seasonalEvents, state.theme);
+  },
+  onStatus: status => document.body?.dataset && (document.body.dataset.authorityStatus = status),
+});
 const peers = new Map(); // id -> {name, hue, x, y, tx, ty, r, tr, a, h, costume, pumpkinHat, heldItem, seatId, lean, av}
 const floaters = [];
 let inbox = JSON.parse(localStorage.getItem('gh_inbox') || '[]');
@@ -503,8 +516,8 @@ try {
   minigames = new MinigameManager(scene, camera, () => me, () => peers, emitOp, toast, floaters);
   seasonalActivities = new SeasonalActivities({
     getState: () => state,
-    getSelfId: () => net?.selfId,
-    getPlayerName: id => id === net?.selfId ? me?.name : peers.get(id)?.name || 'Người chơi',
+    getSelfId: () => authorityClient.connected ? authorityClient.userId : net?.selfId,
+    getPlayerName: id => id === authorityClient.userId || id === net?.selfId ? me?.name : peers.get(id)?.name || 'Người chơi',
     emitOp,
     toast,
     onCostumeSubmit: costumeKey => equipCostume(costumeKey),
@@ -1401,6 +1414,15 @@ async function start() {
   playBgm(state.theme);
   minigames?.setTheme(state.theme);
   seasonalActivities?.setTheme(state.theme);
+  if (authorityClient.enabled) {
+    try {
+      await authorityClient.connect({ roomId: roomName, theme: state.theme, name: me.name, memberId: net.selfId, host: isHost() });
+      toast('🔒 Đã kết nối máy chủ tiến trình bền vững.');
+    } catch (error) {
+      console.error('[Authority] Persistent room service unavailable:', error);
+      toast('⚠️ Máy chủ tiến trình chưa sẵn sàng. Hoạt động lưu tiến trình đang tạm khóa.');
+    }
+  }
   net.send('hello', pubInfo());
   applyMedia(state.mediaCurrent);
   updateHud();
@@ -1767,11 +1789,12 @@ const handlers = {
     }
 
     const first = !state;
+    const persistedSeasonalEvents = authorityClient.enabled ? state?.seasonalEvents : null;
     state = s;
     state.map = migrateLegacyThemeMap(state.map, state.theme);
-    state.seasonalEvents = state.seasonalEvents && typeof state.seasonalEvents === 'object' && !Array.isArray(state.seasonalEvents)
+    state.seasonalEvents = persistedSeasonalEvents || (state.seasonalEvents && typeof state.seasonalEvents === 'object' && !Array.isArray(state.seasonalEvents)
       ? state.seasonalEvents
-      : {};
+      : {});
     seasonalActivities?.setTheme(state.theme);
     state.kickedIds = Array.isArray(state.kickedIds) ? state.kickedIds : [];
     state.bannedNames = Array.isArray(state.bannedNames) ? state.bannedNames : [];
@@ -2480,6 +2503,7 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'seasonal_event': {
+      if (authorityClient.enabled) return;
       // The room host owns shared seasonal progress. Guests submit operations
       // to the host and only apply the canonical snapshot it broadcasts back.
       // The reducer still validates every operation before it changes state.
@@ -2507,6 +2531,23 @@ function emitOp(op) {
   if (typeof op?.k === 'string' && op.k.startsWith('admin_') && !isHost()) {
     toast('⛔ Lệnh quản trị chỉ dùng được bởi chủ phòng.');
     return false;
+  }
+  if (op?.k === 'seasonal_event' && authorityClient.enabled) {
+    if (!authorityClient.connected) {
+      toast('⚠️ Không gửi được tiến trình vì máy chủ hoạt động chưa kết nối.');
+      return false;
+    }
+    authorityClient.submit(op).catch(error => {
+      console.error('[Authority] Seasonal operation rejected:', error);
+      toast('⚠️ Máy chủ chưa ghi nhận thao tác này. Hãy kiểm tra tiến trình rồi thử lại.');
+    });
+    return true;
+  }
+  if (op?.k === 'theme' && authorityClient.enabled) {
+    authorityClient.changeTheme(op.theme).catch(error => {
+      console.error('[Authority] Theme change rejected:', error);
+      toast('⚠️ Máy chủ tiến trình chưa chấp nhận bản đồ mới; hoạt động đã khóa để tránh ghi nhầm dữ liệu.');
+    });
   }
   op.v = Date.now();
   applyOp(op, net.selfId);

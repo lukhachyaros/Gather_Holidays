@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applySeasonalEventOperation, canApplySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_RIDDLE_SEQUENCE, CHRISTMAS_GIFT_IDS, HALLOWEEN_TREASURE_IDS, TET_EXPLORATION_IDS } from '../js/seasonal-activities.js';
-import { buildThemeMap, getThemeFeatures, validMap, migrateLegacyThemeMap } from '../js/maps.js';
+import { buildThemeMap, getThemeFeatures, validMap, migrateLegacyThemeMap, isSolid } from '../js/maps.js';
 
 function room(theme) {
   return { theme, kickedIds: [], seasonalEvents: createSeasonalEventsState() };
@@ -177,9 +177,17 @@ test('seasonal map expansions leave Tet layout unchanged', () => {
   assert.equal(getThemeFeatures('valentine').hotspots.filter(item => item.type === 'photo_collectible').length, 4);
 });
 
-test('Christmas and Halloween maps expose all five collectible hunt locations', () => {
-  assert.equal(getThemeFeatures('christmas').hotspots.filter(item => item.type === 'christmas_gift').length, 5);
-  assert.equal(getThemeFeatures('halloween').hotspots.filter(item => item.type === 'halloween_treasure').length, 5);
+test('all seasonal collectible hunt locations are reachable inside their map boundaries', () => {
+  for (const [theme, type] of [['christmas', 'christmas_gift'], ['halloween', 'halloween_treasure'], ['tet', 'tet_exploration_item']]) {
+    const map = buildThemeMap(theme);
+    const spots = getThemeFeatures(theme).hotspots.filter(item => item.type === type);
+    assert.equal(spots.length, 5);
+    for (const spot of spots) {
+      const tile = map.rows[Math.floor(spot.y)]?.[Math.floor(spot.x)];
+      assert.equal(isSolid(tile), false, `${theme} pickup ${spot.id} is not blocked`);
+      assert.equal(spot.x < map.w && spot.y < map.h, true, `${theme} pickup ${spot.id} is inside the map`);
+    }
+  }
 });
 
 test('Tet exploration tracks unique discoveries and provides five map locations', () => {

@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check js/game.js && node --check js/maps.js && node --check js/world.js && node --check js/minigames.js && node --check js/minigame-rules.js && node --check js/seasonal-activities.js",
-    "test": "node --test tests/*.test.js"
+    "check": "node --check js/game.js && node --check js/maps.js && node --check js/world.js && node --check js/minigames.js && node --check js/minigame-rules.js && node --check js/seasonal-activities.js && node --check server/authority.js",
+    "test": "node --test tests/*.test.js",
+    "start:authority": "node server/authority.js"
   }
 }
