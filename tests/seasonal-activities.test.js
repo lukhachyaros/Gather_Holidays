@@ -106,6 +106,9 @@ test('dance scores are bounded and only improve', () => {
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 75 } }, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 65 } }, 'p1', 'An'), false);
   assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 101 } }, 'p2', 'Bình'), false);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 72, mode: 'memory' } }, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(state, { ...base, data: { score: 99, mode: 'invented' } }, 'p1', 'An'), false);
+  assert.deepEqual(state.seasonalEvents.valentine.dance.records.map(record => record.mode), ['rhythm', 'memory']);
 });
 
 

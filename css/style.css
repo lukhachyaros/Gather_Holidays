@@ -2050,6 +2050,8 @@ body.matrix-active::after {
 .seasonal-collectible-hint{color:#a5b4c5;font-size:12px;line-height:1.4}
 .seasonal-collectible-row.is-complete .seasonal-collectible-title{color:#bbf7d0}
 .seasonal-dance-cue{display:grid;min-height:105px;place-items:center;border:1px solid rgba(244,114,182,.45);border-radius:18px;background:radial-gradient(circle,rgba(236,72,153,.26),rgba(30,15,35,.7));font-size:clamp(44px,9vw,68px);text-shadow:0 0 24px rgba(244,114,182,.55)}
+.seasonal-dance-mode{display:grid;gap:8px;padding:12px;border:1px solid rgba(244,114,182,.24);border-radius:14px;background:rgba(20,16,36,.65)}
+.seasonal-dance-mode span{color:#cbd5e1;font-size:.9rem;line-height:1.45}
 .seasonal-move-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
 .seasonal-move{min-height:56px;font-size:16px}
 @media(max-width:420px){.seasonal-track-grid{gap:5px}.seasonal-lane{min-height:98px;padding:8px 4px;font-size:11px}}

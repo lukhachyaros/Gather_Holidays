@@ -8,6 +8,11 @@ export function canApplySeasonalEventOperation(isRoomHost, senderId, hostId) {
   return Boolean(hostId && (isRoomHost || senderId === hostId));
 }
 const DANCE_MOVES = ['left', 'right', 'up', 'down'];
+const DANCE_MODES = [
+  { id: 'rhythm', label: '🥁 Bắt nhịp', detail: 'Nhấn đúng hướng theo nhịp nhạc.' },
+  { id: 'memory', label: '🧠 Ghi nhớ', detail: 'Xem chuỗi động tác rồi lặp lại khi ký hiệu biến mất.' },
+  { id: 'copy', label: '🪞 Bắt chước', detail: 'Bắt chước chuỗi động tác đang hiện trên sàn.' },
+];
 const COSTUME_KEYS = ['default', 'frankenstein', 'zombie', 'vampire', 'witch', 'skeleton'];
 const PHOTO_SPOTS = [
   { id: 'snow_globe', name: 'Cổng Ánh Sao', icon: '✨' },
@@ -194,12 +199,13 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
 
   if (op.season === 'valentine' && op.action === 'dance_record') {
     const score = Number(data.score);
-    if (!Number.isFinite(score) || !Number.isInteger(score) || score < 0 || score > 100) return false;
+    const mode = String(data.mode || 'rhythm');
+    if (!DANCE_MODES.some(item => item.id === mode) || !Number.isFinite(score) || !Number.isInteger(score) || score < 0 || score > 100) return false;
     if (!isObject(season.dance)) season.dance = {};
     const records = ensureList(season.dance, 'records');
-    const previous = findRecord(records, id);
+    const previous = records.find(item => item?.id === id && (item.mode || 'rhythm') === mode);
     if (previous && score <= previous.score) return false;
-    const next = { id, name, score, at: Date.now() };
+    const next = { id, name, mode, score, at: Date.now() };
     if (previous) Object.assign(previous, next);
     else {
       if (records.length >= 100) return false;
@@ -813,19 +819,30 @@ export class SeasonalActivities {
       this.body.appendChild(moves);
     } else {
       if (this.lastDanceScore !== null) this.body.appendChild(this.el('p', '🎶 Lượt vừa rồi: ' + this.lastDanceScore + '/100 điểm.', 'seasonal-result'));
-      this.body.appendChild(this.button('▶ Bắt đầu nhảy', 'dance-start', {}, 'seasonal-button seasonal-primary'));
+      DANCE_MODES.forEach(mode => {
+        const card = this.el('div', null, 'seasonal-dance-mode');
+        card.append(this.el('strong', mode.label), this.el('span', mode.detail));
+        card.appendChild(this.button('▶ Chơi chế độ này', 'dance-start', { mode: mode.id }, 'seasonal-button seasonal-primary'));
+        this.body.appendChild(card);
+      });
     }
     this.heading('Bảng điểm vũ đạo');
     const list = this.el('div', null, 'seasonal-list');
-    records.slice(0, 8).forEach((record, index) => list.appendChild(this.el('div', (index + 1) + '. ' + record.name + ' · ' + record.score + '/100', 'seasonal-list-item')));
+    records.slice(0, 8).forEach((record, index) => {
+      const modeName = DANCE_MODES.find(mode => mode.id === (record.mode || 'rhythm'))?.label || 'Bắt nhịp';
+      list.appendChild(this.el('div', (index + 1) + '. ' + record.name + ' · ' + modeName + ' · ' + record.score + '/100', 'seasonal-list-item'));
+    });
     if (!records.length) list.appendChild(this.el('div', 'Chưa có điểm vũ đạo nào.', 'seasonal-empty'));
     this.body.appendChild(list);
   }
 
-  startDance() {
+  startDance(mode = 'rhythm') {
     this.stopDance();
-    const sequence = Array.from({ length: 8 }, () => DANCE_MOVES[Math.floor(Math.random() * DANCE_MOVES.length)]);
-    this.dance = { sequence, startAt: performance.now() + 1500, hits: new Set(), score: 0, correct: 0 };
+    if (!DANCE_MODES.some(item => item.id === mode)) mode = 'rhythm';
+    this.danceMode = mode;
+    const sequence = Array.from({ length: mode === 'memory' ? 5 : 8 }, () => DANCE_MOVES[Math.floor(Math.random() * DANCE_MOVES.length)]);
+    const playbackMs = mode === 'memory' ? sequence.length * 520 : 0;
+    this.dance = { mode, sequence, playbackMs, startAt: performance.now() + 1200, hits: new Set(), score: 0, correct: 0 };
     this.render();
     this.tickDance();
   }
@@ -833,35 +850,47 @@ export class SeasonalActivities {
   tickDance() {
     if (!this.dance) return;
     const elapsed = performance.now() - this.dance.startAt;
-    if (elapsed >= 8 * 650) {
+    const tempoMs = this.dance.mode === 'copy' ? 820 : 650;
+    const inputStart = this.dance.playbackMs;
+    if (elapsed >= inputStart + this.dance.sequence.length * tempoMs) {
       this.finishDance();
       return;
     }
-    const beat = Math.max(0, Math.min(7, Math.floor(elapsed / 650)));
+    const isMemoryPlayback = this.dance.mode === 'memory' && elapsed < inputStart;
+    const beat = Math.max(0, Math.min(this.dance.sequence.length - 1, Math.floor((elapsed - inputStart) / tempoMs)));
     const symbols = { left: '⬅️', right: '➡️', up: '⬆️', down: '⬇️' };
     if (this.dancePrompt) {
       if (elapsed < 0) this.dancePrompt.textContent = 'Chuẩn bị… ' + Math.ceil(-elapsed / 500);
-      else this.dancePrompt.textContent = 'NHỊP ' + (beat + 1) + ' / 8';
+      else if (isMemoryPlayback) this.dancePrompt.textContent = 'GHI NHỚ CHUỖI · ' + (Math.floor(elapsed / 520) + 1) + ' / ' + this.dance.sequence.length;
+      else this.dancePrompt.textContent = (this.dance.mode === 'rhythm' ? 'NHỊP ' : this.dance.mode === 'memory' ? 'LẶP LẠI ' : 'BẮT CHƯỚC ') + (beat + 1) + ' / ' + this.dance.sequence.length;
     }
-    if (this.danceCue) this.danceCue.textContent = elapsed < 0 ? '🎵' : symbols[this.dance.sequence[beat]];
-    if (this.danceScoreLabel) this.danceScoreLabel.textContent = 'Điểm: ' + this.dance.score + ' / 100 · Đúng: ' + this.dance.correct + '/8';
+    if (this.danceCue) this.danceCue.textContent = elapsed < 0 || (this.dance.mode === 'memory' && !isMemoryPlayback) ? '❔' : symbols[this.dance.sequence[beat]];
+    if (this.danceScoreLabel) this.danceScoreLabel.textContent = 'Điểm: ' + this.dance.score + ' / 100 · Đúng: ' + this.dance.correct + '/' + this.dance.sequence.length;
     this.danceFrame = requestAnimationFrame(() => this.tickDance());
   }
 
   moveDance(direction) {
     if (!this.dance || !DANCE_MOVES.includes(direction)) return;
     const elapsed = performance.now() - this.dance.startAt;
-    const beat = Math.round(elapsed / 650);
-    if (beat < 0 || beat > 7 || this.dance.hits.has(beat)) return;
-    const delta = Math.abs(elapsed - beat * 650);
-    if (delta > 250) {
+    const tempoMs = this.dance.mode === 'copy' ? 820 : 650;
+    if (this.dance.mode === 'memory' && elapsed < this.dance.playbackMs) {
+      this.toast?.('🧠 Đợi chuỗi kết thúc rồi lặp lại nhé!');
+      return;
+    }
+    const phaseElapsed = elapsed - this.dance.playbackMs;
+    const beat = Math.round(phaseElapsed / tempoMs);
+    if (beat < 0 || beat >= this.dance.sequence.length || this.dance.hits.has(beat)) return;
+    const delta = Math.abs(phaseElapsed - beat * tempoMs);
+    const windowMs = this.dance.mode === 'memory' ? 440 : this.dance.mode === 'copy' ? 300 : 250;
+    if (delta > windowMs) {
       this.toast?.('🎵 Lệch nhịp rồi — chờ động tác tiếp theo nhé!');
       return;
     }
     this.dance.hits.add(beat);
     if (direction === this.dance.sequence[beat]) {
       this.dance.correct++;
-      this.dance.score = Math.min(100, this.dance.score + (delta <= 110 ? 13 : 9));
+      const base = Math.floor(100 / this.dance.sequence.length);
+      this.dance.score = Math.min(100, this.dance.score + (delta <= 110 ? base : Math.max(1, base - 4)));
     } else this.toast?.('↔️ Sai động tác! Hãy bắt chước mũi tên đang sáng.');
   }
 
@@ -870,7 +899,7 @@ export class SeasonalActivities {
     const score = Math.min(100, this.dance.score);
     this.stopDance();
     this.lastDanceScore = score;
-    this.submit('dance_record', { score });
+    this.submit('dance_record', { score, mode: this.danceMode || 'rhythm' });
     this.render();
   }
 
@@ -905,7 +934,7 @@ export class SeasonalActivities {
       this.active = 'haunted_mansion';
       this.render();
     } else if (action === 'costume-photo') this.takePhoto('Sàn diễn hóa trang Halloween');
-    else if (action === 'dance-start') this.startDance();
+    else if (action === 'dance-start') this.startDance(data.mode);
     else if (action === 'dance-move') this.moveDance(data.direction);
   }
 }
