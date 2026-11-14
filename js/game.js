@@ -521,6 +521,14 @@ try {
     emitOp,
     toast,
     onCostumeSubmit: costumeKey => equipCostume(costumeKey),
+    getHeldItem: () => me?.heldItem,
+    consumeHeldItem: ornamentKey => {
+      if (me?.heldItem !== ornamentKey) return;
+      me.heldItem = null;
+      me.av?.setHeldItem(null);
+      updateStatusBadges();
+      syncMyAppearance();
+    },
     onCapturePhoto: () => {
       try {
         renderer.render(scene, camera);
@@ -801,8 +809,13 @@ function buildStaticGrids() {
   ORNAMENTS.forEach(orn => {
     const b = document.createElement('button');
     b.textContent = orn.name;
-    b.onclick = () => {
+    b.onclick = async () => {
       if (!checkCooldown()) return;
+      if (me.heldItem) { toast('🎒 Bạn đang cầm một món. Hãy treo hoặc đóng góp món đó trước.'); return; }
+      if (state?.theme === 'christmas') {
+        const accepted = await emitOp({ k: 'seasonal_event', season: 'christmas', action: 'ornament_pickup', data: { ornamentKey: orn.key } });
+        if (accepted === false) return;
+      }
       me.heldItem = orn.key;
       me.av?.setHeldItem(orn.key);
       me.av?.playEmote('interact');
@@ -2537,11 +2550,11 @@ function emitOp(op) {
       toast('⚠️ Không gửi được tiến trình vì máy chủ hoạt động chưa kết nối.');
       return false;
     }
-    authorityClient.submit(op).catch(error => {
+    return authorityClient.submit(op).then(() => true).catch(error => {
       console.error('[Authority] Seasonal operation rejected:', error);
       toast('⚠️ Máy chủ chưa ghi nhận thao tác này. Hãy kiểm tra tiến trình rồi thử lại.');
+      return false;
     });
-    return true;
   }
   if (op?.k === 'theme' && authorityClient.enabled) {
     authorityClient.changeTheme(op.theme).catch(error => {
@@ -3672,6 +3685,9 @@ function hangHeldOrnamentOnTree() {
   if (!me.heldItem) return;
   if (!checkCooldown()) return;
   const orn = ORNAMENTS.find(o => o.key === me.heldItem) || ORNAMENTS[0];
+  if (state?.theme === 'christmas') {
+    emitOp({ k: 'seasonal_event', season: 'christmas', action: 'ornament_spend', data: { ornamentKey: orn.key } });
+  }
   emitOp({
     k: 'ornament+',
     o: { id: uid(), key: orn.key, by: me.name },

@@ -16,10 +16,23 @@ test('seasonal shared progress is reduced by the room host, while guests only ac
 
 test('community tree contributions are unique per player', () => {
   const state = room('christmas');
-  const op = { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: 'star' } };
+  const pickup = { k: 'seasonal_event', season: 'christmas', action: 'ornament_pickup', data: { ornamentKey: 'star' } };
+  assert.equal(applySeasonalEventOperation(state, pickup, 'p1', 'An'), true);
+  const op = { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: 'star', ornamentKey: 'star' } };
   assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), false);
   assert.equal(state.seasonalEvents.christmas.tree.contributors.length, 1);
+});
+
+test('tree contribution consumes a server-validated ornament from the player inventory', () => {
+  const state = room('christmas');
+  const contribution = { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: 'star', ornamentKey: 'star' } };
+  assert.equal(applySeasonalEventOperation(state, contribution, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'christmas', action: 'ornament_pickup', data: { ornamentKey: 'star' } }, 'p1', 'An'), true);
+  assert.equal(applySeasonalEventOperation(state, { ...contribution, data: { decorationType: 'bell', ornamentKey: 'star' } }, 'p1', 'An'), false);
+  assert.equal(applySeasonalEventOperation(state, contribution, 'p1', 'An'), true);
+  assert.equal(state.seasonalEvents.christmas.inventory.players[0].heldKey, null);
+  assert.equal(applySeasonalEventOperation(state, contribution, 'p2', 'Bình'), false);
 });
 
 test('Christmas gifts and Halloween relics are known, unique per player, and room-shared', () => {
@@ -41,16 +54,20 @@ test('community tree requires a balanced set of three decoration types', () => {
   const state = room('christmas');
   for (const type of ['star', 'bell', 'ribbon']) {
     for (let i = 0; i < 8; i++) {
+      const ornamentKey = type === 'ribbon' ? 'cane' : type;
+      assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'christmas', action: 'ornament_pickup', data: { ornamentKey } }, type + i, 'Người chơi ' + i), true);
       assert.equal(applySeasonalEventOperation(
         state,
-        { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: type } },
+        { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: type, ornamentKey } },
         type + i,
         'Người chơi ' + i
       ), true);
     }
+    const extraOrnamentKey = type === 'ribbon' ? 'cane' : type;
+    assert.equal(applySeasonalEventOperation(state, { k: 'seasonal_event', season: 'christmas', action: 'ornament_pickup', data: { ornamentKey: extraOrnamentKey } }, 'extra-' + type, 'Người chơi thêm'), true);
     assert.equal(applySeasonalEventOperation(
       state,
-      { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: type } },
+      { k: 'seasonal_event', season: 'christmas', action: 'tree_contribute', data: { decorationType: type, ornamentKey: extraOrnamentKey } },
       'extra-' + type,
       'Người chơi thêm'
     ), false);

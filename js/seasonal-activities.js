@@ -46,7 +46,7 @@ const findRecord = (list, id) => list.find(item => item && item.id === id);
 
 export function createSeasonalEventsState() {
   return {
-    christmas: { tree: { contributors: [] }, sled: { records: [] }, gifts: { players: [] } },
+    christmas: { tree: { contributors: [] }, inventory: { players: [] }, sled: { records: [] }, gifts: { players: [] } },
     halloween: { mansion: { players: [], solved: [] }, costume: { entries: [], votes: [] }, treasure: { players: [] } },
     valentine: { photos: { players: [] }, dance: { records: [] } },
     tet: { exploration: { players: [] } },
@@ -122,13 +122,37 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
 
   if (op.season === 'christmas' && op.action === 'tree_contribute') {
     const decorationType = String(data.decorationType || 'bell');
-    if (!['star', 'bell', 'ribbon'].includes(decorationType)) return false;
+    const ornamentKey = String(data.ornamentKey || '');
+    const ornamentType = { star: 'star', bell: 'bell', cane: 'ribbon' }[ornamentKey];
+    if (!['star', 'bell', 'ribbon'].includes(decorationType) || ornamentType !== decorationType) return false;
     if (!isObject(season.tree)) season.tree = {};
     const contributors = ensureList(season.tree, 'contributors');
     if (contributors.length >= 24 || findRecord(contributors, id)) return false;
     const typeCount = contributors.filter(item => item?.decorationType === decorationType).length;
     if (typeCount >= 8) return false;
-    contributors.push({ id, name, decorationType, at: Date.now() });
+    const inventory = ensureList(season.inventory ||= {}, 'players');
+    const held = findRecord(inventory, id);
+    if (held?.heldKey !== ornamentKey) return false;
+    held.heldKey = null;
+    contributors.push({ id, name, decorationType, ornamentKey, at: Date.now() });
+    return true;
+  }
+
+  if (op.season === 'christmas' && ['ornament_pickup', 'ornament_spend'].includes(op.action)) {
+    const ornamentKey = String(data.ornamentKey || '');
+    if (!['star', 'bell', 'cane', 'ball_red', 'ball_gold', 'ball_blue', 'gift'].includes(ornamentKey)) return false;
+    if (!isObject(season.inventory)) season.inventory = {};
+    const players = ensureList(season.inventory, 'players');
+    let player = findRecord(players, id);
+    if (!player) { if (players.length >= 100) return false; player = { id, name, heldKey: null }; players.push(player); }
+    if (op.action === 'ornament_pickup') {
+      if (player.heldKey) return false;
+      player.heldKey = ornamentKey;
+    } else {
+      if (player.heldKey !== ornamentKey) return false;
+      player.heldKey = null;
+    }
+    player.name = name;
     return true;
   }
 
@@ -276,7 +300,7 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
 }
 
 export class SeasonalActivities {
-  constructor({ getState, getSelfId, getPlayerName, emitOp, toast, onCostumeSubmit, onCapturePhoto }) {
+  constructor({ getState, getSelfId, getPlayerName, emitOp, toast, onCostumeSubmit, onCapturePhoto, getHeldItem, consumeHeldItem }) {
     this.getState = getState;
     this.getSelfId = getSelfId;
     this.getPlayerName = getPlayerName;
@@ -284,6 +308,8 @@ export class SeasonalActivities {
     this.toast = toast;
     this.onCostumeSubmit = onCostumeSubmit;
     this.onCapturePhoto = onCapturePhoto;
+    this.getHeldItem = getHeldItem || (() => null);
+    this.consumeHeldItem = consumeHeldItem || (() => {});
     this.photoShots = [];
     this.mansionRoomId = '';
     this.theme = null;
@@ -412,8 +438,7 @@ export class SeasonalActivities {
       this.toast?.('Bạn cần vào phòng trước khi tham gia hoạt động.');
       return false;
     }
-    this.emitOp?.({ k: 'seasonal_event', season: this.theme, action, data });
-    return true;
+    return this.emitOp?.({ k: 'seasonal_event', season: this.theme, action, data }) ?? false;
   }
 
   takePhoto(label = 'Khoảnh khắc lễ hội') {
@@ -608,6 +633,8 @@ export class SeasonalActivities {
   renderTree() {
     const contributors = this.stateBucket('christmas', 'tree', 'contributors');
     const mine = this.myRecord(contributors);
+    const heldItem = this.myRecord(this.stateBucket('christmas', 'inventory', 'players'))?.heldKey || this.getHeldItem?.();
+    const heldType = { star: 'star', bell: 'bell', cane: 'ribbon' }[heldItem] || '';
     const types = [
       { id: 'star', label: '🌟 Ngôi sao', hint: 'Ánh sáng trên đỉnh cây' },
       { id: 'bell', label: '🔔 Chuông', hint: 'Âm thanh mùa lễ hội' },
@@ -617,7 +644,8 @@ export class SeasonalActivities {
     const total = contributors.length;
     const complete = types.every(type => counts[type.id] >= 8);
     const progress = Math.min(100, Math.round(total / 24 * 100));
-    this.paragraph('Đây là nhiệm vụ phối hợp: cả phòng cần trang trí đủ 8 ngôi sao, 8 chuông và 8 dải ruy băng. Mỗi người chỉ được góp một món. Khi một loại đã đủ, hãy chọn loại còn thiếu để hoàn thiện cây.');
+    this.paragraph('Lấy một món ở bàn đồ trang trí rồi mang đến cây thông cộng đồng. Cả phòng cần góp đủ 8 ngôi sao, 8 chuông và 8 kẹo gậy (tính như ruy băng). Mỗi người chỉ góp một món; vật phẩm sẽ bị tiêu thụ khi đóng góp.');
+    this.body.appendChild(this.el('div', heldItem ? '🎒 Đang cầm: ' + heldItem : '🎒 Chưa có đồ trang trí · Hãy ghé bàn đồ trang trí', 'seasonal-stat'));
     const meter = this.el('div', null, 'seasonal-progress');
     const fill = this.el('div', null, 'seasonal-progress-fill');
     fill.style.width = progress + '%';
@@ -628,7 +656,7 @@ export class SeasonalActivities {
     types.forEach(type => {
       const button = this.button(type.label + ' · ' + counts[type.id] + '/8', 'tree-contribute', { decorationType: type.id }, 'seasonal-button seasonal-primary');
       button.title = type.hint;
-      button.disabled = !!mine || counts[type.id] >= 8 || complete;
+      button.disabled = !!mine || counts[type.id] >= 8 || complete || heldType !== type.id;
       options.appendChild(button);
     });
     this.body.appendChild(options);
@@ -1043,8 +1071,13 @@ export class SeasonalActivities {
   handleAction(action, data) {
     if (action === 'close') return this.close();
     if (action === 'tree-contribute') {
-      this.submit('tree_contribute', { decorationType: data.decorationType });
-      this.toast?.('🎁 Đã gửi món trang trí cho cây thông cộng đồng!');
+      const ornamentKey = this.myRecord(this.stateBucket('christmas', 'inventory', 'players'))?.heldKey || this.getHeldItem?.();
+      const expected = { star: 'star', bell: 'bell', cane: 'ribbon' }[ornamentKey];
+      if (!ornamentKey || expected !== data.decorationType) { this.toast?.('🎒 Hãy cầm đúng món trang trí trước khi đóng góp.'); return; }
+      const result = this.submit('tree_contribute', { decorationType: data.decorationType, ornamentKey });
+      if (result?.then) result.then(accepted => { if (accepted) this.consumeHeldItem?.(ornamentKey); }).catch(() => {});
+      else if (result) this.consumeHeldItem?.(ornamentKey);
+      this.toast?.('🎁 Đã gửi yêu cầu đóng góp cho cây thông cộng đồng!');
     } else if (action === 'race-start') this.startRace();
     else if (action === 'race-choice') this.chooseRace(data.lane);
     else if (action === 'mansion-choice') this.chooseMansion(data.symbol);
