@@ -33,3 +33,14 @@ test('browser authority client submits operations and only accepts increasing ca
   assert.equal(calls[1].options.headers.authorization, 'Bearer session-token');
   client.destroy();
 });
+
+test('authority client estimates server clock offset from response timestamps', async () => {
+  const client = new SeasonalAuthorityClient({
+    baseUrl: 'https://authority.test',
+    fetcher: async () => ({ ok: true, status: 200, json: async () => ({ serverNow: Date.now() + 5000 }) }),
+  });
+  await client.request('/health', { token: '' });
+  assert.ok(client.serverNow() - Date.now() >= 4900);
+  assert.ok(client.serverNow() - Date.now() <= 5100);
+  client.destroy();
+});

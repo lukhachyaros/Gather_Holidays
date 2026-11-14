@@ -300,7 +300,7 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
 }
 
 export class SeasonalActivities {
-  constructor({ getState, getSelfId, getPlayerName, emitOp, toast, onCostumeSubmit, onCapturePhoto, getHeldItem, consumeHeldItem, getAuthorityEnabled }) {
+  constructor({ getState, getSelfId, getPlayerName, emitOp, toast, onCostumeSubmit, onCapturePhoto, getHeldItem, consumeHeldItem, getAuthorityEnabled, getServerNow }) {
     this.getState = getState;
     this.getSelfId = getSelfId;
     this.getPlayerName = getPlayerName;
@@ -311,6 +311,7 @@ export class SeasonalActivities {
     this.getHeldItem = getHeldItem || (() => null);
     this.consumeHeldItem = consumeHeldItem || (() => {});
     this.getAuthorityEnabled = getAuthorityEnabled || (() => false);
+    this.getServerNow = getServerNow || Date.now;
     this.photoShots = [];
     this.mansionRoomId = '';
     this.theme = null;
@@ -753,7 +754,7 @@ export class SeasonalActivities {
     if (this.getAuthorityEnabled?.()) {
       this.race = this.serverRace();
       if (!this.race) { this.raceFrame = 0; this.refresh(); return; }
-      const now = Date.now();
+      const now = this.getServerNow();
       const untilStart = this.race.startAt - now;
       const remaining = this.race.startAt + (this.race.step + 1) * 1450 - now;
       if (this.racePrompt) this.racePrompt.textContent = untilStart > 0
@@ -1068,7 +1069,7 @@ export class SeasonalActivities {
       }
       this.dance = run;
       const symbols = { left: '⬅️', right: '➡️', up: '⬆️', down: '⬇️' };
-      const now = Date.now();
+      const now = this.getServerNow();
       if (this.dancePrompt) this.dancePrompt.textContent = now < run.startAt
         ? 'CHUẨN BỊ… ' + Math.ceil((run.startAt - now) / 500)
         : run.mode === 'memory' && now < run.inputStartAt

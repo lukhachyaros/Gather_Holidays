@@ -16,7 +16,7 @@ For a container host, deploy with `docker compose -f docker-compose.authority.ym
 
 ## API
 
-`GET /health` returns service health and room count.
+`GET /health` returns service health, room count, and a `serverNow` timestamp in milliseconds for client clock alignment. Authenticated room responses include the same timestamp.
 
 `POST /v1/rooms` accepts `{ "roomId", "theme", "name" }` and creates a room. Themes are `christmas`, `halloween`, `valentine`, and `tet`. The response includes a one-time bearer token for the creator.
 
@@ -32,4 +32,4 @@ Deploy this service separately from GitHub Pages, then open the game with `?auth
 
 ## Current limits
 
-The sled race stores a server-generated gate sequence, validates each lane choice against server time, accounts for missed gates and calculates the finish record on the service. Valentine dance runs also use server-generated sequences and server-timed input windows for rhythm, memory and copy modes; score records are calculated by the authority and client-submitted `dance_record` scores are rejected. A late join receives persisted room progress, while private race and dance inputs are only included in the matching member's snapshot. Position-bound validation for collectible pickups still requires movement telemetry to be sent through the authority. The P2P transport remains responsible for movement, chat, voice and the rest of the real-time scene. The JSON store suits a single service instance and should be replaced with a transactional database before horizontal scaling.
+The sled race stores a server-generated gate sequence, validates each lane choice against server time, accounts for missed gates and calculates the finish record on the service. Valentine dance runs also use server-generated sequences and server-timed input windows for rhythm, memory and copy modes; score records are calculated by the authority and client-submitted `dance_record` scores are rejected. The browser estimates server clock offset from response timestamps so countdowns and visible cues follow the authority clock. A late join receives persisted room progress, while private race and dance inputs are only included in the matching member's snapshot. Position-bound validation for collectible pickups still requires movement telemetry to be sent through the authority. The P2P transport remains responsible for movement, chat, voice and the rest of the real-time scene. The JSON store suits a single service instance and should be replaced with a transactional database before horizontal scaling.

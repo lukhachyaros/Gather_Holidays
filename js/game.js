@@ -523,6 +523,7 @@ try {
     onCostumeSubmit: costumeKey => equipCostume(costumeKey),
     getHeldItem: () => me?.heldItem,
     getAuthorityEnabled: () => authorityClient.connected,
+    getServerNow: () => authorityClient.serverNow(),
     consumeHeldItem: ornamentKey => {
       if (me?.heldItem !== ornamentKey) return;
       me.heldItem = null;

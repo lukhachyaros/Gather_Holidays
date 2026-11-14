@@ -14,19 +14,29 @@ export class SeasonalAuthorityClient {
     this.timer = 0;
     this.stopped = false;
     this.inFlight = false;
+    this.serverOffsetMs = 0;
+    this.hasServerClock = false;
   }
 
   get enabled() { return !!this.baseUrl && typeof this.fetcher === 'function'; }
   get connected() { return !!this.token && !this.stopped; }
+  serverNow() { return Date.now() + this.serverOffsetMs; }
   storageKey(roomId) { return TOKEN_PREFIX + roomId; }
 
   async request(path, { method = 'GET', body, token = this.token } = {}) {
+    const sentAt = Date.now();
     const response = await this.fetcher(this.baseUrl + path, {
       method,
       headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
+    const receivedAt = Date.now();
     const data = await response.json().catch(() => ({}));
+    if (Number.isFinite(data.serverNow)) {
+      const measuredOffset = data.serverNow - (sentAt + receivedAt) / 2;
+      this.serverOffsetMs = this.hasServerClock ? this.serverOffsetMs * 0.75 + measuredOffset * 0.25 : measuredOffset;
+      this.hasServerClock = true;
+    }
     if (!response.ok) { const error = new Error(data.error || `Authority request failed (${response.status})`); error.status = response.status; throw error; }
     return data;
   }
