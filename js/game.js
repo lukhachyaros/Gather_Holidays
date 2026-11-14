@@ -1854,6 +1854,9 @@ const handlers = {
 };
 
 function applyOp(op, senderId = null) {
+  // The public MQTT relay does not authenticate `senderId`; this host check
+  // blocks ordinary guests, but sensitive moderation still needs a trusted backend.
+  if (typeof op?.k === 'string' && op.k.startsWith('admin_') && senderId !== state?.hostId) return;
   switch (op.k) {
     case 'theme': {
       if (!state?.hostId || senderId !== state.hostId) return;
@@ -2484,6 +2487,7 @@ function applyOp(op, senderId = null) {
     case 'mg_snowball_throw':
     case 'mg_cupid_shoot':
     case 'mg_tet_cannon':
+    case 'mg_halloween_lantern':
     case 'mg_pvp_ko': {
       minigames?.handleNetworkOp(op);
       break;
@@ -2496,9 +2500,14 @@ function applyOp(op, senderId = null) {
 }
 
 function emitOp(op) {
+  if (typeof op?.k === 'string' && op.k.startsWith('admin_') && !isHost()) {
+    toast('⛔ Lệnh quản trị chỉ dùng được bởi chủ phòng.');
+    return false;
+  }
   op.v = Date.now();
   applyOp(op, net.selfId);
   net.send('op', op);
+  return true;
 }
 
 // ---------- Live Player Count & FPS Update ----------
