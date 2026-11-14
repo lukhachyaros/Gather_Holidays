@@ -234,6 +234,7 @@ export class World {
     this.mediaBannerKey = '';
     this.communityTreeGroup = null;
     this.communityTreeDecorationMesh = null;
+    this.communityTreeProgressGroup = null;
     this.seasonalVisualKey = '';
     this.particles = [];
     this.particleBatches = [];
@@ -322,6 +323,15 @@ export class World {
       this.communityTreeDecorationMesh.material.dispose();
       this.communityTreeDecorationMesh = null;
     }
+    if (this.communityTreeProgressGroup) {
+      this.communityTreeGroup?.remove(this.communityTreeProgressGroup);
+      this.communityTreeProgressGroup.traverse(object => {
+        object.geometry?.dispose?.();
+        if (Array.isArray(object.material)) object.material.forEach(material => material.dispose?.());
+        else object.material?.dispose?.();
+      });
+      this.communityTreeProgressGroup = null;
+    }
     if (!count || !this.communityTreeGroup) return;
 
     const geometry = new THREE.SphereGeometry(0.105, 10, 8);
@@ -350,6 +360,56 @@ export class World {
     bulbs.receiveShadow = false;
     this.communityTreeGroup.add(bulbs);
     this.communityTreeDecorationMesh = bulbs;
+
+    const stage = Math.min(5, 1 + Math.floor(count / 6));
+    const progress = new THREE.Group();
+    progress.name = 'CommunityChristmasTreeStage' + stage;
+    if (stage >= 2) {
+      const lightGeometry = new THREE.SphereGeometry(0.055, 8, 6);
+      const lightMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.85, roughness: 0.25 });
+      const lights = new THREE.InstancedMesh(lightGeometry, lightMaterial, 24);
+      const dummy = new THREE.Object3D();
+      const colors = [0xffd166, 0x67e8f9, 0xf9a8d4, 0xa7f3d0];
+      for (let i = 0; i < 24; i++) {
+        const angle = i / 24 * Math.PI * 2;
+        const y = 0.32 + (i / 24) * 1.9;
+        const radius = 0.62 - (y / 1.9) * 0.27;
+        dummy.position.set(Math.cos(angle * 3) * radius, y, Math.sin(angle * 3) * radius);
+        dummy.updateMatrix();
+        lights.setMatrixAt(i, dummy.matrix);
+        lights.setColorAt(i, new THREE.Color(colors[i % colors.length]));
+      }
+      lights.instanceMatrix.needsUpdate = true;
+      if (lights.instanceColor) lights.instanceColor.needsUpdate = true;
+      progress.add(lights);
+    }
+    if (stage >= 3) {
+      for (let tier = 0; tier < 3; tier++) {
+        const ribbon = new THREE.Mesh(
+          new THREE.TorusGeometry(0.58 - tier * 0.13, 0.035, 6, 48),
+          new THREE.MeshStandardMaterial({ color: [0xf472b6, 0xfbbf24, 0xf472b6][tier], roughness: 0.55 })
+        );
+        ribbon.rotation.x = Math.PI / 2;
+        ribbon.position.y = 0.48 + tier * 0.55;
+        ribbon.scale.z = 0.78;
+        progress.add(ribbon);
+      }
+    }
+    if (stage >= 4) {
+      const glow = new THREE.PointLight(0xffc85c, 1.35, 5.5, 2);
+      glow.position.set(0, 1.25, 0);
+      progress.add(glow);
+    }
+    if (stage >= 5) {
+      const topper = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.28, 0),
+        new THREE.MeshStandardMaterial({ color: 0xffdf70, emissive: 0xffb000, emissiveIntensity: 1.8, metalness: 0.25, roughness: 0.25 })
+      );
+      topper.position.y = 2.48;
+      progress.add(topper);
+    }
+    this.communityTreeGroup.add(progress);
+    this.communityTreeProgressGroup = progress;
   }
 
   requestMapBuild(map, themeKey, roomSeed) {
@@ -485,6 +545,14 @@ export class World {
       this.communityTreeDecorationMesh.geometry.dispose();
       this.communityTreeDecorationMesh.material.dispose();
       this.communityTreeDecorationMesh = null;
+    }
+    if (this.communityTreeProgressGroup) {
+      this.communityTreeProgressGroup.traverse(object => {
+        object.geometry?.dispose?.();
+        if (Array.isArray(object.material)) object.material.forEach(material => material.dispose?.());
+        else object.material?.dispose?.();
+      });
+      this.communityTreeProgressGroup = null;
     }
     this.scene.remove(this.group);
     this.group = new THREE.Group();

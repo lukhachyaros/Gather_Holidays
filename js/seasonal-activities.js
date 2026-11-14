@@ -7,6 +7,10 @@ export const MANSION_RIDDLE_SEQUENCE = ['moon', 'flame', 'star'];
 export const CHRISTMAS_GIFT_IDS = ['gift_snow_cabin', 'gift_frozen_bridge', 'gift_cocoa_corner', 'gift_pine_lane', 'gift_sleigh_depot'];
 export const HALLOWEEN_TREASURE_IDS = ['relic_graveyard', 'relic_haunted_well', 'relic_cemetery_gate', 'relic_witch_garden', 'relic_clocktower'];
 export const TET_EXPLORATION_IDS = ['tet_explore_gate', 'tet_explore_lantern', 'tet_explore_market', 'tet_explore_boat', 'tet_explore_scroll'];
+export function getCommunityTreeStage(contributionCount) {
+  const count = Math.max(0, Math.min(24, Math.floor(Number(contributionCount) || 0)));
+  return Math.min(5, 1 + Math.floor(count / 6));
+}
 export function canApplySeasonalEventOperation(isRoomHost, senderId, hostId) {
   return Boolean(hostId && (isRoomHost || senderId === hostId));
 }
@@ -653,6 +657,8 @@ export class SeasonalActivities {
     ];
     const counts = Object.fromEntries(types.map(type => [type.id, contributors.filter(item => item?.decorationType === type.id).length]));
     const total = contributors.length;
+    const stage = getCommunityTreeStage(total);
+    const stageNames = ['Cây non', 'Dây đèn', 'Quả châu & ruy băng', 'Ánh sáng lễ hội', 'Cây thông rực rỡ'];
     const complete = types.every(type => counts[type.id] >= 8);
     const progress = Math.min(100, Math.round(total / 24 * 100));
     this.paragraph('Lấy một món ở bàn đồ trang trí rồi mang đến cây thông cộng đồng. Cả phòng cần góp đủ 8 ngôi sao, 8 chuông và 8 kẹo gậy (tính như ruy băng). Mỗi người chỉ góp một món; vật phẩm sẽ bị tiêu thụ khi đóng góp.');
@@ -663,6 +669,7 @@ export class SeasonalActivities {
     meter.appendChild(fill);
     this.body.appendChild(meter);
     this.body.appendChild(this.el('p', total + ' / 24 món trang trí · ' + progress + '%', 'seasonal-stat'));
+    this.body.appendChild(this.el('p', 'Giai đoạn ' + stage + ' / 5 · ' + stageNames[stage - 1], 'seasonal-result'));
     const options = this.el('div', null, 'seasonal-actions seasonal-tree-options');
     types.forEach(type => {
       const button = this.button(type.label + ' · ' + counts[type.id] + '/8', 'tree-contribute', { decorationType: type.id }, 'seasonal-button seasonal-primary');

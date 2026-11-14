@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applySeasonalEventOperation, canApplySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_RIDDLE_SEQUENCE, CHRISTMAS_GIFT_IDS, HALLOWEEN_TREASURE_IDS, TET_EXPLORATION_IDS } from '../js/seasonal-activities.js';
+import { applySeasonalEventOperation, canApplySeasonalEventOperation, createSeasonalEventsState, PHOTO_SPOT_IDS, PHOTO_ITEM_IDS, MANSION_KEY_IDS, MANSION_RIDDLE_SEQUENCE, CHRISTMAS_GIFT_IDS, HALLOWEEN_TREASURE_IDS, TET_EXPLORATION_IDS, getCommunityTreeStage } from '../js/seasonal-activities.js';
 import { buildThemeMap, getThemeFeatures, validMap, migrateLegacyThemeMap, isSolid } from '../js/maps.js';
 
 function room(theme) {
@@ -22,6 +22,11 @@ test('community tree contributions are unique per player', () => {
   assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), true);
   assert.equal(applySeasonalEventOperation(state, op, 'p1', 'An'), false);
   assert.equal(state.seasonalEvents.christmas.tree.contributors.length, 1);
+});
+
+test('community Christmas tree advances through five contribution stages', () => {
+  assert.deepEqual([0, 5, 6, 11, 12, 17, 18, 23, 24].map(getCommunityTreeStage), [1, 1, 2, 2, 3, 3, 4, 4, 5]);
+  assert.equal(getCommunityTreeStage(100), 5);
 });
 
 test('tree contribution consumes a server-validated ornament from the player inventory', () => {
