@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applySeasonalEventOperation } from '../js/seasonal-activities.js';
+import { getThemeFeatures } from '../js/maps.js';
 
 const THEMES = new Set(['christmas', 'halloween', 'valentine', 'tet']);
 const digest = token => createHash('sha256').update(token).digest('hex');
@@ -16,6 +17,36 @@ const tokenMatches = (token, expected) => {
   const expectedHash = Buffer.from(expected);
   return actualHash.length === expectedHash.length && timingSafeEqual(actualHash, expectedHash);
 };
+
+const INTERACTION_TARGETS = {
+  gift_collect: ['christmas_gift', 'giftId'],
+  treasure_collect: ['halloween_treasure', 'treasureId'],
+  mansion_key: ['mansion_key', 'keyId'],
+  exploration_collect: ['tet_exploration_item', 'itemId'],
+  photo_spot: ['photo_spot', 'spotId'],
+  photo_item: ['photo_collectible', 'itemId'],
+  ornament_pickup: ['ornament_table', null],
+  ornament_spend: ['xmas_tree', null],
+  tree_contribute: ['community_tree', null],
+  sled_start: ['sled_race', null],
+  sled_checkpoint: ['sled_race', null],
+  mansion_clear: ['haunted_mansion', null],
+  costume_entry: ['costume_runway', null],
+  costume_vote: ['costume_runway', null],
+  dance_start: ['dance_stage', null],
+  dance_input: ['dance_stage', null],
+};
+
+function validateInteractionPosition(room, op, now, position) {
+  const targetRule = INTERACTION_TARGETS[op?.action];
+  if (!targetRule) return true;
+  if (!position || now - position.at > 4000) return false;
+  const [type, field] = targetRule;
+  const targetId = field ? String(op.data?.[field] || '') : '';
+  const hotspot = getThemeFeatures(room.theme, room.roomId).hotspots.find(item => item.type === type && (!field || String(item[field] || '') === targetId));
+  if (!hotspot) return false;
+  return Math.hypot(position.x - hotspot.x, position.y - hotspot.y) <= hotspot.radius + 0.55;
+}
 
 function recordServerEvent(room, user, action, now) {
   room.seq++;
@@ -198,10 +229,11 @@ function applyServerSledEvent(room, user, op, now) {
   return true;
 }
 
-export function applyAuthoritativeEvent(room, user, op, now = Date.now()) {
+export function applyAuthoritativeEvent(room, user, op, now = Date.now(), position = user?.position) {
   if (!room || !user || !op || op.k !== 'seasonal_event' || op.season !== room.theme || !THEMES.has(room.theme)) return false;
   room.kickedIds ||= [];
   room.seasonalEvents ||= {};
+  if (!validateInteractionPosition(room, op, now, position)) return false;
   if (op.season === 'christmas' && ['sled_start', 'sled_checkpoint'].includes(op.action)) return applyServerSledEvent(room, user, op, now);
   if (op.season === 'valentine' && ['dance_start', 'dance_input'].includes(op.action)) return applyServerDanceEvent(room, user, op, now);
   if (op.season === 'halloween' && ['costume_round_start', 'costume_entry', 'costume_vote'].includes(op.action)) {
@@ -221,6 +253,7 @@ export async function createAuthorityServer({ dataPath = resolve('data/rooms.jso
   let rooms = {};
   try { rooms = JSON.parse(await readFile(file, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   let writes = Promise.resolve();
+  const playerPositions = new Map();
   const persist = () => {
     writes = writes.then(async () => {
       await mkdir(dirname(file), { recursive: true });
@@ -249,11 +282,12 @@ export async function createAuthorityServer({ dataPath = resolve('data/rooms.jso
         const body = await readBody(); const roomId = safeRoomId(body.roomId); if (!roomId || !THEMES.has(body.theme)) return send(400, { error: 'invalid room or theme' });
         if (rooms[roomId]) return send(409, { error: 'room exists' });
         const token = randomBytes(32).toString('base64url'); const userId = safeMemberId(body.memberId);
-        rooms[roomId] = { theme: body.theme, hostId: userId, users: [{ id: userId, name: safeName(body.name), tokenHash: digest(token) }], seq: 0, events: [], seasonalEvents: {}, kickedIds: [], updatedAt: clock() };
+        rooms[roomId] = { roomId, theme: body.theme, hostId: userId, users: [{ id: userId, name: safeName(body.name), tokenHash: digest(token) }], seq: 0, events: [], seasonalEvents: {}, kickedIds: [], updatedAt: clock() };
         await persist(); return send(201, { roomId, userId, token, host: true, state: { theme: body.theme, seq: 0, seasonalEvents: {} } });
       }
       if (parts[0] !== 'v1' || parts[1] !== 'rooms' || !safeRoomId(parts[2])) return send(404, { error: 'not found' });
       const roomId = parts[2]; const room = rooms[roomId]; if (!room) return send(404, { error: 'room not found' });
+      room.roomId ||= roomId;
       if (parts[3] === 'join' && req.method === 'POST') {
         const body = await readBody(); const token = randomBytes(32).toString('base64url'); const userId = safeMemberId(body.memberId);
         if (room.users.length >= 100) return send(409, { error: 'room full' });
@@ -263,11 +297,27 @@ export async function createAuthorityServer({ dataPath = resolve('data/rooms.jso
       }
       const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
       const user = room.users.find(item => tokenMatches(auth, item.tokenHash)); if (!user) return send(401, { error: 'unauthorized' });
+      if (req.method === 'POST' && parts[3] === 'position') {
+        const body = await readBody();
+        const x = Number(body.x); const y = Number(body.y); const now = clock();
+        const width = room.theme === 'tet' ? 30 : 36; const height = room.theme === 'tet' ? 22 : 24;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x >= width || y >= height) return send(422, { error: 'invalid position' });
+        const positionKey = `${roomId}:${user.id}`;
+        const previous = playerPositions.get(positionKey);
+        if (previous && now - previous.at < 100) return send(429, { error: 'position update too frequent' });
+        if (previous && now - previous.at <= 5000) {
+          const elapsed = Math.max(0, (now - previous.at) / 1000);
+          if (Math.hypot(x - previous.x, y - previous.y) > 6.5 * elapsed + 0.75) return send(422, { error: 'movement exceeds allowed speed' });
+        }
+        playerPositions.set(positionKey, { x, y, at: now });
+        return send(200, { accepted: true });
+      }
       if (req.method === 'POST' && parts[3] === 'theme') {
         if (user.id !== room.hostId) return send(403, { error: 'host required' });
         const body = await readBody();
         if (!THEMES.has(body.theme)) return send(400, { error: 'invalid theme' });
         room.theme = body.theme;
+        for (const key of playerPositions.keys()) if (key.startsWith(`${roomId}:`)) playerPositions.delete(key);
         room.seq++;
         room.updatedAt = clock();
         await persist();
@@ -277,7 +327,8 @@ export async function createAuthorityServer({ dataPath = resolve('data/rooms.jso
       if (req.method === 'GET' && parts[3] === 'events') return send(200, { events: room.events.filter(event => event.seq > Number(url.searchParams.get('after') || 0)) });
       if (req.method === 'POST' && parts[3] === 'events') {
         const body = await readBody();
-        if (!applyAuthoritativeEvent(room, user, body.operation, clock())) return send(422, { error: 'operation rejected' });
+        const position = playerPositions.get(`${roomId}:${user.id}`);
+        if (!applyAuthoritativeEvent(room, user, body.operation, clock(), position)) return send(422, { error: 'operation rejected' });
         room.updatedAt = clock(); await persist(); return send(200, { theme: room.theme, seq: room.seq, seasonalEvents: publicSeasonalEvents(room, user.id) });
       }
       return send(404, { error: 'not found' });

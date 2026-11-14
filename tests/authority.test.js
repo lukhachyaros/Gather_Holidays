@@ -17,20 +17,21 @@ const post = (url, body, token) => fetch(url, {
   headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
   body: JSON.stringify(body),
 });
+const at = (x, y, now) => ({ x, y, at: now });
 
 test('sled checkpoint results use server-generated gates and server time, not submitted finish scores', () => {
   const room = { theme: 'christmas', seasonalEvents: {}, events: [], seq: 0 };
   const user = { id: 'player-1', name: 'Racer' };
   const start = { k: 'seasonal_event', season: 'christmas', action: 'sled_start', data: {} };
-  assert.equal(applyAuthoritativeEvent(room, user, start, 1000), true);
+  assert.equal(applyAuthoritativeEvent(room, user, start, 1000, at(31, 11.5, 1000)), true);
   const run = room.seasonalEvents.christmas.sled.runs[0];
   assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'sled_record', data: { timeMs: 5000, gatesHit: 8 } }, 2000), false);
-  assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'sled_checkpoint', data: { runId: 'forged', lane: 'left' } }, run.startAt + 100), false);
+  assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'sled_checkpoint', data: { runId: 'forged', lane: 'left' } }, run.startAt + 100, at(31, 11.5, run.startAt + 100)), false);
   for (let gateIndex = 0; gateIndex < 8; gateIndex++) {
     const gate = run.sequence[gateIndex];
     assert.equal(applyAuthoritativeEvent(room, user, {
       ...start, action: 'sled_checkpoint', data: { runId: run.id, lane: gate.safeLane },
-    }, run.startAt + gateIndex * 1450 + 200), true);
+    }, run.startAt + gateIndex * 1450 + 200, at(31, 11.5, run.startAt + gateIndex * 1450 + 200)), true);
   }
   const record = room.seasonalEvents.christmas.sled.records[0];
   assert.equal(record.gatesHit, 8);
@@ -43,16 +44,16 @@ test('dance modes score server-validated timed inputs and reject client score su
     const room = { theme: 'valentine', seasonalEvents: {}, events: [], seq: 0 };
     const user = { id: `player-${mode}`, name: 'Dancer' };
     const start = { k: 'seasonal_event', season: 'valentine', action: 'dance_start', data: { mode } };
-    assert.equal(applyAuthoritativeEvent(room, user, start, 1000), true);
+    assert.equal(applyAuthoritativeEvent(room, user, start, 1000, at(31, 14, 1000)), true);
     const run = room.seasonalEvents.valentine.dance.runs[0];
     assert.equal('sequence' in run, true, 'the authority retains the input sequence');
     assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'dance_record', data: { score: 100, mode } }, 1500), false);
-    assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'dance_input', data: { runId: run.id, direction: run.sequence[0] } }, run.inputStartAt - 1), false);
+    assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'dance_input', data: { runId: run.id, direction: run.sequence[0] } }, run.inputStartAt - 1, at(31, 14, run.inputStartAt - 1)), false);
     const tempo = mode === 'copy' || mode === 'memory' ? (mode === 'copy' ? 820 : 900) : 650;
     for (let step = 0; step < run.sequence.length; step++) {
       assert.equal(applyAuthoritativeEvent(room, user, {
         ...start, action: 'dance_input', data: { runId: run.id, direction: run.sequence[step] },
-      }, run.inputStartAt + step * tempo + 100), true);
+      }, run.inputStartAt + step * tempo + 100, at(31, 14, run.inputStartAt + step * tempo + 100)), true);
     }
     assert.equal(run.active, false);
     assert.equal(run.score, 100);
@@ -61,7 +62,7 @@ test('dance modes score server-validated timed inputs and reject client score su
     });
     assert.equal(applyAuthoritativeEvent(room, user, {
       ...start, action: 'dance_input', data: { runId: run.id, direction: 'left' },
-    }, run.finishedAt + 100), false);
+    }, run.finishedAt + 100, at(31, 14, run.finishedAt + 100)), false);
   }
 });
 
@@ -70,18 +71,18 @@ test('costume runway rounds require the room host, two entries and one timed vot
   const host = { id: 'host-1', name: 'Host' };
   const guest = { id: 'guest-1', name: 'Guest' };
   const event = (action, data = {}) => ({ k: 'seasonal_event', season: 'halloween', action, data });
-  assert.equal(applyAuthoritativeEvent(room, host, event('costume_entry', { costumeKey: 'vampire' }), 1000), true);
-  assert.equal(applyAuthoritativeEvent(room, host, event('costume_round_start'), 1100), false);
-  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_entry', { costumeKey: 'witch' }), 1200), true);
-  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_round_start'), 1300), false);
-  assert.equal(applyAuthoritativeEvent(room, host, event('costume_round_start'), 1400), true);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_entry', { costumeKey: 'vampire' }), 1000, at(30, 10.5, 1000)), true);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_round_start'), 1100, at(30, 10.5, 1100)), false);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_entry', { costumeKey: 'witch' }), 1200, at(30, 10.5, 1200)), true);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_round_start'), 1300, at(30, 10.5, 1300)), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_round_start'), 1400, at(30, 10.5, 1400)), true);
   const round = room.seasonalEvents.halloween.costume.round;
-  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt - 1), false);
-  assert.equal(applyAuthoritativeEvent(room, host, event('costume_vote', { targetId: 'host-1' }), round.startAt + 100), false);
-  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt + 100), true);
-  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt + 200), false);
-  assert.equal(applyAuthoritativeEvent(room, host, event('costume_entry', { costumeKey: 'zombie' }), round.startAt + 300), false);
-  assert.equal(applyAuthoritativeEvent(room, host, event('costume_vote', { targetId: 'guest-1' }), round.endAt), false);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt - 1, at(30, 10.5, round.startAt - 1)), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_vote', { targetId: 'host-1' }), round.startAt + 100, at(30, 10.5, round.startAt + 100)), false);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt + 100, at(30, 10.5, round.startAt + 100)), true);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt + 200, at(30, 10.5, round.startAt + 200)), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_entry', { costumeKey: 'zombie' }), round.startAt + 300, at(30, 10.5, round.startAt + 300)), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_vote', { targetId: 'guest-1' }), round.endAt, at(30, 10.5, round.endAt)), false);
 });
 
 test('authority validates member events and restores saved progress after restart', async () => {
@@ -98,6 +99,13 @@ test('authority validates member events and restores saved progress after restar
       const joinedResponse = await post(`${base}/v1/rooms/winter-room/join`, { name: 'Guest' });
       const guest = await joinedResponse.json();
       guestToken = guest.token;
+      const remoteCollect = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'gift_collect', data: { giftId: 'gift_snow_cabin' } } }, guestToken);
+      assert.equal(remoteCollect.status, 422);
+      const positioned = await post(`${base}/v1/rooms/winter-room/position`, { x: 4.6, y: 8.4 }, guestToken);
+      assert.equal(positioned.status, 200);
+      await new Promise(resolve => setTimeout(resolve, 110));
+      const teleport = await post(`${base}/v1/rooms/winter-room/position`, { x: 33.2, y: 8.8 }, guestToken);
+      assert.equal(teleport.status, 422);
       const valid = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'gift_collect', data: { giftId: 'gift_snow_cabin' } } }, guestToken);
       assert.equal(valid.status, 200);
       const duplicate = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'gift_collect', data: { giftId: 'gift_snow_cabin' } } }, guestToken);
@@ -109,8 +117,10 @@ test('authority validates member events and restores saved progress after restar
       const lateJoinResponse = await post(`${base}/v1/rooms/winter-room/join`, { name: 'Late join' });
       const lateJoin = await lateJoinResponse.json();
       assert.equal(lateJoin.state.seasonalEvents.christmas.gifts.players[0].gifts[0], 'gift_snow_cabin');
-      await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'sled_start', data: {} } }, guestToken);
-      const guestStateResponse = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } });
+      const hostSledPosition = await post(`${base}/v1/rooms/winter-room/position`, { x: 31, y: 11.5 }, hostToken);
+      assert.equal(hostSledPosition.status, 200);
+      await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'sled_start', data: {} } }, hostToken);
+      const guestStateResponse = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${hostToken}` } });
       const guestState = await guestStateResponse.json();
       const ownRun = guestState.seasonalEvents.christmas.sled.runs[0];
       assert.ok(ownRun.currentGate);
@@ -121,6 +131,8 @@ test('authority validates member events and restores saved progress after restar
       assert.equal(guestThemeChange.status, 403);
       const valentineThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'valentine' }, hostToken);
       assert.equal(valentineThemeChange.status, 200);
+      const hostDancePosition = await post(`${base}/v1/rooms/winter-room/position`, { x: 31, y: 14 }, hostToken);
+      assert.equal(hostDancePosition.status, 200);
       const danceStart = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'valentine', action: 'dance_start', data: { mode: 'rhythm' } } }, hostToken);
       assert.equal(danceStart.status, 200);
       const hostDanceState = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${hostToken}` } }).then(response => response.json());

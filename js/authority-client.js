@@ -1,17 +1,20 @@
 const TOKEN_PREFIX = 'gh_authority_session_v1:';
 
 export class SeasonalAuthorityClient {
-  constructor({ baseUrl, onState = () => {}, onStatus = () => {}, storage = globalThis.localStorage, fetcher = globalThis.fetch } = {}) {
+  constructor({ baseUrl, onState = () => {}, onStatus = () => {}, storage = globalThis.localStorage, fetcher = globalThis.fetch, getPosition } = {}) {
     this.baseUrl = String(baseUrl || '').replace(/\/+$/, '');
     this.onState = onState;
     this.onStatus = onStatus;
     this.storage = storage;
     this.fetcher = fetcher;
+    this.getPosition = getPosition;
     this.roomId = '';
     this.userId = '';
     this.token = '';
     this.sequence = -1;
     this.timer = 0;
+    this.positionTimer = 0;
+    this.positionFlight = null;
     this.stopped = false;
     this.inFlight = false;
     this.serverOffsetMs = 0;
@@ -95,7 +98,9 @@ export class SeasonalAuthorityClient {
     if (state.seq === this.sequence) {
       if (!refresh) return false;
       const activeDance = state.seasonalEvents?.valentine?.dance?.runs?.some(run => run.active);
-      if (!activeDance) return false;
+      const round = state.seasonalEvents?.halloween?.costume?.round;
+      const activeRunway = round?.id && (state.serverNow || Date.now()) < round.endAt;
+      if (!activeDance && !activeRunway) return false;
     }
     this.sequence = Math.max(this.sequence, state.seq);
     this.onState(state);
@@ -104,6 +109,7 @@ export class SeasonalAuthorityClient {
 
   async submit(operation) {
     if (!this.connected) return false;
+    if (operation?.k === 'seasonal_event' && this.getPosition) await this.reportPosition();
     const result = await this.request(`/v1/rooms/${encodeURIComponent(this.roomId)}/events`, { method: 'POST', body: { operation } });
     this.acceptState(result);
     return true;
@@ -119,7 +125,23 @@ export class SeasonalAuthorityClient {
   beginPolling() {
     clearInterval(this.timer);
     this.timer = setInterval(() => this.poll(), 1500);
+    if (this.getPosition) {
+      clearInterval(this.positionTimer);
+      this.positionTimer = setInterval(() => this.reportPosition().catch(() => {}), 750);
+      this.reportPosition().catch(() => {});
+    }
     this.poll();
+  }
+
+  async reportPosition() {
+    if (!this.connected || typeof this.getPosition !== 'function') return false;
+    if (this.positionFlight) return this.positionFlight;
+    const position = this.getPosition();
+    if (!Number.isFinite(position?.x) || !Number.isFinite(position?.y)) return false;
+    this.positionFlight = this.request(`/v1/rooms/${encodeURIComponent(this.roomId)}/position`, {
+      method: 'POST', body: { x: position.x, y: position.y },
+    }).then(result => !!result.accepted).finally(() => { this.positionFlight = null; });
+    return this.positionFlight;
   }
 
   async poll() {
@@ -135,7 +157,9 @@ export class SeasonalAuthorityClient {
   destroy() {
     this.stopped = true;
     clearInterval(this.timer);
+    clearInterval(this.positionTimer);
     this.timer = 0;
+    this.positionTimer = 0;
     this.onStatus('offline');
   }
 }

@@ -43,8 +43,8 @@ import {
   getBgmVolume,
 } from './audio.js';
 import { MinigameManager, DRAGON_SKINS, FLIGHT_QUESTS } from './minigames.js';
-import { SeasonalActivities, canApplySeasonalEventOperation } from './seasonal-activities.js?v=20261114seasonalphase5';
-import { SeasonalAuthorityClient } from './authority-client.js?v=20261114seasonalphase5';
+import { SeasonalActivities, canApplySeasonalEventOperation } from './seasonal-activities.js?v=20261114seasonalphase7';
+import { SeasonalAuthorityClient } from './authority-client.js?v=20261114seasonalphase7';
 import {
   initCasino,
   openRoulette,
@@ -346,6 +346,7 @@ const authorityClient = new SeasonalAuthorityClient({
     world?.syncSeasonalEventVisuals(state.seasonalEvents, state.theme);
   },
   onStatus: status => document.body?.dataset && (document.body.dataset.authorityStatus = status),
+  getPosition: () => me && ({ x: me.x, y: me.y }),
 });
 const peers = new Map(); // id -> {name, hue, x, y, tx, ty, r, tr, a, h, costume, pumpkinHat, heldItem, seatId, lean, av}
 const floaters = [];
