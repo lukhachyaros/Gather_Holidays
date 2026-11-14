@@ -65,6 +65,25 @@ test('dance modes score server-validated timed inputs and reject client score su
   }
 });
 
+test('costume runway rounds require the room host, two entries and one timed vote per player', () => {
+  const room = { theme: 'halloween', hostId: 'host-1', seasonalEvents: {}, events: [], seq: 0 };
+  const host = { id: 'host-1', name: 'Host' };
+  const guest = { id: 'guest-1', name: 'Guest' };
+  const event = (action, data = {}) => ({ k: 'seasonal_event', season: 'halloween', action, data });
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_entry', { costumeKey: 'vampire' }), 1000), true);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_round_start'), 1100), false);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_entry', { costumeKey: 'witch' }), 1200), true);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_round_start'), 1300), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_round_start'), 1400), true);
+  const round = room.seasonalEvents.halloween.costume.round;
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt - 1), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_vote', { targetId: 'host-1' }), round.startAt + 100), false);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt + 100), true);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('costume_vote', { targetId: 'host-1' }), round.startAt + 200), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_entry', { costumeKey: 'zombie' }), round.startAt + 300), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('costume_vote', { targetId: 'guest-1' }), round.endAt), false);
+});
+
 test('authority validates member events and restores saved progress after restart', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'gh-authority-'));
   const dataPath = join(directory, 'rooms.json');

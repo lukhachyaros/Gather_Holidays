@@ -45,7 +45,44 @@ function publicSeasonalEvents(room, userId) {
       return publicRun;
     });
   }
+  const runwayRound = snapshot.halloween?.costume?.round;
+  if (runwayRound?.id) {
+    const now = Date.now();
+    runwayRound.status = now < runwayRound.startAt ? 'ready' : now < runwayRound.endAt ? 'voting' : 'complete';
+    runwayRound.remainingMs = Math.max(0, runwayRound.endAt - now);
+  }
   return snapshot;
+}
+
+function applyServerRunwayEvent(room, user, op, now) {
+  const data = op.data || {};
+  const costume = (room.seasonalEvents.halloween ||= {}).costume ||= { entries: [], votes: [] };
+  costume.entries ||= [];
+  costume.votes ||= [];
+  if (op.action === 'costume_round_start') {
+    if (user.id !== room.hostId) return false;
+    if (costume.round && now < costume.round.endAt) return false;
+    if (costume.entries.length < 2) return false;
+    const id = randomBytes(12).toString('hex');
+    costume.round = { id, participantIds: costume.entries.map(entry => entry.id), startAt: now + 5000, endAt: now + 50000, status: 'ready' };
+    costume.votes = [];
+    recordServerEvent(room, user, op.action, now);
+    return true;
+  }
+  if (op.action === 'costume_entry') {
+    if (costume.round && now < costume.round.endAt) return false;
+    return applySeasonalEventOperation(room, op, user.id, user.name) && (recordServerEvent(room, user, op.action, now), true);
+  }
+  if (op.action === 'costume_vote') {
+    const round = costume.round;
+    const targetId = String(data.targetId || '');
+    if (!round || now < round.startAt || now >= round.endAt || targetId === user.id || !round.participantIds.includes(user.id) || !round.participantIds.includes(targetId)) return false;
+    if (costume.votes.some(vote => vote.roundId === round.id && vote.id === user.id)) return false;
+    costume.votes.push({ id: user.id, targetId, roundId: round.id, at: now });
+    recordServerEvent(room, user, op.action, now);
+    return true;
+  }
+  return null;
 }
 
 function finishServerDanceRun(room, user, run, now) {
@@ -167,6 +204,10 @@ export function applyAuthoritativeEvent(room, user, op, now = Date.now()) {
   room.seasonalEvents ||= {};
   if (op.season === 'christmas' && ['sled_start', 'sled_checkpoint'].includes(op.action)) return applyServerSledEvent(room, user, op, now);
   if (op.season === 'valentine' && ['dance_start', 'dance_input'].includes(op.action)) return applyServerDanceEvent(room, user, op, now);
+  if (op.season === 'halloween' && ['costume_round_start', 'costume_entry', 'costume_vote'].includes(op.action)) {
+    const runwayResult = applyServerRunwayEvent(room, user, op, now);
+    if (runwayResult !== null) return runwayResult;
+  }
   if (op.action === 'sled_record' || op.action === 'dance_record') return false;
   if (!applySeasonalEventOperation(room, op, user.id, user.name)) return false;
   room.seq++;
@@ -194,7 +235,7 @@ export async function createAuthorityServer({ dataPath = resolve('data/rooms.jso
     res.setHeader('Access-Control-Allow-Headers', 'authorization,content-type');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     if (req.method === 'OPTIONS') { res.writeHead(204).end(); return; }
-    const send = (status, body) => { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
+    const send = (status, body) => { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ...body, serverNow: clock() })); };
     if (req.url === '/health' && req.method === 'GET') return send(200, { ok: true, rooms: Object.keys(rooms).length });
     const url = new URL(req.url, 'http://localhost');
     const parts = url.pathname.split('/').filter(Boolean);

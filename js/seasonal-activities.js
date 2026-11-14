@@ -518,6 +518,10 @@ export class SeasonalActivities {
     return Array.isArray(value) ? value : [];
   }
 
+  stateValue(season, key, valueName) {
+    return this.getState?.()?.seasonalEvents?.[season]?.[key]?.[valueName] ?? null;
+  }
+
   serverRace() {
     const id = this.getSelfId?.();
     return this.stateBucket('christmas', 'sled', 'runs').find(run => run?.idOwner === id && run.active) || null;
@@ -922,12 +926,17 @@ export class SeasonalActivities {
   }
 
   renderCostumeRunway() {
-    const entries = this.stateBucket('halloween', 'costume', 'entries');
-    const votes = this.stateBucket('halloween', 'costume', 'votes');
+    const round = this.stateValue('halloween', 'costume', 'round');
+    const allEntries = this.stateBucket('halloween', 'costume', 'entries');
+    const entries = round?.participantIds ? allEntries.filter(entry => round.participantIds.includes(entry.id)) : allEntries;
+    const allVotes = this.stateBucket('halloween', 'costume', 'votes');
+    const votes = this.getAuthorityEnabled?.() && round ? allVotes.filter(vote => vote.roundId === round.id) : allVotes;
     const id = this.getSelfId?.();
     const mine = this.myRecord(entries);
     const myVote = this.myRecord(votes);
-    this.paragraph('Chọn một bộ trang phục, bước lên sân khấu và gửi bài dự thi. Mỗi người có một phiếu bình chọn; không thể tự bình chọn cho mình.');
+    this.paragraph(this.getAuthorityEnabled?.()
+      ? 'Đăng ký trang phục trước khi chủ phòng mở phiên. Khi sân khấu bắt đầu, khán giả có 45 giây để bỏ một phiếu; server khóa phiếu khi hết giờ.'
+      : 'Chọn một bộ trang phục, bước lên sân khấu và gửi bài dự thi. Mỗi người có một phiếu bình chọn; không thể tự bình chọn cho mình.');
     const label = this.el('label', 'Trang phục dự thi', 'seasonal-label');
     const select = this.el('select', null, 'seasonal-select');
     COSTUMES.forEach(item => {
@@ -939,8 +948,20 @@ export class SeasonalActivities {
     label.appendChild(select);
     this.body.appendChild(label);
     const submit = this.button(mine ? '↻ Cập nhật trang phục' : '✨ Gửi bài dự thi', 'costume-submit');
+    if (this.getAuthorityEnabled?.() && round && round.status !== 'complete') submit.disabled = true;
     this.body.appendChild(submit);
     this.body.appendChild(this.el('p', entries.length + ' bài dự thi · ' + votes.length + ' lượt bình chọn', 'seasonal-stat'));
+    if (this.getAuthorityEnabled?.()) {
+      if (round?.status === 'ready') this.body.appendChild(this.el('p', '⏳ Sân khấu mở sau ' + Math.ceil(round.remainingMs / 1000) + ' giây.', 'seasonal-result'));
+      else if (round?.status === 'voting') this.body.appendChild(this.el('p', '🗳️ Đang bình chọn · còn ' + Math.ceil(round.remainingMs / 1000) + ' giây.', 'seasonal-result'));
+      else if (round?.status === 'complete') this.body.appendChild(this.el('p', '🏆 Phiên đã kết thúc. Có thể đăng ký lượt tiếp theo.', 'seasonal-result'));
+      if (!round || round.status === 'complete') {
+        const start = this.button('🎬 Mở phiên bình chọn · Chủ phòng', 'costume-round-start', {}, 'seasonal-button seasonal-primary');
+        start.disabled = entries.length < 2;
+        start.title = entries.length < 2 ? 'Cần ít nhất hai bài dự thi.' : '';
+        this.body.appendChild(start);
+      }
+    }
     this.body.appendChild(this.button('📸 Chụp ảnh trên sàn diễn', 'costume-photo', {}, 'seasonal-button seasonal-primary'));
     this.heading('Sân khấu & bình chọn');
     const list = this.el('div', null, 'seasonal-list');
@@ -949,7 +970,11 @@ export class SeasonalActivities {
       card.appendChild(this.el('div', entry.name + ' · ' + (COSTUMES.find(item => item.key === entry.costumeKey)?.label || entry.costumeKey), 'seasonal-list-item'));
       const count = votes.filter(vote => vote.targetId === entry.id).length;
       card.appendChild(this.el('span', '⭐ ' + count + ' phiếu', 'seasonal-vote-count'));
-      if (entry.id !== id && !myVote) card.appendChild(this.button('Bình chọn', 'costume-vote', { targetId: entry.id }, 'seasonal-button seasonal-small'));
+      if (entry.id !== id && !myVote) {
+        const vote = this.button('Bình chọn', 'costume-vote', { targetId: entry.id }, 'seasonal-button seasonal-small');
+        if (this.getAuthorityEnabled?.() && round?.status !== 'voting') vote.disabled = true;
+        card.appendChild(vote);
+      }
       list.appendChild(card);
     });
     if (!entries.length) list.appendChild(this.el('div', 'Chưa có bài dự thi. Hãy mở màn lễ hội!', 'seasonal-empty'));
@@ -1177,8 +1202,13 @@ export class SeasonalActivities {
       this.submit('costume_entry', { costumeKey });
       this.toast?.('🎭 Đã đổi trang phục và gửi bài dự thi!');
     } else if (action === 'costume-vote') {
-      this.submit('costume_vote', { targetId: data.targetId });
-      this.toast?.('⭐ Đã gửi bình chọn của bạn!');
+      const result = this.submit('costume_vote', { targetId: data.targetId });
+      if (result?.then) result.then(accepted => this.toast?.(accepted ? '⭐ Đã ghi nhận phiếu bình chọn.' : '⏱️ Phiên chưa mở hoặc đã kết thúc.'));
+      else if (result) this.toast?.('⭐ Đã gửi bình chọn của bạn!');
+      else this.toast?.('⏱️ Phiên chưa mở hoặc bạn đã bình chọn.');
+    } else if (action === 'costume-round-start') {
+      const result = this.submit('costume_round_start');
+      if (result?.then) result.then(accepted => this.toast?.(accepted ? '🎬 Phiên diễn bắt đầu sau 5 giây.' : 'Cần là chủ phòng và có ít nhất hai bài dự thi để mở sân khấu.'));
     } else if (action === 'mansion-symbol') this.chooseMansionSymbol(data.symbol);
     else if (action === 'mansion-room') this.openMansionRoom(data.roomId);
     else if (action === 'mansion-back') {
