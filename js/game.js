@@ -2480,6 +2480,10 @@ function applyOp(op, senderId = null) {
       break;
     }
     case 'seasonal_event': {
+      // The room host owns shared seasonal progress. Guests submit operations
+      // to the host and only apply the canonical snapshot it broadcasts back.
+      // The reducer still validates every operation before it changes state.
+      if (!state?.hostId || (!isHost() && senderId !== state.hostId)) return;
       const changed = seasonalActivities?.applyOperation(op, senderId);
       if (changed) world?.syncSeasonalEventVisuals(state.seasonalEvents, state.theme);
       break;
