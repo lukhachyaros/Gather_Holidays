@@ -877,20 +877,18 @@ export function initAvatarStudioScene(canvas) {
 
 export function updatePreviewAvatar(cfg) {
   if (!previewScene) return;
-  if (previewAvatar) {
-    previewScene.remove(previewAvatar.root);
+  if (!previewAvatar) {
+    previewAvatar = new Avatar(null, {
+      name: 'Preview',
+      hue: 200,
+    });
+    if (previewAvatar.label) previewAvatar.label.visible = false;
+    previewScene.add(previewAvatar.root);
   }
-
-  previewAvatar = new Avatar(null, {
-    name: 'Preview',
-    hue: 200,
-  });
-  if (previewAvatar.label) previewAvatar.label.visible = false;
 
   previewAvatar.applyCustomization(cfg);
   previewAvatar.root.position.set(0, 0, 0);
   previewAvatar.root.rotation.y = avatarRotY;
-  previewScene.add(previewAvatar.root);
   fitPreviewCamera();
 }
 

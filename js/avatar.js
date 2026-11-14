@@ -6,7 +6,15 @@ import { getFaceCanvasTexture } from './avatar_customizer.js';
 
 const HEIGHT = 1.72;
 const _headPos = new THREE.Vector3();
+const clothingMapMaterials = new Map();
 export const loadCharacter = async () => true;
+
+function clothingMapMaterial(key, map, roughness) {
+  if (!clothingMapMaterials.has(key)) {
+    clothingMapMaterials.set(key, new THREE.MeshStandardMaterial({ map, roughness }));
+  }
+  return clothingMapMaterials.get(key);
+}
 
 // Social & Interactive Emote Mapping
 export const EMOTE_CLIP = {
@@ -918,6 +926,25 @@ export class Avatar {
     part(layered.torso, G.box(), ribMat, [0, 0.54, 0], [0.38, 0.06, 0.24]);
     part(layered.leftArm, G.cyl(), ribMat, [0, -0.15, 0], [0.165, 0.32, 0.165]);
     part(layered.rightArm, G.cyl(), ribMat, [0, -0.15, 0], [0.165, 0.32, 0.165]);
+  } else if (cfg.jacket === 'trench_coat') {
+    const coatMat = mat('#78350f', { roughness: 0.7 });
+    const trimMat = mat('#d6a76c', { roughness: 0.65 });
+    part(layered.torso, G.box(), coatMat, [0, 0.28, 0.02], [0.53, 0.58, 0.30]);
+    part(layered.torso, G.box(), coatMat, [0, -0.20, -0.015], [0.53, 0.43, 0.31]);
+    part(layered.torso, G.box(), trimMat, [-0.12, 0.48, 0.17], [0.12, 0.18, 0.025], [0, 0, 0.24]);
+    part(layered.torso, G.box(), trimMat, [0.12, 0.48, 0.17], [0.12, 0.18, 0.025], [0, 0, -0.24]);
+    part(layered.leftArm, G.cyl(), coatMat, [0, -0.15, 0], [0.17, 0.33, 0.17]);
+    part(layered.rightArm, G.cyl(), coatMat, [0, -0.15, 0], [0.17, 0.33, 0.17]);
+  } else if (cfg.jacket === 'varsity_jacket') {
+    const bodyMat = mat('#b91c1c', { roughness: 0.58 });
+    const sleeveMat = mat('#f8fafc', { roughness: 0.72 });
+    const trimMat = mat('#1e3a8a', { roughness: 0.65 });
+    part(layered.torso, G.box(), bodyMat, [0, 0.28, 0.015], [0.52, 0.55, 0.29]);
+    part(layered.torso, G.box(), trimMat, [0, 0.02, 0.015], [0.525, 0.07, 0.30]);
+    part(layered.leftArm, G.cyl(), sleeveMat, [0, -0.15, 0], [0.17, 0.33, 0.17]);
+    part(layered.rightArm, G.cyl(), sleeveMat, [0, -0.15, 0], [0.17, 0.33, 0.17]);
+    part(layered.leftArm, G.cyl(), trimMat, [0, -0.29, 0], [0.173, 0.055, 0.173]);
+    part(layered.rightArm, G.cyl(), trimMat, [0, -0.29, 0], [0.173, 0.055, 0.173]);
   } else if (cfg.jacket === 'winter_parka') {
     const pMat = mat('#1e3a8a', { roughness: 0.6 });
     const furMat = mat('#f8fafc', { roughness: 0.95 });
@@ -936,11 +963,22 @@ export class Avatar {
     part(layered.torso, G.box(), sMat, [0, 0.28, 0.01], [0.48, 0.54, 0.26]);
     part(layered.torso, G.box(), wMat, [0, 0.30, 0.133], [0.14, 0.14, 0.02]);
     part(layered.torso, G.box(), wMat, [-0.14, 0.30, 0.133], [0.08, 0.08, 0.02]);
+    part(layered.leftArm, G.cyl(), sMat, [0, -0.15, 0], [0.16, 0.32, 0.16]);
+    part(layered.rightArm, G.cyl(), sMat, [0, -0.15, 0], [0.16, 0.32, 0.16]);
     part(layered.torso, G.box(), wMat, [0.14, 0.30, 0.133], [0.08, 0.08, 0.02]);
   } else if (cfg.sweater === 'turtleneck') {
     const tMat = mat('#f5f5f4', { roughness: 0.75 });
     part(layered.torso, G.box(), tMat, [0, 0.28, 0.01], [0.48, 0.54, 0.26]);
     part(layered.torso, G.cyl(), tMat, [0, 0.56, 0], [0.26, 0.14, 0.26]);
+    part(layered.leftArm, G.cyl(), tMat, [0, -0.15, 0], [0.155, 0.32, 0.155]);
+    part(layered.rightArm, G.cyl(), tMat, [0, -0.15, 0], [0.155, 0.32, 0.155]);
+  } else if (cfg.sweater === 'cozy_hoodie') {
+    const hMat = mat('#334155', { roughness: 0.8 });
+    part(layered.torso, G.box(), hMat, [0, 0.28, 0.01], [0.51, 0.56, 0.29]);
+    part(layered.torso, G.sph(), hMat, [0, 0.53, -0.15], [0.30, 0.20, 0.20]);
+    part(layered.torso, G.box(), mat('#1e293b'), [0, 0.14, 0.16], [0.30, 0.15, 0.035]);
+    part(layered.leftArm, G.cyl(), hMat, [0, -0.15, 0], [0.165, 0.33, 0.165]);
+    part(layered.rightArm, G.cyl(), hMat, [0, -0.15, 0], [0.165, 0.33, 0.165]);
   }
 
   // 3. Shirts 3D
@@ -956,6 +994,15 @@ export class Avatar {
     for (let i = 0; i < 3; i++) {
       part(layered.torso, G.sph(), brassMat, [0, 0.16 + i * 0.12, 0.14], [0.03, 0.03, 0.03]);
     }
+  }
+
+  // 3. Skirts and dresses share the hip and torso pivots so they follow animation.
+  if (cfg.dressSkirt === 'flared_skirt') {
+    part(layered.hips, G.cone(), mat('#db2777', { roughness: 0.75 }), [0, -0.16, 0], [0.42, 0.38, 0.36], [Math.PI, 0, 0]);
+  } else if (cfg.dressSkirt === 'party_dress') {
+    const dressMat = mat('#7c3aed', { roughness: 0.65 });
+    part(layered.torso, G.box(), dressMat, [0, 0.24, 0.01], [0.49, 0.47, 0.27]);
+    part(layered.hips, G.cone(), dressMat, [0, -0.20, 0], [0.46, 0.50, 0.39], [Math.PI, 0, 0]);
   }
 
   // 4. Pants 3D
@@ -1125,8 +1172,8 @@ export class Avatar {
     }
 
     // Accessories & Auras if present
-    if (cfg.accessory) this.setAccessory(cfg.accessory);
-    if (cfg.aura) this.setAura(cfg.aura);
+    this.setAccessory(cfg.accessory || null);
+    this.setAura(cfg.aura || null);
   }
 
   applyCostume(costumeKey = 'default') {
@@ -1385,7 +1432,7 @@ export class Avatar {
     const shirtId = cfg.classicClothing?.shirt;
     if (shirtId && shirtId !== 'none') {
       const sTex = getClassicShirtTexture(shirtId);
-      const sMat = new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.65 });
+      const sMat = clothingMapMaterial('shirt:' + shirtId, sTex, 0.65);
       this.shirtMesh.material = sMat;
       this.leftSleeve.material = sMat;
       this.rightSleeve.material = sMat;
@@ -1393,7 +1440,7 @@ export class Avatar {
     const pantsId = cfg.classicClothing?.pants;
     if (pantsId && pantsId !== 'none') {
       const pTex = getClassicPantsTexture(pantsId);
-      const pMat = new THREE.MeshStandardMaterial({ map: pTex, roughness: 0.7 });
+      const pMat = clothingMapMaterial('pants:' + pantsId, pTex, 0.7);
       this.pelvisMesh.material = pMat;
       this.leftThigh.material = pMat;
       this.rightThigh.material = pMat;
@@ -1412,6 +1459,23 @@ export class Avatar {
     const dressLayer = new THREE.Group();
     dressLayer.scale.setScalar(1.01);
     this.layeredClothingGroup.add(dressLayer);
+    Object.values(this.layeredClothing).forEach(group => group.clear());
+
+    // Clothing sleeves follow the shoulder pivots instead of floating beside
+    // the animated arms. The jacket is the outer layer when both are selected.
+    const jacketSleeveColors = {
+      bomber_jacket: '#1e293b', trench_coat: '#78350f',
+      leather_jacket: '#0f172a', varsity_jacket: '#f8fafc',
+    };
+    const sweaterSleeveColors = {
+      cozy_hoodie: '#334155', xmas_sweater: '#047857', turtleneck: '#18181b',
+    };
+    const sleeveColor = jacketSleeveColors[lc.jacket] || sweaterSleeveColors[lc.sweater];
+    if (sleeveColor) {
+      const sleeveMat = mat(sleeveColor, { roughness: 0.72 });
+      part(this.layeredClothing.leftArm, G.cyl(), sleeveMat, [0, -0.15, 0], [0.17, 0.34, 0.17]);
+      part(this.layeredClothing.rightArm, G.cyl(), sleeveMat, [0, -0.15, 0], [0.17, 0.34, 0.17]);
+    }
 
     if (lc.jacket && lc.jacket !== 'none') {
       if (lc.jacket === 'bomber_jacket') {
