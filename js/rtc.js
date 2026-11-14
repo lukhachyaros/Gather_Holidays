@@ -7,7 +7,7 @@
 // 5. LiveKit active-speaker events for real-time speaking indicators
 // 6. Full HD Screen Sharing (Entire Screen, App Window, Browser Tab with Audio) onto the Giant 3D Cinema TV
 
-import { joinRoom } from 'https://cdn.jsdelivr.net/npm/trystero/+esm';
+import { joinRoom } from 'https://cdn.jsdelivr.net/npm/trystero@0.27.0/+esm';
 
 const LIVEKIT_URL = 'wss://gather-holidays-72e5l6gu.livekit.cloud';
 const LIVEKIT_TOKEN_SERVER_ID = 'gatherholidays-gpzvfy';
@@ -297,10 +297,9 @@ export class RtcManager {
       const config = { appId: 'gather-holidays-voice-v3' };
       const cleanRoomId = 'gh_v_' + encodeURIComponent(this.roomId);
       console.log(`[RTC] Joining Trystero media room for screen sharing: ${cleanRoomId} with selfId=${this.selfId}`);
-      this.room = joinRoom(config, cleanRoomId, {
-        onJoinError: ({ peerId, error }) => {
-          console.error(`[RTC] Trystero screen share connection failed for peer ${peerId}:`, error);
-        },
+      this.room = joinRoom(config, cleanRoomId);
+      this.room.onError?.((error, peerId) => {
+        console.error(`[RTC] Trystero media connection failed${peerId ? ` for peer ${peerId}` : ''}:`, error);
       });
 
       const handleJoin = peerId => {

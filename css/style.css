@@ -204,6 +204,7 @@ button.danger-btn:hover:not(:disabled){background:#991b1b}
 .hud-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid rgba(255,255,255,.1)}
 .hud-close{padding:1px 6px;font-size:11px;background:transparent;border:0;color:#94a3b8}
 .hud-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;color:#cbd5e1}
+.season-minigame-hint{grid-column:1/-1;margin-top:5px;padding:6px 8px;border-left:2px solid #fbbf24;border-radius:4px;background:rgba(251,191,36,.08);color:#fde68a;font-size:10.5px;line-height:1.45}
 kbd{background:#334155;border:1px solid #64748b;border-radius:4px;padding:1px 5px;font-size:10.5px;font-family:inherit;color:#f8fafc;font-weight:600}
 
 /* Contextual Status Badges (Top-Left below dock) */

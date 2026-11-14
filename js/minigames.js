@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { playSfx } from './audio.js';
 import { buildAerialRing } from './props.js';
 import { createDragon } from './dragon.js';
+import { HALLOWEEN_LANTERN_PARRY, isHalloweenLanternParryWindowOpen } from './minigame-rules.js';
 
 const TILE = 2;
 
@@ -138,6 +139,7 @@ export class MinigameManager {
     this.lastActionTime = 0;
     this.lastTetFirecrackerTime = null;
     this.tetCooldownNotified = false;
+    this.lastHalloweenLanternTime = 0;
 
     // PvP Health State for Local Player
     this.hp = 100;
@@ -305,6 +307,14 @@ export class MinigameManager {
 
   updateHUDButton() {
     const btn = document.getElementById('btnMinigame');
+    const hint = document.getElementById('seasonMinigameHint');
+    const hints = {
+      christmas: '🎄 Giáng sinh · Ngắm và ném cầu tuyết vào người chơi. Chạy để né; khu ghế TV chặn đạn.',
+      halloween: `🎃 Halloween · Né vòng đỏ hoặc bấm G đúng nhịp (${HALLOWEEN_LANTERN_PARRY.opensAtMs / 1000}–${(HALLOWEEN_LANTERN_PARRY.closesAtMs / 1000).toFixed(2)} giây) để ngắt cú vồ, cứu cả phòng.`,
+      tet: '🧧 Tết · Ngắm bắn pháo vào mục tiêu để tạo chuỗi hiệu ứng; cùng lái Kim Long qua các vòng bay để mở skin.',
+      valentine: '💝 Valentine · Ngắm bắn cung Cupid, né tên và phối hợp với người chơi khác; khu ghế TV là vùng an toàn.',
+    };
+    if (hint) hint.textContent = hints[this.theme] || 'Chọn một chủ đề lễ hội để chơi minigame cùng mọi người trong phòng.';
     if (!btn) return;
     const lbl = btn.querySelector('.item-label');
     const setTxt = (txt, fullTxt) => {
@@ -318,8 +328,8 @@ export class MinigameManager {
         btn.title = 'Minigame Giáng Sinh: Đấu Súng Cầu Tuyết FPS ngắm tâm (Chuột Trái / phím G)';
         break;
       case 'halloween':
-        setTxt('🧛 Boss', 'Tránh Vampire Boss');
-        btn.title = 'Halloween: Boss Vampire bay rình mồi & vồ Jumpscare (Chạy vào Vùng Ghế TV để an toàn)';
+        setTxt('🕯️ Đèn [G]', 'Đèn Lồng Trừ Tà');
+        btn.title = 'Halloween: Chạy khỏi vòng đỏ hoặc bấm G đúng nhịp để dùng đèn lồng ngắt cú vồ và cứu cả phòng';
         break;
       case 'tet':
         setTxt('🎆 Pháo [G]', 'Minigame Pháo Thần Công');
@@ -428,7 +438,7 @@ export class MinigameManager {
         this.actionPvPSnowball();
         break;
       case 'halloween':
-        this.toast('🧛 Boss Vampire đang rình mò trên bầu trời! Chạy vào Vùng Ghế TV để an toàn!');
+        this.actionHalloweenLantern();
         break;
       case 'tet':
         this.actionTetFirecracker();
@@ -509,6 +519,32 @@ export class MinigameManager {
       ty: aim.y,
       tz: aim.z,
     });
+  }
+
+  actionHalloweenLantern() {
+    const me = this.getMe();
+    const hunt = this.vampireHunt;
+    if (!me) return false;
+    if (!hunt) {
+      this.toast('🕯️ Giữ đèn lồng sẵn sàng. Khi vòng đỏ xuất hiện, bấm G đúng nhịp để cứu cả phòng.');
+      return false;
+    }
+
+    const now = performance.now();
+    if (now - this.lastHalloweenLanternTime < HALLOWEEN_LANTERN_PARRY.cooldownMs) {
+      this.toast('🕯️ Đèn lồng đang hồi sáng. Né vòng đỏ hoặc chạy về khu ghế TV!');
+      return false;
+    }
+
+    const elapsed = now - hunt.startTime;
+    if (!isHalloweenLanternParryWindowOpen(elapsed)) {
+      this.toast('⏱️ Chưa đúng nhịp! Canh vòng đỏ co lại rồi bấm G.');
+      return false;
+    }
+
+    this.lastHalloweenLanternTime = now;
+    this.emitOp({ k: 'mg_halloween_lantern', fromName: me.name });
+    return true;
   }
 
   // --------------------------------------------------------------------------
@@ -1235,6 +1271,24 @@ export class MinigameManager {
   // --------------------------------------------------------------------------
   handleNetworkOp(op) {
     switch (op.k) {
+      case 'mg_halloween_lantern': {
+        const me = this.getMe();
+        const playerName = String(op.fromName || 'Người chơi').replace(/[<>\u0000-\u001f]/g, '').slice(0, 24) || 'Người chơi';
+        if (this.vampireHunt?.circleMesh) this.group.remove(this.vampireHunt.circleMesh);
+        this.vampireHunt = null;
+        this.nextVampireCheck = Math.max(this.nextVampireCheck, performance.now() + HALLOWEEN_LANTERN_PARRY.roomGraceMs);
+
+        const score = this.scores.get(playerName) || { name: playerName, score: 0 };
+        score.score += 1;
+        this.scores.set(playerName, score);
+        this.updateScoreboardUI('🕯️ ĐÈN LỒNG CỨU NGUY', 'Cứu cả phòng');
+        playSfx('xmas_bell', 'halloween');
+        this.toast(`🕯️ ${playerName} đã canh đúng nhịp, ngắt cú vồ và cho cả phòng 6 giây an toàn!`);
+        if (playerName === me?.name && this.floaters) {
+          this.floaters.push({ e: '🕯️ CỨU CẢ PHÒNG!', who: 'me', t: Date.now() });
+        }
+        break;
+      }
       case 'mg_snowball_throw':
         this.spawnProjectile(op, 'snowball');
         break;
