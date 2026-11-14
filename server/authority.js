@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomInt, createHash, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,11 +17,94 @@ const tokenMatches = (token, expected) => {
   return actualHash.length === expectedHash.length && timingSafeEqual(actualHash, expectedHash);
 };
 
+function recordServerEvent(room, user, action, now) {
+  room.seq++;
+  room.events.push({ seq: room.seq, userId: user.id, action, at: now });
+  if (room.events.length > 500) room.events.splice(0, room.events.length - 500);
+}
+
+function publicSeasonalEvents(room, userId) {
+  const snapshot = JSON.parse(JSON.stringify(room.seasonalEvents || {}));
+  const runs = snapshot.christmas?.sled?.runs;
+  if (Array.isArray(runs)) {
+    snapshot.christmas.sled.runs = runs.filter(run => run.idOwner === userId).map(run => {
+      const { sequence, ...publicRun } = run;
+      publicRun.currentGate = run.active ? sequence[run.step] || null : null;
+      return publicRun;
+    });
+  }
+  return snapshot;
+}
+
+function finishServerSledRun(room, user, run, now) {
+  run.active = false;
+  run.timeMs = Math.min(300000, Math.max(5000, now - run.startAt + run.penaltyMs));
+  const previous = room.seasonalEvents.christmas.sled.records.find(item => item.id === user.id);
+  const result = { id: user.id, name: user.name, timeMs: run.timeMs, gatesHit: run.gatesHit, shortcuts: run.shortcuts, collisions: run.collisions, at: now };
+  if (!previous) room.seasonalEvents.christmas.sled.records.push(result);
+  else if (result.gatesHit > previous.gatesHit || (result.gatesHit === previous.gatesHit && result.shortcuts > previous.shortcuts) || (result.gatesHit === previous.gatesHit && result.shortcuts === previous.shortcuts && result.collisions < previous.collisions) || (result.gatesHit === previous.gatesHit && result.shortcuts === previous.shortcuts && result.collisions === previous.collisions && result.timeMs < previous.timeMs)) Object.assign(previous, result);
+}
+
+function applyServerSledEvent(room, user, op, now) {
+  const data = op.data || {};
+  const season = room.seasonalEvents.christmas ||= {};
+  const sled = season.sled ||= { records: [], runs: [] };
+  sled.records ||= [];
+  sled.runs ||= [];
+  if (op.action === 'sled_start') {
+    if (sled.runs.length >= 100) sled.runs = sled.runs.slice(-80);
+    const sequence = Array.from({ length: 8 }, () => {
+      const shortcut = randomInt(3);
+      let safe = randomInt(2);
+      if (safe >= shortcut) safe++;
+      return { shortcutLane: ['left', 'center', 'right'][shortcut], safeLane: ['left', 'center', 'right'][safe], obstacleLane: ['left', 'center', 'right'][3 - shortcut - safe] };
+    });
+    const run = { id: randomBytes(12).toString('hex'), idOwner: user.id, name: user.name, sequence, step: 0, gatesHit: 0, shortcuts: 0, collisions: 0, penaltyMs: 0, startAt: now + 1500, active: true };
+    sled.runs = sled.runs.filter(item => item.idOwner !== user.id);
+    sled.runs.push(run);
+    recordServerEvent(room, user, op.action, now);
+    return true;
+  }
+  if (op.action !== 'sled_checkpoint' || !['left', 'center', 'right'].includes(data.lane)) return false;
+  const run = sled.runs.find(item => item.id === data.runId && item.idOwner === user.id && item.active);
+  if (!run || run.step >= run.sequence.length) return false;
+  const elapsed = now - run.startAt;
+  const expectedStep = Math.floor(elapsed / 1450);
+  if (expectedStep < run.step) return false;
+  if (expectedStep > run.step) {
+    while (run.step < Math.min(expectedStep, run.sequence.length)) {
+      run.collisions++;
+      run.penaltyMs += 1450;
+      run.step++;
+    }
+    if (run.step >= run.sequence.length) finishServerSledRun(room, user, run, now);
+    recordServerEvent(room, user, op.action, now);
+    return true;
+  }
+  if (run.step >= run.sequence.length) {
+    finishServerSledRun(room, user, run, now);
+    recordServerEvent(room, user, op.action, now);
+    return true;
+  }
+  if (elapsed < run.step * 1450 || elapsed > (run.step + 1) * 1450) return false;
+  const gate = run.sequence[run.step];
+  if (data.lane === gate.obstacleLane) { run.collisions++; run.penaltyMs += 1250; }
+  else {
+    run.gatesHit++;
+    if (data.lane === gate.shortcutLane) { run.shortcuts++; run.penaltyMs = Math.max(0, run.penaltyMs - 350); }
+  }
+  run.step++;
+  if (run.step === 8) finishServerSledRun(room, user, run, now);
+  recordServerEvent(room, user, op.action, now);
+  return true;
+}
+
 export function applyAuthoritativeEvent(room, user, op, now = Date.now()) {
   if (!room || !user || !op || op.k !== 'seasonal_event' || op.season !== room.theme || !THEMES.has(room.theme)) return false;
-  if (op.action === 'sled_record' || op.action === 'dance_record') return false;
   room.kickedIds ||= [];
   room.seasonalEvents ||= {};
+  if (op.season === 'christmas' && ['sled_start', 'sled_checkpoint'].includes(op.action)) return applyServerSledEvent(room, user, op, now);
+  if (op.action === 'sled_record' || op.action === 'dance_record') return false;
   if (!applySeasonalEventOperation(room, op, user.id, user.name)) return false;
   room.seq++;
   room.events.push({ seq: room.seq, userId: user.id, action: op.action, at: now });
@@ -72,7 +155,7 @@ export async function createAuthorityServer({ dataPath = resolve('data/rooms.jso
         if (room.users.length >= 100) return send(409, { error: 'room full' });
         if (room.users.some(item => item.id === userId)) return send(409, { error: 'member already joined' });
         room.users.push({ id: userId, name: safeName(body.name), tokenHash: digest(token) });
-        await persist(); return send(201, { roomId, userId, token, host: false, state: { theme: room.theme, seq: room.seq, seasonalEvents: room.seasonalEvents } });
+        await persist(); return send(201, { roomId, userId, token, host: false, state: { theme: room.theme, seq: room.seq, seasonalEvents: publicSeasonalEvents(room, userId) } });
       }
       const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
       const user = room.users.find(item => tokenMatches(auth, item.tokenHash)); if (!user) return send(401, { error: 'unauthorized' });
@@ -84,14 +167,14 @@ export async function createAuthorityServer({ dataPath = resolve('data/rooms.jso
         room.seq++;
         room.updatedAt = clock();
         await persist();
-        return send(200, { theme: room.theme, seq: room.seq, seasonalEvents: room.seasonalEvents });
+        return send(200, { theme: room.theme, seq: room.seq, seasonalEvents: publicSeasonalEvents(room, user.id) });
       }
-      if (req.method === 'GET' && parts[3] === 'state') return send(200, { theme: room.theme, seq: room.seq, seasonalEvents: room.seasonalEvents, events: room.events });
+      if (req.method === 'GET' && parts[3] === 'state') return send(200, { theme: room.theme, seq: room.seq, seasonalEvents: publicSeasonalEvents(room, user.id), events: room.events });
       if (req.method === 'GET' && parts[3] === 'events') return send(200, { events: room.events.filter(event => event.seq > Number(url.searchParams.get('after') || 0)) });
       if (req.method === 'POST' && parts[3] === 'events') {
         const body = await readBody();
         if (!applyAuthoritativeEvent(room, user, body.operation, clock())) return send(422, { error: 'operation rejected' });
-        room.updatedAt = clock(); await persist(); return send(200, { theme: room.theme, seq: room.seq, seasonalEvents: room.seasonalEvents });
+        room.updatedAt = clock(); await persist(); return send(200, { theme: room.theme, seq: room.seq, seasonalEvents: publicSeasonalEvents(room, user.id) });
       }
       return send(404, { error: 'not found' });
     } catch (error) { return send(error.message === 'body too large' ? 413 : 400, { error: error.message || 'bad request' }); }

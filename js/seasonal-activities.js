@@ -300,7 +300,7 @@ export function applySeasonalEventOperation(state, op, senderId, senderName = 'N
 }
 
 export class SeasonalActivities {
-  constructor({ getState, getSelfId, getPlayerName, emitOp, toast, onCostumeSubmit, onCapturePhoto, getHeldItem, consumeHeldItem }) {
+  constructor({ getState, getSelfId, getPlayerName, emitOp, toast, onCostumeSubmit, onCapturePhoto, getHeldItem, consumeHeldItem, getAuthorityEnabled }) {
     this.getState = getState;
     this.getSelfId = getSelfId;
     this.getPlayerName = getPlayerName;
@@ -310,6 +310,7 @@ export class SeasonalActivities {
     this.onCapturePhoto = onCapturePhoto;
     this.getHeldItem = getHeldItem || (() => null);
     this.consumeHeldItem = consumeHeldItem || (() => {});
+    this.getAuthorityEnabled = getAuthorityEnabled || (() => false);
     this.photoShots = [];
     this.mansionRoomId = '';
     this.theme = null;
@@ -516,6 +517,11 @@ export class SeasonalActivities {
     return Array.isArray(value) ? value : [];
   }
 
+  serverRace() {
+    const id = this.getSelfId?.();
+    return this.stateBucket('christmas', 'sled', 'runs').find(run => run?.idOwner === id && run.active) || null;
+  }
+
   myRecord(list) {
     const id = this.getSelfId?.();
     return list.find(item => item?.id === id) || null;
@@ -671,6 +677,7 @@ export class SeasonalActivities {
   }
 
   renderSledRace() {
+    if (this.getAuthorityEnabled?.()) this.race = this.serverRace();
     const records = this.stateBucket('christmas', 'sled', 'records').slice()
       .sort((a, b) => (b.gatesHit - a.gatesHit) || ((b.shortcuts || 0) - (a.shortcuts || 0)) ||
         ((a.collisions || 0) - (b.collisions || 0)) || (a.timeMs - b.timeMs));
@@ -683,7 +690,8 @@ export class SeasonalActivities {
       this.raceTimer.appendChild(this.raceTimerFill);
       this.body.appendChild(this.raceTimer);
       this.body.appendChild(this.el('div', '❄️ An toàn · ⚡ Đường tắt · 🪨 Chướng ngại', 'seasonal-race-cue'));
-      const gate = this.race.sequence[this.race.step];
+      const gate = this.race.currentGate || this.race.sequence?.[this.race.step];
+      if (!gate) return;
       const row = this.el('div', null, 'seasonal-track-grid');
       [
         { id: 'left', label: 'TRÁI' },
@@ -711,6 +719,16 @@ export class SeasonalActivities {
   }
 
   startRace() {
+    if (this.getAuthorityEnabled?.()) {
+      const result = this.submit('sled_start');
+      if (result?.then) result.then(accepted => {
+        if (!accepted) return;
+        this.race = this.serverRace();
+        this.render();
+        if (this.race) this.tickRace();
+      });
+      return;
+    }
     if (this.raceFrame) cancelAnimationFrame(this.raceFrame);
     const lanes = ['left', 'center', 'right'];
     const sequence = Array.from({ length: 8 }, () => {
@@ -732,6 +750,19 @@ export class SeasonalActivities {
 
   tickRace() {
     if (!this.race) return;
+    if (this.getAuthorityEnabled?.()) {
+      this.race = this.serverRace();
+      if (!this.race) { this.raceFrame = 0; this.refresh(); return; }
+      const now = Date.now();
+      const untilStart = this.race.startAt - now;
+      const remaining = this.race.startAt + (this.race.step + 1) * 1450 - now;
+      if (this.racePrompt) this.racePrompt.textContent = untilStart > 0
+        ? 'CHUẨN BỊ XUẤT PHÁT · ' + (untilStart / 1000).toFixed(1) + ' giây'
+        : 'CỔNG ' + Math.min(8, this.race.step + 1) + ' / 8 · ' + Math.max(0, remaining / 1000).toFixed(1) + ' giây';
+      if (this.raceTimerFill) this.raceTimerFill.style.width = untilStart > 0 ? '100%' : Math.max(0, Math.min(100, remaining / 1450 * 100)) + '%';
+      this.raceFrame = requestAnimationFrame(() => this.tickRace());
+      return;
+    }
     const remaining = this.race.gateDurationMs - (performance.now() - this.race.gateStartedAt);
     if (remaining <= 0) {
       this.race.collisions++;
@@ -746,6 +777,16 @@ export class SeasonalActivities {
 
   chooseRace(lane) {
     if (!this.race || !['left', 'center', 'right'].includes(lane)) return false;
+    if (this.getAuthorityEnabled?.()) {
+      const result = this.submit('sled_checkpoint', { runId: this.race.id, lane });
+      if (result?.then) result.then(accepted => {
+        if (!accepted) return;
+        this.race = this.serverRace();
+        this.render();
+        if (this.race) this.tickRace();
+      });
+      return true;
+    }
     if (performance.now() - this.race.gateStartedAt > this.race.gateDurationMs) return false;
     const gate = this.race.sequence[this.race.step];
     if (lane === gate.obstacleLane) {

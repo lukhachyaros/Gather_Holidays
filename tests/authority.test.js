@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createAuthorityServer } from '../server/authority.js';
+import { applyAuthoritativeEvent, createAuthorityServer } from '../server/authority.js';
 
 async function withServer(dataPath, fn) {
   const server = await createAuthorityServer({ dataPath, allowedOrigin: 'https://game.test' });
@@ -16,6 +16,26 @@ const post = (url, body, token) => fetch(url, {
   method: 'POST',
   headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
   body: JSON.stringify(body),
+});
+
+test('sled checkpoint results use server-generated gates and server time, not submitted finish scores', () => {
+  const room = { theme: 'christmas', seasonalEvents: {}, events: [], seq: 0 };
+  const user = { id: 'player-1', name: 'Racer' };
+  const start = { k: 'seasonal_event', season: 'christmas', action: 'sled_start', data: {} };
+  assert.equal(applyAuthoritativeEvent(room, user, start, 1000), true);
+  const run = room.seasonalEvents.christmas.sled.runs[0];
+  assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'sled_record', data: { timeMs: 5000, gatesHit: 8 } }, 2000), false);
+  assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'sled_checkpoint', data: { runId: 'forged', lane: 'left' } }, run.startAt + 100), false);
+  for (let gateIndex = 0; gateIndex < 8; gateIndex++) {
+    const gate = run.sequence[gateIndex];
+    assert.equal(applyAuthoritativeEvent(room, user, {
+      ...start, action: 'sled_checkpoint', data: { runId: run.id, lane: gate.safeLane },
+    }, run.startAt + gateIndex * 1450 + 200), true);
+  }
+  const record = room.seasonalEvents.christmas.sled.records[0];
+  assert.equal(record.gatesHit, 8);
+  assert.equal(record.collisions, 0);
+  assert.equal(record.timeMs, run.startAt + 7 * 1450 + 200 - run.startAt);
 });
 
 test('authority validates member events and restores saved progress after restart', async () => {
@@ -43,6 +63,14 @@ test('authority validates member events and restores saved progress after restar
       const lateJoinResponse = await post(`${base}/v1/rooms/winter-room/join`, { name: 'Late join' });
       const lateJoin = await lateJoinResponse.json();
       assert.equal(lateJoin.state.seasonalEvents.christmas.gifts.players[0].gifts[0], 'gift_snow_cabin');
+      await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'sled_start', data: {} } }, guestToken);
+      const guestStateResponse = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } });
+      const guestState = await guestStateResponse.json();
+      const ownRun = guestState.seasonalEvents.christmas.sled.runs[0];
+      assert.ok(ownRun.currentGate);
+      assert.equal('sequence' in ownRun, false);
+      const lateState = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${lateJoin.token}` } }).then(response => response.json());
+      assert.deepEqual(lateState.seasonalEvents.christmas.sled.runs, []);
       const guestThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'tet' }, guestToken);
       assert.equal(guestThemeChange.status, 403);
       const hostThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'halloween' }, hostToken);
@@ -52,7 +80,7 @@ test('authority validates member events and restores saved progress after restar
       const state = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } });
       assert.equal(state.status, 200);
       const saved = await state.json();
-      assert.equal(saved.seq, 2);
+      assert.equal(saved.seq, 3);
       assert.equal(saved.seasonalEvents.christmas.gifts.players[0].gifts[0], 'gift_snow_cabin');
       assert.equal(saved.theme, 'halloween');
       const unauthorized = await fetch(`${base}/v1/rooms/winter-room/state`);

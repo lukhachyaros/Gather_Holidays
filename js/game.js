@@ -522,6 +522,7 @@ try {
     toast,
     onCostumeSubmit: costumeKey => equipCostume(costumeKey),
     getHeldItem: () => me?.heldItem,
+    getAuthorityEnabled: () => authorityClient.connected,
     consumeHeldItem: ornamentKey => {
       if (me?.heldItem !== ornamentKey) return;
       me.heldItem = null;
