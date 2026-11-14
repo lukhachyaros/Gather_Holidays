@@ -30,7 +30,8 @@ test('browser authority client submits operations and only accepts increasing ca
   assert.equal(client.acceptState({ theme: 'christmas', seq: 1, seasonalEvents: {} }), false);
   assert.equal(client.acceptState({ theme: 'christmas', seq: 1, seasonalEvents: { valentine: { dance: { runs: [{ active: true, currentCue: 'left' }] } } } }, true), true);
   assert.equal(client.acceptState({ theme: 'halloween', seq: 1, serverNow: 1000, seasonalEvents: { halloween: { costume: { round: { id: 'round', endAt: 5000, status: 'ready' } } } } }, true), true);
-  assert.equal(snapshots.length, 4, 'poll refreshes timed dance cues and runway countdowns when room sequence is unchanged');
+  assert.equal(client.acceptState({ theme: 'valentine', seq: 1, serverNow: 1000, seasonalEvents: { valentine: { dance: { teamSession: { id: 'team', endAt: 5000, status: 'playing' } } } } }, true), true);
+  assert.equal(snapshots.length, 5, 'poll refreshes timed dance cues, team rounds and runway countdowns when room sequence is unchanged');
   assert.equal(calls[1].options.headers.authorization, 'Bearer session-token');
   client.destroy();
 });

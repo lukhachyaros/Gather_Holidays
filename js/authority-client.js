@@ -13,6 +13,7 @@ export class SeasonalAuthorityClient {
     this.token = '';
     this.sequence = -1;
     this.timer = 0;
+    this.pollIntervalMs = 1500;
     this.positionTimer = 0;
     this.positionFlight = null;
     this.stopped = false;
@@ -97,10 +98,13 @@ export class SeasonalAuthorityClient {
     if (!state || !Number.isFinite(state.seq) || state.seq < this.sequence) return false;
     if (state.seq === this.sequence) {
       if (!refresh) return false;
-      const activeDance = state.seasonalEvents?.valentine?.dance?.runs?.some(run => run.active);
+      const now = state.serverNow || Date.now();
+      const activeDance = state.seasonalEvents?.valentine?.dance?.runs?.some(run => run.active || (run.endAt && now <= run.endAt + 3000));
+      const team = state.seasonalEvents?.valentine?.dance?.teamSession;
+      const activeTeam = !!team?.id && now <= team.endAt + 3000;
       const round = state.seasonalEvents?.halloween?.costume?.round;
-      const activeRunway = round?.id && (state.serverNow || Date.now()) < round.endAt;
-      if (!activeDance && !activeRunway) return false;
+      const activeRunway = !!round?.id && now <= round.endAt + 3000;
+      if (!activeDance && !activeTeam && !activeRunway) return false;
     }
     this.sequence = Math.max(this.sequence, state.seq);
     this.onState(state);
@@ -124,6 +128,7 @@ export class SeasonalAuthorityClient {
 
   beginPolling() {
     clearInterval(this.timer);
+    this.pollIntervalMs = 1500;
     this.timer = setInterval(() => this.poll(), 1500);
     if (this.getPosition) {
       clearInterval(this.positionTimer);
@@ -148,10 +153,25 @@ export class SeasonalAuthorityClient {
     if (!this.connected || this.inFlight) return;
     this.inFlight = true;
     try {
-      this.acceptState(await this.request(`/v1/rooms/${encodeURIComponent(this.roomId)}/state`), true);
+      const state = await this.request(`/v1/rooms/${encodeURIComponent(this.roomId)}/state`);
+      this.acceptState(state, true);
+      const dance = state.seasonalEvents?.valentine?.dance;
+      const teamSession = dance?.teamSession;
+      const runway = state.seasonalEvents?.halloween?.costume?.round;
+      const now = state.serverNow || this.serverNow();
+      const needsFastRefresh = dance?.runs?.some(run => run.active || (run.endAt && now <= run.endAt + 3000)) ||
+        (teamSession?.id && now <= teamSession.endAt + 3000) || (runway?.id && now <= runway.endAt + 3000);
+      this.setPollInterval(needsFastRefresh ? 250 : 1500);
       this.onStatus('connected');
     } catch { this.onStatus('reconnecting'); }
     finally { this.inFlight = false; }
+  }
+
+  setPollInterval(ms) {
+    if (this.pollIntervalMs === ms || !this.connected) return;
+    this.pollIntervalMs = ms;
+    clearInterval(this.timer);
+    this.timer = setInterval(() => this.poll(), ms);
   }
 
   destroy() {

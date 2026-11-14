@@ -43,8 +43,8 @@ import {
   getBgmVolume,
 } from './audio.js';
 import { MinigameManager, DRAGON_SKINS, FLIGHT_QUESTS } from './minigames.js';
-import { SeasonalActivities, canApplySeasonalEventOperation } from './seasonal-activities.js?v=20261114seasonalphase7';
-import { SeasonalAuthorityClient } from './authority-client.js?v=20261114seasonalphase7';
+import { SeasonalActivities, canApplySeasonalEventOperation } from './seasonal-activities.js?v=20261114seasonalphase8';
+import { SeasonalAuthorityClient } from './authority-client.js?v=20261114seasonalphase8';
 import {
   initCasino,
   openRoulette,

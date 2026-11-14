@@ -66,6 +66,29 @@ test('dance modes score server-validated timed inputs and reject client score su
   }
 });
 
+test('synchronized team dance requires balanced teams and scores both teams on server time', () => {
+  const room = { theme: 'valentine', hostId: 'host-1', seasonalEvents: {}, events: [], seq: 0 };
+  const host = { id: 'host-1', name: 'Host' };
+  const guest = { id: 'guest-1', name: 'Guest' };
+  const event = (action, data = {}) => ({ k: 'seasonal_event', season: 'valentine', action, data });
+  assert.equal(applyAuthoritativeEvent(room, host, event('dance_team_join', { team: 'A' }), 1000, at(31, 14, 1000)), true);
+  assert.equal(applyAuthoritativeEvent(room, host, event('dance_team_start'), 1100, at(31, 14, 1100)), false);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('dance_team_join', { team: 'B' }), 1200, at(31, 14, 1200)), true);
+  assert.equal(applyAuthoritativeEvent(room, guest, event('dance_team_start'), 1300, at(31, 14, 1300)), false);
+  assert.equal(applyAuthoritativeEvent(room, host, event('dance_team_start'), 1400, at(31, 14, 1400)), true);
+  const session = room.seasonalEvents.valentine.dance.teamSession;
+  for (let step = 0; step < session.sequence.length; step++) {
+    const now = session.startAt + step * 650 + 325;
+    for (const player of [host, guest]) {
+      const input = event('dance_team_input', { sessionId: session.id, direction: session.sequence[step] });
+      assert.equal(applyAuthoritativeEvent(room, player, input, now, at(31, 14, now)), true);
+      assert.equal(applyAuthoritativeEvent(room, player, input, now + 1, at(31, 14, now + 1)), false);
+    }
+  }
+  assert.deepEqual(session.teamScores, { A: 100, B: 100 });
+  assert.deepEqual(session.participants.map(player => player.correct), [8, 8]);
+});
+
 test('costume runway rounds require the room host, two entries and one timed vote per player', () => {
   const room = { theme: 'halloween', hostId: 'host-1', seasonalEvents: {}, events: [], seq: 0 };
   const host = { id: 'host-1', name: 'Host' };
@@ -139,6 +162,14 @@ test('authority validates member events and restores saved progress after restar
       assert.equal('sequence' in hostDanceState.seasonalEvents.valentine.dance.runs[0], false);
       const guestDanceState = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } }).then(response => response.json());
       assert.deepEqual(guestDanceState.seasonalEvents.valentine.dance.runs, []);
+      assert.equal((await post(`${base}/v1/rooms/winter-room/position`, { x: 31, y: 14 }, guestToken)).status, 200);
+      assert.equal((await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'valentine', action: 'dance_team_join', data: { team: 'A' } } }, hostToken)).status, 200);
+      assert.equal((await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'valentine', action: 'dance_team_join', data: { team: 'B' } } }, guestToken)).status, 200);
+      const teamStart = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'valentine', action: 'dance_team_start', data: {} } }, hostToken);
+      assert.equal(teamStart.status, 200);
+      const teamState = await teamStart.json();
+      assert.equal('sequence' in teamState.seasonalEvents.valentine.dance.teamSession, false);
+      assert.equal(teamState.seasonalEvents.valentine.dance.teamSession.participants.length, 2);
       const hostThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'halloween' }, hostToken);
       assert.equal(hostThemeChange.status, 200);
     });
@@ -146,7 +177,7 @@ test('authority validates member events and restores saved progress after restar
       const state = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } });
       assert.equal(state.status, 200);
       const saved = await state.json();
-      assert.equal(saved.seq, 5);
+      assert.equal(saved.seq, 8);
       assert.equal(saved.seasonalEvents.christmas.gifts.players[0].gifts[0], 'gift_snow_cabin');
       assert.equal(saved.theme, 'halloween');
       const unauthorized = await fetch(`${base}/v1/rooms/winter-room/state`);

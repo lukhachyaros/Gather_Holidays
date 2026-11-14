@@ -1057,6 +1057,45 @@ export class SeasonalActivities {
         this.body.appendChild(card);
       });
     }
+    if (this.getAuthorityEnabled?.()) {
+      const assignments = this.stateBucket('valentine', 'dance', 'teamAssignments');
+      const team = this.stateValue('valentine', 'dance', 'teamSession');
+      const active = team && ['ready', 'playing'].includes(team.status);
+      const countA = assignments.filter(item => item.team === 'A').length;
+      const countB = assignments.filter(item => item.team === 'B').length;
+      this.heading('Đấu đội đồng bộ');
+      this.body.appendChild(this.el('p', 'Chia đều người chơi vào Đội A và Đội B. Server phát cùng nhịp cho cả phòng, tính điểm từng người và cộng điểm đội.', 'seasonal-copy'));
+      const teams = this.el('div', null, 'seasonal-actions');
+      [['A', countA], ['B', countB]].forEach(([teamId, count]) => {
+        const join = this.button('Vào Đội ' + teamId + ' · ' + count, 'dance-team-join', { team: teamId }, 'seasonal-button seasonal-primary');
+        join.disabled = !!active;
+        teams.appendChild(join);
+      });
+      this.body.appendChild(teams);
+      if (!active) {
+        const start = this.button('▶ Chủ phòng bắt đầu đấu đội', 'dance-team-start', {}, 'seasonal-button seasonal-primary');
+        start.disabled = countA < 1 || countA !== countB;
+        this.body.appendChild(start);
+      }
+      if (team) {
+        this.body.appendChild(this.el('div', 'Đội A ' + (team.teamScores?.A || 0) + ' điểm · Đội B ' + (team.teamScores?.B || 0) + ' điểm', 'seasonal-stat'));
+        if (team.status === 'ready') this.body.appendChild(this.el('p', 'Đồng bộ bắt đầu sau ' + Math.ceil((team.startAt - this.getServerNow()) / 1000) + ' giây.', 'seasonal-result'));
+        if (team.status === 'playing') {
+          const symbols = { left: '⬅️', right: '➡️', up: '⬆️', down: '⬇️' };
+          this.body.appendChild(this.el('div', 'NHỊP ' + symbols[team.currentCue], 'seasonal-dance-cue'));
+          const moves = this.el('div', null, 'seasonal-move-grid');
+          [['left', '⬅️ Trái'], ['right', '➡️ Phải'], ['up', '⬆️ Lên'], ['down', '⬇️ Xuống']]
+            .forEach(([direction, label]) => moves.appendChild(this.button(label, 'dance-team-move', { direction, sessionId: team.id }, 'seasonal-button seasonal-move')));
+          this.body.appendChild(moves);
+        }
+        const participants = this.el('div', null, 'seasonal-list');
+        (team.participants || []).slice().sort((a, b) => a.team.localeCompare(b.team) || b.score - a.score).forEach(player => {
+          participants.appendChild(this.el('div', 'Đội ' + player.team + ' · ' + player.name + ' · ' + player.score + '/100', 'seasonal-list-item'));
+        });
+        this.body.appendChild(participants);
+        if (team.status === 'complete') this.body.appendChild(this.el('p', team.teamScores?.A === team.teamScores?.B ? '🤝 Hai đội hòa nhau!' : '🏆 Đội ' + (team.teamScores?.A > team.teamScores?.B ? 'A' : 'B') + ' chiến thắng!', 'seasonal-result'));
+      }
+    }
     this.heading('Bảng điểm vũ đạo');
     const list = this.el('div', null, 'seasonal-list');
     records.slice(0, 8).forEach((record, index) => {
@@ -1224,5 +1263,15 @@ export class SeasonalActivities {
     } else if (action === 'costume-photo') this.takePhoto('Sàn diễn hóa trang Halloween');
     else if (action === 'dance-start') this.startDance(data.mode);
     else if (action === 'dance-move') this.moveDance(data.direction);
+    else if (action === 'dance-team-join') {
+      const result = this.submit('dance_team_join', { team: data.team });
+      if (result?.then) result.then(accepted => { if (!accepted) this.toast?.('Không thể vào đội khi phiên đang diễn ra.'); });
+    } else if (action === 'dance-team-start') {
+      const result = this.submit('dance_team_start');
+      if (result?.then) result.then(accepted => { if (!accepted) this.toast?.('Cần là chủ phòng và hai đội phải có cùng số người.'); });
+    } else if (action === 'dance-team-move') {
+      const result = this.submit('dance_team_input', { sessionId: data.sessionId, direction: data.direction });
+      if (result?.then) result.then(accepted => { if (!accepted) this.toast?.('Lượt nhịp này đã qua hoặc thao tác không hợp lệ.'); });
   }
+}
 }

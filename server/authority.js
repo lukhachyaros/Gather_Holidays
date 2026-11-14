@@ -35,6 +35,9 @@ const INTERACTION_TARGETS = {
   costume_vote: ['costume_runway', null],
   dance_start: ['dance_stage', null],
   dance_input: ['dance_stage', null],
+  dance_team_join: ['dance_stage', null],
+  dance_team_start: ['dance_stage', null],
+  dance_team_input: ['dance_stage', null],
 };
 
 function validateInteractionPosition(room, op, now, position) {
@@ -56,6 +59,7 @@ function recordServerEvent(room, user, action, now) {
 
 function publicSeasonalEvents(room, userId) {
   const snapshot = JSON.parse(JSON.stringify(room.seasonalEvents || {}));
+  const now = Date.now();
   const runs = snapshot.christmas?.sled?.runs;
   if (Array.isArray(runs)) {
     snapshot.christmas.sled.runs = runs.filter(run => run.idOwner === userId).map(run => {
@@ -68,17 +72,24 @@ function publicSeasonalEvents(room, userId) {
   if (Array.isArray(dance?.runs)) {
     dance.runs = dance.runs.filter(run => run.idOwner === userId).map(run => {
       const { sequence, ...publicRun } = run;
-      const now = Date.now();
       const tempoMs = run.mode === 'copy' ? 820 : run.mode === 'memory' ? 900 : 650;
+      publicRun.endAt = run.inputStartAt + sequence.length * tempoMs;
+      publicRun.active = run.active && now < publicRun.endAt;
       const presentation = run.mode === 'memory' && now < run.inputStartAt;
       publicRun.previewCue = presentation ? sequence[Math.max(0, Math.min(sequence.length - 1, Math.floor((now - run.startAt) / 520)))] || null : null;
       publicRun.currentCue = run.active && !presentation ? sequence[Math.max(0, Math.min(sequence.length - 1, Math.floor((now - run.inputStartAt) / tempoMs)))] || null : null;
       return publicRun;
     });
   }
+  if (dance?.teamSession) {
+    const session = dance.teamSession;
+    const { sequence, ...publicSession } = session;
+    publicSession.status = now < session.startAt ? 'ready' : now < session.endAt ? 'playing' : 'complete';
+    publicSession.currentCue = publicSession.status === 'playing' ? sequence[Math.min(sequence.length - 1, Math.floor((now - session.startAt) / 650))] || null : null;
+    snapshot.valentine.dance.teamSession = publicSession;
+  }
   const runwayRound = snapshot.halloween?.costume?.round;
   if (runwayRound?.id) {
-    const now = Date.now();
     runwayRound.status = now < runwayRound.startAt ? 'ready' : now < runwayRound.endAt ? 'voting' : 'complete';
     runwayRound.remainingMs = Math.max(0, runwayRound.endAt - now);
   }
@@ -131,6 +142,49 @@ function applyServerDanceEvent(room, user, op, now) {
   const dance = (room.seasonalEvents.valentine ||= {}).dance ||= { records: [], runs: [] };
   dance.records ||= [];
   dance.runs ||= [];
+  dance.teamAssignments ||= [];
+  if (op.action === 'dance_team_join') {
+    const team = data.team;
+    if (!['A', 'B'].includes(team) || dance.teamSession?.endAt > now) return false;
+    let assignment = dance.teamAssignments.find(item => item.id === user.id);
+    if (!assignment) {
+      if (dance.teamAssignments.length >= 100) return false;
+      assignment = { id: user.id, name: user.name, team };
+      dance.teamAssignments.push(assignment);
+    } else Object.assign(assignment, { name: user.name, team });
+    recordServerEvent(room, user, op.action, now);
+    return true;
+  }
+  if (op.action === 'dance_team_start') {
+    if (user.id !== room.hostId || dance.teamSession?.endAt > now) return false;
+    const teams = { A: dance.teamAssignments.filter(item => item.team === 'A'), B: dance.teamAssignments.filter(item => item.team === 'B') };
+    if (!teams.A.length || teams.A.length !== teams.B.length) return false;
+    const sequence = Array.from({ length: 8 }, () => ['left', 'right', 'up', 'down'][randomInt(4)]);
+    const startAt = now + 2000;
+    dance.teamSession = {
+      id: randomBytes(12).toString('hex'), sequence, startAt, endAt: startAt + sequence.length * 650,
+      participants: [...teams.A.map(item => ({ ...item, score: 0, correct: 0 })), ...teams.B.map(item => ({ ...item, score: 0, correct: 0 }))],
+      teamScores: { A: 0, B: 0 },
+    };
+    recordServerEvent(room, user, op.action, now);
+    return true;
+  }
+  if (op.action === 'dance_team_input') {
+    const session = dance.teamSession;
+    const participant = session?.participants.find(item => item.id === user.id);
+    if (!session || !participant || session.endAt <= now || !['left', 'right', 'up', 'down'].includes(data.direction) || data.sessionId !== session.id || now < session.startAt) return false;
+    const step = Math.floor((now - session.startAt) / 650);
+    const beatCenterDelta = Math.abs((now - session.startAt) - (step * 650 + 325));
+    if (step < participant.step || step >= session.sequence.length || beatCenterDelta > 300) return false;
+    participant.step = step + 1;
+    if (data.direction === session.sequence[step]) {
+      participant.correct++;
+      participant.score = Math.min(100, Math.round(participant.correct * 100 / session.sequence.length));
+    }
+    session.teamScores[participant.team] = session.participants.filter(item => item.team === participant.team).reduce((sum, item) => sum + item.score, 0);
+    recordServerEvent(room, user, op.action, now);
+    return true;
+  }
   if (op.action === 'dance_start') {
     const mode = ['rhythm', 'memory', 'copy'].includes(data.mode) ? data.mode : '';
     if (!mode) return false;
@@ -235,7 +289,7 @@ export function applyAuthoritativeEvent(room, user, op, now = Date.now(), positi
   room.seasonalEvents ||= {};
   if (!validateInteractionPosition(room, op, now, position)) return false;
   if (op.season === 'christmas' && ['sled_start', 'sled_checkpoint'].includes(op.action)) return applyServerSledEvent(room, user, op, now);
-  if (op.season === 'valentine' && ['dance_start', 'dance_input'].includes(op.action)) return applyServerDanceEvent(room, user, op, now);
+  if (op.season === 'valentine' && ['dance_start', 'dance_input', 'dance_team_join', 'dance_team_start', 'dance_team_input'].includes(op.action)) return applyServerDanceEvent(room, user, op, now);
   if (op.season === 'halloween' && ['costume_round_start', 'costume_entry', 'costume_vote'].includes(op.action)) {
     const runwayResult = applyServerRunwayEvent(room, user, op, now);
     if (runwayResult !== null) return runwayResult;
