@@ -27,6 +27,9 @@ test('browser authority client submits operations and only accepts increasing ca
   await client.submit({ k: 'seasonal_event', season: 'christmas', action: 'gift_collect', data: { giftId: 'gift_snow_cabin' } });
   assert.equal(snapshots.length, 2);
   assert.equal(client.acceptState({ theme: 'christmas', seq: 0, seasonalEvents: {} }), false);
+  assert.equal(client.acceptState({ theme: 'christmas', seq: 1, seasonalEvents: {} }), false);
+  assert.equal(client.acceptState({ theme: 'christmas', seq: 1, seasonalEvents: { valentine: { dance: { runs: [{ active: true, currentCue: 'left' }] } } } }, true), true);
+  assert.equal(snapshots.length, 3, 'poll refreshes time-sensitive private cues even when room sequence is unchanged');
   assert.equal(calls[1].options.headers.authorization, 'Bearer session-token');
   client.destroy();
 });

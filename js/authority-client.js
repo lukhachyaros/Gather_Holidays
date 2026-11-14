@@ -80,10 +80,14 @@ export class SeasonalAuthorityClient {
     return true;
   }
 
-  acceptState(state) {
+  acceptState(state, refresh = false) {
     if (!state || !Number.isFinite(state.seq) || state.seq < this.sequence) return false;
-    if (state.seq === this.sequence) return false;
-    this.sequence = state.seq;
+    if (state.seq === this.sequence) {
+      if (!refresh) return false;
+      const activeDance = state.seasonalEvents?.valentine?.dance?.runs?.some(run => run.active);
+      if (!activeDance) return false;
+    }
+    this.sequence = Math.max(this.sequence, state.seq);
     this.onState(state);
     return true;
   }
@@ -112,7 +116,7 @@ export class SeasonalAuthorityClient {
     if (!this.connected || this.inFlight) return;
     this.inFlight = true;
     try {
-      this.acceptState(await this.request(`/v1/rooms/${encodeURIComponent(this.roomId)}/state`));
+      this.acceptState(await this.request(`/v1/rooms/${encodeURIComponent(this.roomId)}/state`), true);
       this.onStatus('connected');
     } catch { this.onStatus('reconnecting'); }
     finally { this.inFlight = false; }

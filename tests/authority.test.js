@@ -38,6 +38,33 @@ test('sled checkpoint results use server-generated gates and server time, not su
   assert.equal(record.timeMs, run.startAt + 7 * 1450 + 200 - run.startAt);
 });
 
+test('dance modes score server-validated timed inputs and reject client score submissions', () => {
+  for (const mode of ['rhythm', 'memory', 'copy']) {
+    const room = { theme: 'valentine', seasonalEvents: {}, events: [], seq: 0 };
+    const user = { id: `player-${mode}`, name: 'Dancer' };
+    const start = { k: 'seasonal_event', season: 'valentine', action: 'dance_start', data: { mode } };
+    assert.equal(applyAuthoritativeEvent(room, user, start, 1000), true);
+    const run = room.seasonalEvents.valentine.dance.runs[0];
+    assert.equal('sequence' in run, true, 'the authority retains the input sequence');
+    assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'dance_record', data: { score: 100, mode } }, 1500), false);
+    assert.equal(applyAuthoritativeEvent(room, user, { ...start, action: 'dance_input', data: { runId: run.id, direction: run.sequence[0] } }, run.inputStartAt - 1), false);
+    const tempo = mode === 'copy' || mode === 'memory' ? (mode === 'copy' ? 820 : 900) : 650;
+    for (let step = 0; step < run.sequence.length; step++) {
+      assert.equal(applyAuthoritativeEvent(room, user, {
+        ...start, action: 'dance_input', data: { runId: run.id, direction: run.sequence[step] },
+      }, run.inputStartAt + step * tempo + 100), true);
+    }
+    assert.equal(run.active, false);
+    assert.equal(run.score, 100);
+    assert.deepEqual(room.seasonalEvents.valentine.dance.records[0], {
+      id: user.id, name: user.name, mode, score: 100, correct: run.sequence.length, at: run.finishedAt,
+    });
+    assert.equal(applyAuthoritativeEvent(room, user, {
+      ...start, action: 'dance_input', data: { runId: run.id, direction: 'left' },
+    }, run.finishedAt + 100), false);
+  }
+});
+
 test('authority validates member events and restores saved progress after restart', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'gh-authority-'));
   const dataPath = join(directory, 'rooms.json');
@@ -73,6 +100,14 @@ test('authority validates member events and restores saved progress after restar
       assert.deepEqual(lateState.seasonalEvents.christmas.sled.runs, []);
       const guestThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'tet' }, guestToken);
       assert.equal(guestThemeChange.status, 403);
+      const valentineThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'valentine' }, hostToken);
+      assert.equal(valentineThemeChange.status, 200);
+      const danceStart = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'valentine', action: 'dance_start', data: { mode: 'rhythm' } } }, hostToken);
+      assert.equal(danceStart.status, 200);
+      const hostDanceState = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${hostToken}` } }).then(response => response.json());
+      assert.equal('sequence' in hostDanceState.seasonalEvents.valentine.dance.runs[0], false);
+      const guestDanceState = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } }).then(response => response.json());
+      assert.deepEqual(guestDanceState.seasonalEvents.valentine.dance.runs, []);
       const hostThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'halloween' }, hostToken);
       assert.equal(hostThemeChange.status, 200);
     });
@@ -80,7 +115,7 @@ test('authority validates member events and restores saved progress after restar
       const state = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } });
       assert.equal(state.status, 200);
       const saved = await state.json();
-      assert.equal(saved.seq, 3);
+      assert.equal(saved.seq, 5);
       assert.equal(saved.seasonalEvents.christmas.gifts.players[0].gifts[0], 'gift_snow_cabin');
       assert.equal(saved.theme, 'halloween');
       const unauthorized = await fetch(`${base}/v1/rooms/winter-room/state`);

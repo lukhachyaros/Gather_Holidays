@@ -33,7 +33,69 @@ function publicSeasonalEvents(room, userId) {
       return publicRun;
     });
   }
+  const dance = snapshot.valentine?.dance;
+  if (Array.isArray(dance?.runs)) {
+    dance.runs = dance.runs.filter(run => run.idOwner === userId).map(run => {
+      const { sequence, ...publicRun } = run;
+      const now = Date.now();
+      const tempoMs = run.mode === 'copy' ? 820 : run.mode === 'memory' ? 900 : 650;
+      const presentation = run.mode === 'memory' && now < run.inputStartAt;
+      publicRun.previewCue = presentation ? sequence[Math.max(0, Math.min(sequence.length - 1, Math.floor((now - run.startAt) / 520)))] || null : null;
+      publicRun.currentCue = run.active && !presentation ? sequence[Math.max(0, Math.min(sequence.length - 1, Math.floor((now - run.inputStartAt) / tempoMs)))] || null : null;
+      return publicRun;
+    });
+  }
   return snapshot;
+}
+
+function finishServerDanceRun(room, user, run, now) {
+  run.active = false;
+  run.finishedAt = now;
+  const dance = room.seasonalEvents.valentine.dance;
+  const previous = dance.records.find(item => item.id === user.id && item.mode === run.mode);
+  const result = { id: user.id, name: user.name, mode: run.mode, score: run.score, correct: run.correct, at: now };
+  if (!previous) dance.records.push(result);
+  else if (result.score > previous.score) Object.assign(previous, result);
+}
+
+function applyServerDanceEvent(room, user, op, now) {
+  const data = op.data || {};
+  const dance = (room.seasonalEvents.valentine ||= {}).dance ||= { records: [], runs: [] };
+  dance.records ||= [];
+  dance.runs ||= [];
+  if (op.action === 'dance_start') {
+    const mode = ['rhythm', 'memory', 'copy'].includes(data.mode) ? data.mode : '';
+    if (!mode) return false;
+    if (dance.runs.length >= 100) dance.runs = dance.runs.slice(-80);
+    const sequence = Array.from({ length: mode === 'memory' ? 5 : 8 }, () => ['left', 'right', 'up', 'down'][randomInt(4)]);
+    const startAt = now + 1200;
+    const playbackMs = mode === 'memory' ? sequence.length * 520 : 0;
+    const run = { id: randomBytes(12).toString('hex'), idOwner: user.id, name: user.name, mode, sequence, startAt, inputStartAt: startAt + playbackMs, step: 0, score: 0, correct: 0, timingPenalty: 0, active: true };
+    dance.runs = dance.runs.filter(item => item.idOwner !== user.id);
+    dance.runs.push(run);
+    recordServerEvent(room, user, op.action, now);
+    return true;
+  }
+  if (op.action !== 'dance_input' || !['left', 'right', 'up', 'down'].includes(data.direction)) return false;
+  const run = dance.runs.find(item => item.id === data.runId && item.idOwner === user.id && item.active);
+  if (!run || now < run.inputStartAt) return false;
+  const tempoMs = run.mode === 'copy' ? 820 : run.mode === 'memory' ? 900 : 650;
+  const windowMs = run.mode === 'memory' ? 440 : run.mode === 'copy' ? 300 : 250;
+  const elapsed = now - run.inputStartAt;
+  const expectedStep = Math.floor(elapsed / tempoMs);
+  if (expectedStep < run.step || expectedStep >= run.sequence.length) return false;
+  if (expectedStep > run.step) run.step = expectedStep;
+  const delta = Math.abs(elapsed - expectedStep * tempoMs);
+  if (delta > windowMs) return false;
+  if (data.direction === run.sequence[expectedStep]) {
+    run.correct++;
+    if (delta > 110) run.timingPenalty += 4;
+    run.score = Math.min(100, Math.max(0, Math.round(run.correct * 100 / run.sequence.length) - run.timingPenalty));
+  }
+  run.step = expectedStep + 1;
+  if (run.step === run.sequence.length) finishServerDanceRun(room, user, run, now);
+  recordServerEvent(room, user, op.action, now);
+  return true;
 }
 
 function finishServerSledRun(room, user, run, now) {
@@ -104,6 +166,7 @@ export function applyAuthoritativeEvent(room, user, op, now = Date.now()) {
   room.kickedIds ||= [];
   room.seasonalEvents ||= {};
   if (op.season === 'christmas' && ['sled_start', 'sled_checkpoint'].includes(op.action)) return applyServerSledEvent(room, user, op, now);
+  if (op.season === 'valentine' && ['dance_start', 'dance_input'].includes(op.action)) return applyServerDanceEvent(room, user, op, now);
   if (op.action === 'sled_record' || op.action === 'dance_record') return false;
   if (!applySeasonalEventOperation(room, op, user.id, user.name)) return false;
   room.seq++;

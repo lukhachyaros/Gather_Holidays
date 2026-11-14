@@ -999,6 +999,7 @@ export class SeasonalActivities {
   }
 
   renderDanceStage() {
+    if (this.getAuthorityEnabled?.()) this.dance = this.serverDance();
     const records = this.stateBucket('valentine', 'dance', 'records').slice().sort((a, b) => b.score - a.score);
     const roomScore = records.reduce((sum, record) => sum + (Number(record.score) || 0), 0);
     this.paragraph('Bắt chước 8 động tác theo nhịp: trái, phải, lên hoặc xuống. Chọn đúng hướng và đúng thời điểm để ghi điểm. Tổng điểm tốt nhất của mọi người tạo thành thử thách cộng đồng của căn phòng.');
@@ -1036,16 +1037,48 @@ export class SeasonalActivities {
   startDance(mode = 'rhythm') {
     this.stopDance();
     if (!DANCE_MODES.some(item => item.id === mode)) mode = 'rhythm';
+    if (this.getAuthorityEnabled?.()) {
+      this.danceMode = mode;
+      const result = this.submit('dance_start', { mode });
+      if (result?.then) result.then(accepted => {
+        if (!accepted) return;
+        this.dance = this.serverDance();
+        this.render();
+        if (this.dance) this.tickDance();
+      });
+      return;
+    }
     this.danceMode = mode;
     const sequence = Array.from({ length: mode === 'memory' ? 5 : 8 }, () => DANCE_MOVES[Math.floor(Math.random() * DANCE_MOVES.length)]);
     const playbackMs = mode === 'memory' ? sequence.length * 520 : 0;
-    this.dance = { mode, sequence, playbackMs, startAt: performance.now() + 1200, hits: new Set(), score: 0, correct: 0 };
+    this.dance = { mode, sequence, playbackMs, startAt: performance.now() + 1200, hits: new Set(), score: 0, correct: 0, timingPenalty: 0 };
     this.render();
     this.tickDance();
   }
 
   tickDance() {
     if (!this.dance) return;
+    if (this.getAuthorityEnabled?.()) {
+      const run = this.serverDance();
+      if (!run) {
+        this.dance = null;
+        this.danceFrame = 0;
+        this.refresh();
+        return;
+      }
+      this.dance = run;
+      const symbols = { left: '⬅️', right: '➡️', up: '⬆️', down: '⬇️' };
+      const now = Date.now();
+      if (this.dancePrompt) this.dancePrompt.textContent = now < run.startAt
+        ? 'CHUẨN BỊ… ' + Math.ceil((run.startAt - now) / 500)
+        : run.mode === 'memory' && now < run.inputStartAt
+          ? 'GHI NHỚ CHUỖI · ' + (run.previewCue ? 'LÀM THEO MŨI TÊN' : 'CHUẨN BỊ')
+          : (run.mode === 'rhythm' ? 'NHỊP ' : run.mode === 'memory' ? 'LẶP LẠI ' : 'BẮT CHƯỚC ') + Math.min(run.length, run.step + 1) + ' / ' + run.length;
+      if (this.danceCue) this.danceCue.textContent = symbols[run.previewCue || run.currentCue] || '❔';
+      if (this.danceScoreLabel) this.danceScoreLabel.textContent = 'Điểm: ' + run.score + ' / 100 · Đúng: ' + run.correct + '/' + run.length;
+      this.danceFrame = requestAnimationFrame(() => this.tickDance());
+      return;
+    }
     const elapsed = performance.now() - this.dance.startAt;
     const tempoMs = this.dance.mode === 'copy' ? 820 : 650;
     const inputStart = this.dance.playbackMs;
@@ -1068,6 +1101,15 @@ export class SeasonalActivities {
 
   moveDance(direction) {
     if (!this.dance || !DANCE_MOVES.includes(direction)) return;
+    if (this.getAuthorityEnabled?.()) {
+      const result = this.submit('dance_input', { runId: this.dance.id, direction });
+      if (result?.then) result.then(accepted => {
+        if (!accepted) this.toast?.('🎵 Chưa đúng nhịp hoặc lượt đã kết thúc.');
+        this.dance = this.serverDance();
+        if (this.active) { this.render(); if (this.dance) this.tickDance(); }
+      });
+      return;
+    }
     const elapsed = performance.now() - this.dance.startAt;
     const tempoMs = this.dance.mode === 'copy' ? 820 : 650;
     if (this.dance.mode === 'memory' && elapsed < this.dance.playbackMs) {
@@ -1086,8 +1128,8 @@ export class SeasonalActivities {
     this.dance.hits.add(beat);
     if (direction === this.dance.sequence[beat]) {
       this.dance.correct++;
-      const base = Math.floor(100 / this.dance.sequence.length);
-      this.dance.score = Math.min(100, this.dance.score + (delta <= 110 ? base : Math.max(1, base - 4)));
+      if (delta > 110) this.dance.timingPenalty += 4;
+      this.dance.score = Math.min(100, Math.max(0, Math.round(this.dance.correct * 100 / this.dance.sequence.length) - this.dance.timingPenalty));
     } else this.toast?.('↔️ Sai động tác! Hãy bắt chước mũi tên đang sáng.');
   }
 
@@ -1098,6 +1140,12 @@ export class SeasonalActivities {
     this.lastDanceScore = score;
     this.submit('dance_record', { score, mode: this.danceMode || 'rhythm' });
     this.render();
+  }
+
+  serverDance() {
+    const runs = this.stateBucket('valentine', 'dance', 'runs');
+    const run = runs.find(item => item.idOwner === this.getSelfId?.() && item.active);
+    return run ? { ...run, length: run.length || (run.mode === 'memory' ? 5 : 8) } : null;
   }
 
   stopDance() {
