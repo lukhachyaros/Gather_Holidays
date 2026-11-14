@@ -40,13 +40,21 @@ test('authority validates member events and restores saved progress after restar
       assert.equal(forged.status, 422);
       const clientScore = await post(`${base}/v1/rooms/winter-room/events`, { operation: { k: 'seasonal_event', season: 'christmas', action: 'sled_record', data: { timeMs: 5000, gatesHit: 8, shortcuts: 0, collisions: 0 } } }, hostToken);
       assert.equal(clientScore.status, 422);
+      const lateJoinResponse = await post(`${base}/v1/rooms/winter-room/join`, { name: 'Late join' });
+      const lateJoin = await lateJoinResponse.json();
+      assert.equal(lateJoin.state.seasonalEvents.christmas.gifts.players[0].gifts[0], 'gift_snow_cabin');
+      const guestThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'tet' }, guestToken);
+      assert.equal(guestThemeChange.status, 403);
+      const hostThemeChange = await post(`${base}/v1/rooms/winter-room/theme`, { theme: 'halloween' }, hostToken);
+      assert.equal(hostThemeChange.status, 200);
     });
     await withServer(dataPath, async base => {
       const state = await fetch(`${base}/v1/rooms/winter-room/state`, { headers: { authorization: `Bearer ${guestToken}` } });
       assert.equal(state.status, 200);
       const saved = await state.json();
-      assert.equal(saved.seq, 1);
+      assert.equal(saved.seq, 2);
       assert.equal(saved.seasonalEvents.christmas.gifts.players[0].gifts[0], 'gift_snow_cabin');
+      assert.equal(saved.theme, 'halloween');
       const unauthorized = await fetch(`${base}/v1/rooms/winter-room/state`);
       assert.equal(unauthorized.status, 401);
     });
