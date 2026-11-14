@@ -68,6 +68,10 @@ import {
 } from './casino.js?v=2026111217';
 import { loadAvatarCustomization, openAvatarStudioModal } from './avatar_customizer.js';
 
+// ---------- HTML escape helper (used everywhere user-generated text → innerHTML) ----------
+const escHtml = t =>
+  String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 let myAvatarCustom = loadAvatarCustomization();
 let rtc = null;
 let minigames = null;
@@ -1103,8 +1107,8 @@ function renderLobbyRooms() {
 
     const subHtml =
       r.count > 0
-        ? `<span class="active-count">👥 ${r.count} đang chơi</span> · <span>👑 ${r.hostName || 'Host'}</span> · <span>#${r.id}</span>`
-        : `<span>👥 Sẵn sàng vào phòng</span> · <span>#${r.id}</span>`;
+        ? `<span class="active-count">👥 ${r.count} đang chơi</span> · <span>👑 ${escHtml(r.hostName || 'Host')}</span> · <span>#${escHtml(r.id)}</span>`
+        : `<span>👥 Sẵn sàng vào phòng</span> · <span>#${escHtml(r.id)}</span>`;
 
     const left = document.createElement('div');
     left.className = 'room-card-left';
@@ -1112,7 +1116,7 @@ function renderLobbyRooms() {
       <div class="room-theme-icon">${icon}</div>
       <div class="room-meta">
         <div class="room-title-row">
-          <span class="room-title">${r.title || r.id}</span>
+          <span class="room-title">${escHtml(r.title || r.id)}</span>
           ${tagHtml}
         </div>
         <div class="room-sub">${subHtml}</div>
@@ -1576,7 +1580,7 @@ function renderSettingsModal() {
     const passStatus = state.passHash ? '🔒 Phòng Riêng Tư (Có mật khẩu)' : '🌐 Phòng Công Khai';
     hostBox.innerHTML = isHost()
       ? `<b>👑 Bạn là Chủ phòng hiện tại</b> · <span>${passStatus}</span><br><span class="hint">Bạn có quyền đổi chủ đề phòng, đặt mật khẩu và kick thành viên.</span>`
-      : `<b>👑 Chủ phòng:</b> ${state.hostName || 'Ẩn danh'} · <span>${passStatus}</span>`;
+      : `<b>👑 Chủ phòng:</b> ${escHtml(state.hostName || 'Ẩn danh')} · <span>${passStatus}</span>`;
   }
   const pList = $('playerList');
   if (!pList) return;
@@ -1591,7 +1595,7 @@ function renderSettingsModal() {
     : rtc?.isMicMuted
     ? '<span style="color:#94a3b8">🔇 Mic tắt</span>'
     : '<span style="color:#38bdf8">🎙️ Mic bật</span>';
-  selfRow.innerHTML = `<span><b>👤 ${me.name} (Bạn)</b> ${state.hostId === net.selfId ? '👑' : ''} ${selfMicLabel}</span><span style="color:#4ade80">Đang online</span>`;
+  selfRow.innerHTML = `<span><b>👤 ${escHtml(me.name)} (Bạn)</b> ${state.hostId === net.selfId ? '👑' : ''} ${selfMicLabel}</span><span style="color:#4ade80">Đang online</span>`;
   pList.appendChild(selfRow);
 
   // Peer rows
@@ -1601,7 +1605,7 @@ function renderSettingsModal() {
     const left = document.createElement('span');
     const peerSpeaking = p.av?.isSpeaking;
     const peerVoiceTag = peerSpeaking ? '<span style="color:#4ade80;font-weight:700"> 🎙️ Đang nói…</span>' : '';
-    left.innerHTML = `👤 <b>${p.name}</b> ${state.hostId === id ? '👑 <small>(Chủ phòng)</small>' : ''}${peerVoiceTag}`;
+    left.innerHTML = `👤 <b>${escHtml(p.name)}</b> ${state.hostId === id ? '👑 <small>(Chủ phòng)</small>' : ''}${peerVoiceTag}`;
     row.appendChild(left);
 
     if (isHost() && id !== net.selfId) {
@@ -2860,8 +2864,6 @@ function renderStockingList() {
 }
 
 // ---------- Media Queue, Android-TV style Browser & Skip System ----------
-const escHtml = t =>
-  String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const mediaLabel = item => {
   if (item.kind === 'screen') return '🖥️ Màn hình máy tính: ' + (item.title || 'Screen Share');
   if (item.kind === 'web') return '🌐 ' + (item.title || item.url);
@@ -5305,7 +5307,7 @@ function loop(now) {
         cur.pose !== sent.pose ||
         Math.abs(cur.x - sent.x) > 0.005 ||
         Math.abs(cur.y - sent.y) > 0.005 ||
-        Math.abs(cur.r - sent.r) > 0.02 ||
+        Math.abs(cur.r - sent.r) > 0.05 ||
         cur.h !== sent.h)
     ) {
       net.send('pos', cur);
@@ -7287,9 +7289,9 @@ function renderAdminSuggestions(list) {
     el.innerHTML = `
       <div class="admin-suggest-left">
         <span class="admin-suggest-badge ${item.isUser ? 'user' : ''}">${item.isUser ? 'NGƯỜI CHƠI' : 'LỆNH'}</span>
-        <span class="admin-suggest-cmd">${item.label}</span>
+        <span class="admin-suggest-cmd">${escHtml(item.label)}</span>
       </div>
-      <div class="admin-suggest-desc">${item.desc}</div>
+      <div class="admin-suggest-desc">${escHtml(item.desc)}</div>
     `;
 
     el.onclick = (e) => {

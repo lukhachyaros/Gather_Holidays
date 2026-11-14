@@ -47,6 +47,33 @@ import {
 export const TILE = 2; // meters per grid tile
 export const WALL_H = 1.6; // parkour-friendly wall height
 
+/** Recursively dispose all geometries & materials under an Object3D subtree. */
+function disposeSubtree(obj) {
+  if (!obj) return;
+  obj.traverse(child => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      for (const m of mats) {
+        m.map?.dispose();
+        m.lightMap?.dispose();
+        m.bumpMap?.dispose();
+        m.normalMap?.dispose();
+        m.specularMap?.dispose();
+        m.envMap?.dispose();
+        m.alphaMap?.dispose();
+        m.aoMap?.dispose();
+        m.displacementMap?.dispose();
+        m.emissiveMap?.dispose();
+        m.gradientMap?.dispose();
+        m.metalnessMap?.dispose();
+        m.roughnessMap?.dispose();
+        m.dispose();
+      }
+    }
+  });
+}
+
 function buildSeasonalLandmark(type, variant = '') {
   const group = new THREE.Group();
   const addBox = (x, y, z, sx, sy, sz, material) => {
@@ -493,6 +520,7 @@ export class World {
 
     // Tet Night Sky with Glowing Moon (Optimized: Removed heavy stars for maximum performance)
     if (this.nightSkyGroup) {
+      disposeSubtree(this.nightSkyGroup);
       this.scene.remove(this.nightSkyGroup);
       this.nightSkyGroup = null;
     }
@@ -554,6 +582,7 @@ export class World {
       });
       this.communityTreeProgressGroup = null;
     }
+    disposeSubtree(this.group);
     this.scene.remove(this.group);
     this.group = new THREE.Group();
     this.scene.add(this.group);
