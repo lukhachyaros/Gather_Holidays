@@ -5,9 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gather Holidays 3D 🎄🎃🧧💝</title>
 <link rel="icon" type="image/jpeg" href="assets/logo.jpg">
-<link rel="stylesheet" href="css/style.css?v=20261113gameplay4">
+<link rel="stylesheet" href="css/style.css?v=20261118perf1">
 <link rel="stylesheet" href="css/casino.css?v=2026111211">
 <link rel="stylesheet" href="css/avatar_customizer.css">
+<link rel="preconnect" href="https://broker.emqx.io" crossorigin>
+<link rel="preconnect" href="https://broker.hivemq.com" crossorigin>
+<link rel="modulepreload" href="./vendor/three/build/three.module.js">
+<link rel="modulepreload" href="./js/net.js">
 <script type="importmap">
 { "imports": {
   "three": "./vendor/three/build/three.module.js",
@@ -111,6 +115,7 @@
           <div class="lobby-bar-title">
             <span>🌐 Phòng đang sẵn có</span>
             <span id="lobbyOnlineBadge" class="live-dot online" title="Bấm để kiểm tra trạng thái máy chủ MQTT và làm mới">● Trực tuyến</span>
+            <span id="lobbyVisitorBadge" class="visitor-pill" title="Số người đang truy cập toàn website và tổng lượt ghé thăm">👁️ <b id="lobbyOnlineVisitors">1</b> đang xem · 📊 <b id="lobbyTotalVisits">1</b> lượt</span>
           </div>
           <div class="lobby-filters">
             <button class="filter-chip active" data-filter="all">Tất cả</button>
@@ -120,6 +125,9 @@
             <button class="filter-chip" data-filter="valentine">💝 Valentine</button>
             <button id="btnRefreshLobby" class="icon-chip" title="Làm mới danh sách phòng">🔄</button>
           </div>
+        </div>
+        <div class="lobby-search-row">
+          <input id="inSearchLobby" placeholder="🔍 Tìm nhanh theo tên phòng, mã phòng hoặc tên chủ phòng…" autocomplete="off">
         </div>
         <div id="lobbyRoomList" class="lobby-room-list"></div>
       </div>
@@ -302,6 +310,8 @@
     <span class="pill-icon">👑</span>
     <span id="statTitleLabel" class="title-val">Danh Hiệu</span>
   </button>
+  <span class="sep">·</span>
+  <span id="statVisitors" class="visitor-stat" title="Đang truy cập toàn website: 1 · Tổng lượt ghé thăm: 1">👁️ 1 · 📊 1</span>
   <span class="sep">·</span>
   <span id="statPlayers" title="Số người chơi trong phòng">👥 1</span>
   <span class="sep">·</span>
@@ -818,6 +828,12 @@
       </div>
     </div>
 
+    <h3>🌐 Lượt Truy Cập Trang Web</h3>
+    <div id="settingsVisitorBox" class="settings-visitor-box">
+      <span>👁️ Đang trực tuyến toàn trang: <b id="settingsOnlineVisitors">1</b> người</span>
+      <span>📊 Tổng lượt ghé thăm: <b id="settingsTotalVisits">1</b> lượt</span>
+    </div>
+
     <h3>👑 Chủ Phòng & Thành Viên (<span id="settingsPlayerCount">1</span>)</h3>
     <div id="hostInfoBox" class="queue-now"></div>
     <div id="playerList" class="queue-list"></div>
@@ -1313,6 +1329,6 @@
 </div>
 
 <div id="toast"></div>
-<script type="module" src="js/game.js?v=20261114seasonalphase2"></script>
+<script type="module" src="js/game.js?v=20261118perf1"></script>
 </body>
 </html>

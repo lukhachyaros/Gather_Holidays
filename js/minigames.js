@@ -119,6 +119,8 @@ export const FLIGHT_QUESTS = [
   },
 ];
 
+const _centerNdc = new THREE.Vector2(0, 0);
+
 export class MinigameManager {
   constructor(scene, camera, getMe, getPeers, emitOp, toast, floaters) {
     this.scene = scene;
@@ -372,7 +374,7 @@ export class MinigameManager {
     const me = this.getMe();
     if (!me) return new THREE.Vector3(0, 1, 0);
 
-    const ndc = document.pointerLockElement ? new THREE.Vector2(0, 0) : this.mouseNdc;
+    const ndc = document.pointerLockElement ? _centerNdc : this.mouseNdc;
     this.raycaster.setFromCamera(ndc, this.camera);
 
     // 1. Raycast against peer player avatars

@@ -8,7 +8,7 @@ import {
   rollLixiReward,
 } from './themes.js';
 import { isSolid, buildThemeMap, validMap, migrateLegacyThemeMap } from './maps.js?v=20261114seasonalphase2';
-import { connect, connectLobby, hashPass } from './net.js';
+import { connect, connectLobby, hashPass, initSiteStats } from './net.js';
 import {
   initPlayer,
   parseYouTube,
@@ -338,7 +338,24 @@ let net,
   loopRunning = false,
   verifiedPassHash = '',
   pendingRoomTarget = null,
-  activeLobbyFilter = 'all';
+  activeLobbyFilter = 'all',
+  lobbySearchQuery = '';
+let latestSiteStats = { onlineVisitors: 1, totalVisits: 1, brokerConnected: false };
+function renderSiteStats(s = latestSiteStats) {
+  latestSiteStats = s;
+  const onl = Math.max(1, Number(s.onlineVisitors) || 1).toLocaleString('vi-VN');
+  const tot = Math.max(1, Number(s.totalVisits) || 1).toLocaleString('vi-VN');
+  if ($('lobbyOnlineVisitors')) $('lobbyOnlineVisitors').textContent = onl;
+  if ($('lobbyTotalVisits')) $('lobbyTotalVisits').textContent = tot;
+  if ($('settingsOnlineVisitors')) $('settingsOnlineVisitors').textContent = onl;
+  if ($('settingsTotalVisits')) $('settingsTotalVisits').textContent = tot;
+  const hudEl = $('statVisitors');
+  if (hudEl) {
+    hudEl.textContent = `👁️ ${onl} · 📊 ${tot}`;
+    hudEl.title = `Đang truy cập toàn website: ${onl} người · Tổng lượt ghé thăm: ${tot} lượt`;
+  }
+}
+initSiteStats(stats => renderSiteStats(stats));
 const authorityUrl = new URLSearchParams(location.search).get('authority') || document.querySelector('meta[name="gh-authority"]')?.content || '';
 const authorityClient = new SeasonalAuthorityClient({
   baseUrl: authorityUrl,
@@ -923,6 +940,13 @@ document.querySelectorAll('.filter-chip').forEach(btn => {
   };
 });
 
+if ($('inSearchLobby')) {
+  $('inSearchLobby').oninput = e => {
+    lobbySearchQuery = (e.target.value || '').trim().toLowerCase();
+    renderLobbyRooms();
+  };
+}
+
 $('btnRefreshLobby').onclick = () => {
   lobby?.requestDiscover();
   renderLobbyRooms();
@@ -1082,11 +1106,18 @@ function renderLobbyRooms() {
     return b.count - a.count;
   });
 
-  const filtered = combined.filter(r => activeLobbyFilter === 'all' || r.theme === activeLobbyFilter);
+  const filtered = combined.filter(r => {
+    if (activeLobbyFilter !== 'all' && r.theme !== activeLobbyFilter) return false;
+    if (!lobbySearchQuery) return true;
+    const hay = `${r.title || ''} ${r.id || ''} ${r.hostName || ''}`.toLowerCase();
+    return hay.includes(lobbySearchQuery);
+  });
   box.innerHTML = '';
 
   if (!filtered.length) {
-    box.innerHTML = '<div class="hint" style="padding:18px;text-align:center">Chưa có phòng nào thuộc chủ đề này. Bạn hãy tạo phòng mới ở cột bên phải nhé!</div>';
+    box.innerHTML = lobbySearchQuery
+      ? `<div class="hint" style="padding:18px;text-align:center">Không tìm thấy phòng nào khớp với "<b>${escHtml(lobbySearchQuery)}</b>".</div>`
+      : '<div class="hint" style="padding:18px;text-align:center">Chưa có phòng nào thuộc chủ đề này. Bạn hãy tạo phòng mới ở cột bên phải nhé!</div>';
     return;
   }
 
@@ -1573,6 +1604,8 @@ function updateHostUI() {
 
 function renderSettingsModal() {
   if (!state || !net) return;
+  if ($('dlgSettings')?.classList.contains('hidden')) return;
+  renderSiteStats();
   const count = 1 + peers.size;
   if ($('settingsPlayerCount')) $('settingsPlayerCount').textContent = count;
   const hostBox = $('hostInfoBox');
@@ -3475,8 +3508,8 @@ function toggleSettingsModal(forceState = null) {
   if (shouldOpen) {
     closeVerticalDrawer();
     document.exitPointerLock?.();
-    renderSettingsModal();
     openDialog('dlgSettings');
+    renderSettingsModal();
   } else {
     closeDialog('dlgSettings');
   }
@@ -5104,6 +5137,11 @@ function loop(now) {
     rafId = requestAnimationFrame(loop);
     return;
   }
+  if (document.hidden) {
+    last = now;
+    rafId = requestAnimationFrame(loop);
+    return;
+  }
 
   try {
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -5289,11 +5327,11 @@ function loop(now) {
 
     // 6. Network Position Sync
     const cur = {
-      x: me.x,
-      y: me.y,
-      r: me.r,
+      x: Math.round(me.x * 1000) / 1000,
+      y: Math.round(me.y * 1000) / 1000,
+      r: Math.round(me.r * 100) / 100,
       a: me.loco,
-      h: me.h,
+      h: Math.round((me.h || 0) * 1000) / 1000,
       seatId: me.seatSlot?.id || null,
       lean: myLean,
       pose: myPose,

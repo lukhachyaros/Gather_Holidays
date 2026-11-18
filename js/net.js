@@ -28,7 +28,23 @@ function encodeLen(len) {
 
 function encodeStr(str) {
   const bytes = enc.encode(str);
-  return [(bytes.length >> 8) & 0xff, bytes.length & 0xff, ...bytes];
+  const out = new Uint8Array(2 + bytes.length);
+  out[0] = (bytes.length >> 8) & 0xff;
+  out[1] = bytes.length & 0xff;
+  out.set(bytes, 2);
+  return out;
+}
+
+function concatBytes(...chunks) {
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
 }
 
 function buildPacket(typeFlags, bodyBytes) {
@@ -41,7 +57,7 @@ function buildPacket(typeFlags, bodyBytes) {
 }
 
 // Lightweight native WebSocket MQTT v3.1.1 client (0 external dependencies, supports retain)
-function createMqttClient(brokerUrl, { onConnect, onMessage }) {
+function createMqttClient(brokerUrl, { onConnect, onMessage, onStatusChange }) {
   let ws = null;
   let connected = false;
   let closed = false;
@@ -62,7 +78,12 @@ function createMqttClient(brokerUrl, { onConnect, onMessage }) {
 
   function sendSubscribe(topic) {
     const id = (pktId = (pktId % 65000) + 1);
-    const body = [(id >> 8) & 0xff, id & 0xff, ...encodeStr(topic), 0x00];
+    const tBytes = encodeStr(topic);
+    const body = new Uint8Array(2 + tBytes.length + 1);
+    body[0] = (id >> 8) & 0xff;
+    body[1] = id & 0xff;
+    body.set(tBytes, 2);
+    body[2 + tBytes.length] = 0x00;
     sendRaw(buildPacket(0x82, body));
   }
 
@@ -85,14 +106,16 @@ function createMqttClient(brokerUrl, { onConnect, onMessage }) {
     }
 
     ws.onopen = () => {
-      const body = [
-        ...encodeStr('MQTT'),
-        0x04, // Protocol level 4 (3.1.1)
-        0x02, // Clean session
-        0x00,
-        0x28, // Keep-alive 40s
-        ...encodeStr(clientId),
-      ];
+      const body = concatBytes(
+        encodeStr('MQTT'),
+        new Uint8Array([
+          0x04, // Protocol level 4 (3.1.1)
+          0x02, // Clean session
+          0x00,
+          0x28, // Keep-alive 40s
+        ]),
+        encodeStr(clientId)
+      );
       sendRaw(buildPacket(0x10, body));
     };
 
@@ -117,6 +140,7 @@ function createMqttClient(brokerUrl, { onConnect, onMessage }) {
         if (pktType === 2) {
           // CONNACK
           connected = true;
+          onStatusChange?.(true);
           subs.forEach(t => sendSubscribe(t));
           while (queue.length) {
             const item = queue.shift();
@@ -141,8 +165,10 @@ function createMqttClient(brokerUrl, { onConnect, onMessage }) {
     };
 
     ws.onclose = () => {
+      const wasConnected = connected;
       connected = false;
       clearInterval(pingTimer);
+      if (wasConnected) onStatusChange?.(false);
       if (!closed) {
         reconnectTimer = setTimeout(connectWs, 2500);
       }
@@ -183,16 +209,30 @@ function createMqttClient(brokerUrl, { onConnect, onMessage }) {
   };
 }
 
-// Shared Multi-Broker Bus so Lobby and Room share fast connections
+// Shared Multi-Broker Bus so Lobby, Site Stats and Room share fast connections
 class MqttBus {
   constructor() {
     this.handlers = new Set();
+    this.statusHandlers = new Set();
     this.seenMids = new Set();
     this.clients = MQTT_BROKERS.map(url =>
       createMqttClient(url, {
         onMessage: (topic, text) => this._handleIncoming(topic, text),
+        onStatusChange: () => {
+          const online = this.isAnyConnected();
+          for (const fn of this.statusHandlers) fn(online);
+        },
       })
     );
+  }
+
+  onStatus(fn) {
+    this.statusHandlers.add(fn);
+    return () => this.statusHandlers.delete(fn);
+  }
+
+  isConnected() {
+    return this.isAnyConnected();
   }
 
   _handleIncoming(topic, text) {
@@ -533,6 +573,266 @@ export async function connect(roomId, handlers) {
         bc?.close();
       } catch {}
       bus?.publish(roomTopic, { type: '__leave', from: selfId }, false);
+    },
+  };
+}
+
+// ---------- Global Website Visitor Counter (Live Online + Persistent Total Visits) ----------
+const TOTAL_VISITS_KEY = 'gh_site_total_visits_v1';
+const RECENT_VIDS_KEY = 'gh_site_recent_vids_v1';
+const SESSION_VID_KEY = 'gh_vid';
+const SESSION_COUNTED_KEY = 'gh_site_session_counted_v1';
+const VISITOR_TTL_MS = 35000;
+
+export function initSiteStats(onChange) {
+  let selfVid = '';
+  try {
+    selfVid = sessionStorage.getItem(SESSION_VID_KEY) || '';
+    if (!selfVid) {
+      selfVid = 'v-' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+      sessionStorage.setItem(SESSION_VID_KEY, selfVid);
+    }
+  } catch {
+    selfVid = 'v-' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+  }
+
+  const presenceTopic = `${APP_PREFIX}/site/presence`;
+  const totalTopic = `${APP_PREFIX}/site/stats/total`;
+  const visitors = new Map([[selfVid, Date.now()]]);
+
+  let totalVisits = 0;
+  let recentVids = [];
+  try {
+    totalVisits = Math.max(0, parseInt(localStorage.getItem(TOTAL_VISITS_KEY) || '0', 10) || 0);
+    const parsedRecent = JSON.parse(localStorage.getItem(RECENT_VIDS_KEY) || '[]');
+    if (Array.isArray(parsedRecent)) recentVids = parsedRecent.slice(-40);
+  } catch {}
+
+  let sessionCounted = false;
+  try {
+    sessionCounted = sessionStorage.getItem(SESSION_COUNTED_KEY) === '1';
+  } catch {}
+
+  let countedAt = 0;
+  let collisionResolved = false;
+  let closed = false;
+  const bus = getBus();
+  let bc = null;
+
+  function saveTotalLocal() {
+    try {
+      localStorage.setItem(TOTAL_VISITS_KEY, String(totalVisits));
+      localStorage.setItem(RECENT_VIDS_KEY, JSON.stringify(recentVids.slice(-40)));
+    } catch {}
+  }
+
+  function pruneVisitors() {
+    const now = Date.now();
+    visitors.set(selfVid, now);
+    for (const [vid, ts] of visitors) {
+      if (vid !== selfVid && now - ts > VISITOR_TTL_MS) {
+        visitors.delete(vid);
+      }
+    }
+  }
+
+  function getStats() {
+    pruneVisitors();
+    const online = bus ? bus.isConnected() : false;
+    return {
+      onlineVisitors: Math.max(1, visitors.size),
+      totalVisits: Math.max(1, totalVisits),
+      brokerConnected: online,
+      connected: online,
+    };
+  }
+
+  let lastSig = '';
+  function emitChange(force = false) {
+    if (closed) return;
+    const stats = getStats();
+    const sig = `${stats.onlineVisitors}:${stats.totalVisits}:${stats.brokerConnected}`;
+    if (force || sig !== lastSig) {
+      lastSig = sig;
+      onChange?.(stats);
+    }
+  }
+
+  function publishTotal(byId = selfVid) {
+    const payload = {
+      count: totalVisits,
+      recent: recentVids.slice(-40),
+      by: byId,
+      ts: Date.now(),
+    };
+    saveTotalLocal();
+    try {
+      bc?.postMessage({ type: 'total', ...payload });
+    } catch {}
+    bus?.publish(totalTopic, payload, true);
+  }
+
+  function ensureCounted() {
+    if (closed || sessionCounted) return;
+    sessionCounted = true;
+    try {
+      sessionStorage.setItem(SESSION_COUNTED_KEY, '1');
+    } catch {}
+
+    if (!recentVids.includes(selfVid)) {
+      totalVisits = Math.max(totalVisits, 0) + 1;
+      recentVids = [...recentVids, selfVid].slice(-40);
+      countedAt = Date.now();
+      publishTotal(selfVid);
+    } else {
+      saveTotalLocal();
+    }
+    emitChange(true);
+  }
+
+  function handleTotalPayload(data) {
+    if (!data || typeof data.count !== 'number') return;
+    const inCount = Math.max(0, Math.floor(data.count));
+    const inRecent = Array.isArray(data.recent) ? data.recent : [];
+
+    const merged = new Set([...recentVids, ...inRecent]);
+    recentVids = [...merged].slice(-40);
+
+    const prevTotal = totalVisits;
+    if (inCount > totalVisits) {
+      totalVisits = inCount;
+    }
+
+    if (!sessionCounted) {
+      ensureCounted();
+      return;
+    }
+
+    if (
+      inCount === prevTotal &&
+      data.by &&
+      data.by !== selfVid &&
+      !inRecent.includes(selfVid) &&
+      !collisionResolved &&
+      Date.now() - countedAt < 15000 &&
+      selfVid > data.by
+    ) {
+      collisionResolved = true;
+      totalVisits += 1;
+      if (!recentVids.includes(selfVid)) {
+        recentVids = [...recentVids, selfVid].slice(-40);
+      }
+      publishTotal(selfVid);
+    } else {
+      saveTotalLocal();
+    }
+    emitChange();
+  }
+
+  function sendPresence(type, extra = {}) {
+    if (closed) return;
+    const msg = { type, vid: selfVid, ...extra };
+    try {
+      bc?.postMessage(msg);
+    } catch {}
+    bus?.publish(presenceTopic, msg, false);
+  }
+
+  function handlePresenceMsg(msg) {
+    if (!msg || !msg.vid || msg.vid === selfVid) return;
+    if (msg.type === 'ping') {
+      visitors.set(msg.vid, Date.now());
+      emitChange();
+    } else if (msg.type === 'ask') {
+      visitors.set(msg.vid, Date.now());
+      emitChange();
+      const delay = 60 + Math.floor(Math.random() * 260);
+      setTimeout(() => {
+        if (!closed) sendPresence('ping');
+      }, delay);
+    } else if (msg.type === 'bye') {
+      visitors.delete(msg.vid);
+      emitChange();
+    }
+  }
+
+  try {
+    bc = new BroadcastChannel('gh-site-stats-v1');
+    bc.onmessage = ev => {
+      const m = ev.data;
+      if (!m) return;
+      if (m.type === 'total') handleTotalPayload(m);
+      else handlePresenceMsg(m);
+    };
+  } catch {}
+
+  const onStorage = e => {
+    if (e.key === TOTAL_VISITS_KEY) {
+      const v = parseInt(e.newValue || '0', 10) || 0;
+      if (v > totalVisits) {
+        totalVisits = v;
+        emitChange();
+      }
+    } else if (e.key === RECENT_VIDS_KEY) {
+      try {
+        const arr = JSON.parse(e.newValue || '[]');
+        if (Array.isArray(arr)) {
+          recentVids = [...new Set([...recentVids, ...arr])].slice(-40);
+        }
+      } catch {}
+    }
+  };
+  window.addEventListener('storage', onStorage);
+
+  let unsubBus = null;
+  let unsubStatus = null;
+  if (bus) {
+    bus.subscribe(presenceTopic);
+    bus.subscribe(totalTopic);
+    unsubBus = bus.onMessage((topic, data) => {
+      if (topic === presenceTopic) {
+        handlePresenceMsg(data);
+      } else if (topic === totalTopic) {
+        handleTotalPayload(data);
+      }
+    });
+    unsubStatus = bus.onStatus(() => emitChange());
+  }
+
+  setTimeout(() => {
+    if (closed) return;
+    sendPresence('ask');
+    sendPresence('ping');
+  }, 80);
+
+  const countFallbackTimer = setTimeout(ensureCounted, 1200);
+  const heartbeatTimer = setInterval(() => sendPresence('ping'), 12000);
+  const pruneTimer = setInterval(() => emitChange(), 8000);
+
+  const onBye = () => {
+    sendPresence('bye');
+  };
+  window.addEventListener('pagehide', onBye);
+  window.addEventListener('beforeunload', onBye);
+
+  queueMicrotask(() => emitChange(true));
+
+  return {
+    getStats,
+    destroy() {
+      closed = true;
+      clearTimeout(countFallbackTimer);
+      clearInterval(heartbeatTimer);
+      clearInterval(pruneTimer);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('pagehide', onBye);
+      window.removeEventListener('beforeunload', onBye);
+      onBye();
+      unsubBus?.();
+      unsubStatus?.();
+      try {
+        bc?.close();
+      } catch {}
     },
   };
 }

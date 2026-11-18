@@ -47,27 +47,26 @@ import {
 export const TILE = 2; // meters per grid tile
 export const WALL_H = 1.6; // parkour-friendly wall height
 
-/** Recursively dispose all geometries & materials under an Object3D subtree. */
+/** Recursively dispose all non-shared geometries, materials & textures under an Object3D subtree. */
 function disposeSubtree(obj) {
   if (!obj) return;
+  const texKeys = [
+    'map', 'lightMap', 'bumpMap', 'normalMap', 'specularMap',
+    'envMap', 'alphaMap', 'aoMap', 'displacementMap',
+    'emissiveMap', 'gradientMap', 'metalnessMap', 'roughnessMap',
+  ];
   obj.traverse(child => {
-    if (child.geometry) child.geometry.dispose();
+    if (child.geometry && !child.geometry.userData?.shared) {
+      child.geometry.dispose();
+    }
     if (child.material) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       for (const m of mats) {
-        m.map?.dispose();
-        m.lightMap?.dispose();
-        m.bumpMap?.dispose();
-        m.normalMap?.dispose();
-        m.specularMap?.dispose();
-        m.envMap?.dispose();
-        m.alphaMap?.dispose();
-        m.aoMap?.dispose();
-        m.displacementMap?.dispose();
-        m.emissiveMap?.dispose();
-        m.gradientMap?.dispose();
-        m.metalnessMap?.dispose();
-        m.roughnessMap?.dispose();
+        if (!m || m.userData?.shared) continue;
+        for (const k of texKeys) {
+          const tex = m[k];
+          if (tex && !tex.userData?.shared) tex.dispose();
+        }
         m.dispose();
       }
     }

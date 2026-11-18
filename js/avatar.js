@@ -6,16 +6,22 @@ import { getFaceCanvasTexture } from './avatar_customizer.js';
 
 const HEIGHT = 1.72;
 const _headPos = new THREE.Vector3();
+let _speechLayer = null;
+const getSpeechLayer = () => _speechLayer || (_speechLayer = document.getElementById('speechLayer'));
 const clothingMapMaterials = new Map();
 const SKIRT_GEOMETRIES = {
   flared: new THREE.CylinderGeometry(0.22, 0.40, 0.38, 16, 1, false),
   party: new THREE.CylinderGeometry(0.24, 0.43, 0.46, 18, 1, false),
 };
+SKIRT_GEOMETRIES.flared.userData = { shared: true };
+SKIRT_GEOMETRIES.party.userData = { shared: true };
 export const loadCharacter = async () => true;
 
 function clothingMapMaterial(key, map, roughness) {
   if (!clothingMapMaterials.has(key)) {
-    clothingMapMaterials.set(key, new THREE.MeshStandardMaterial({ map, roughness }));
+    const m = new THREE.MeshStandardMaterial({ map, roughness });
+    m.userData = { shared: true };
+    clothingMapMaterials.set(key, m);
   }
   return clothingMapMaterials.get(key);
 }
@@ -1858,10 +1864,15 @@ export class Avatar {
     if (!this.bubbleEl) {
       this.bubbleEl = document.createElement('div');
       this.bubbleEl.className = 'speech-bubble';
-      document.getElementById('speechLayer')?.appendChild(this.bubbleEl);
+      getSpeechLayer()?.appendChild(this.bubbleEl);
+      this._bx = NaN;
+      this._by = NaN;
     }
     this.bubbleEl.textContent = t;
-    this.bubbleEl.style.display = 'block';
+    if (this._bubbleVis !== 'block') {
+      this.bubbleEl.style.display = 'block';
+      this._bubbleVis = 'block';
+    }
   }
 
   updateBubble(camera) {
@@ -1869,11 +1880,15 @@ export class Avatar {
     if (performance.now() > this.bubbleUntil) {
       this.bubbleEl.remove();
       this.bubbleEl = null;
+      this._bubbleVis = '';
       return;
     }
-    const layer = document.getElementById('speechLayer');
+    const layer = getSpeechLayer();
     if (!camera || !this.root.visible || layer?.classList.contains('safe-hidden')) {
-      this.bubbleEl.style.display = 'none';
+      if (this._bubbleVis !== 'none') {
+        this.bubbleEl.style.display = 'none';
+        this._bubbleVis = 'none';
+      }
       return;
     }
     _headPos.set(0, HEIGHT + 0.35, 0);
@@ -1881,21 +1896,42 @@ export class Avatar {
     _headPos.project(camera);
 
     if (_headPos.z > 1 || _headPos.z < -1) {
-      this.bubbleEl.style.display = 'none';
+      if (this._bubbleVis !== 'none') {
+        this.bubbleEl.style.display = 'none';
+        this._bubbleVis = 'none';
+      }
       return;
     }
     const sx = Math.round((_headPos.x * 0.5 + 0.5) * innerWidth);
     const sy = Math.round((-_headPos.y * 0.5 + 0.5) * innerHeight);
-    this.bubbleEl.style.display = 'block';
-    this.bubbleEl.style.left = `${sx}px`;
-    this.bubbleEl.style.top = `${sy}px`;
+    if (this._bubbleVis !== 'block') {
+      this.bubbleEl.style.display = 'block';
+      this._bubbleVis = 'block';
+    }
+    if (sx !== this._bx || sy !== this._by) {
+      this._bx = sx;
+      this._by = sy;
+      this.bubbleEl.style.transform = `translate3d(${sx}px, ${sy}px, 0) translate(-50%, -100%)`;
+    }
   }
 
   destroy() {
     if (this.bubbleEl) {
       this.bubbleEl.remove();
       this.bubbleEl = null;
+      this._bubbleVis = '';
     }
+    this.root?.traverse(child => {
+      if (child.geometry && !child.geometry.userData?.shared) {
+        child.geometry.dispose();
+      }
+      if (child.isSprite && child.material && !child.material.userData?.shared) {
+        if (child.material.map && !child.material.map.userData?.shared) {
+          child.material.map.dispose();
+        }
+        child.material.dispose();
+      }
+    });
     if (this.root.parent) {
       this.root.parent.remove(this.root);
     }

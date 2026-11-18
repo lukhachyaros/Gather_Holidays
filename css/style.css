@@ -499,7 +499,7 @@ kbd{background:#334155;border:1px solid #64748b;border-radius:4px;padding:1px 5p
   box-shadow:0 8px 24px rgba(0,0,0,0.55);
   pointer-events:none;
   user-select:none;
-  will-change:transform,left,top;
+  will-change:transform;
 }
 .speech-bubble::after{
   content:'';
@@ -2068,3 +2068,16 @@ body.matrix-active::after {
 /* Reaction-race timer */
 .seasonal-race-timer{height:10px;overflow:hidden;border:1px solid rgba(255,255,255,.2);border-radius:99px;background:rgba(2,6,23,.8)}
 .seasonal-race-timer-fill{height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,#22c55e,#facc15,#ef4444);transition:width .06s linear}
+
+/* Live Website Visitor Counter & Lobby Quick Search */
+.visitor-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;color:#bae6fd;background:rgba(14,165,233,0.14);border:1px solid rgba(56,189,248,0.35);white-space:nowrap}
+.visitor-pill b{color:#38bdf8;font-weight:800}
+.lobby-search-row{margin:8px 0 6px}
+.lobby-search-row input{width:100%;box-sizing:border-box;padding:8px 12px;border-radius:10px;border:1px solid rgba(148,163,184,0.28);background:rgba(15,23,42,0.72);color:#f8fafc;font-size:13px}
+.lobby-search-row input:focus{outline:none;border-color:#38bdf8;box-shadow:0 0 0 2px rgba(56,189,248,0.2)}
+.visitor-stat{color:#7dd3fc;font-weight:600;white-space:nowrap}
+.settings-visitor-box{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 12px;border-radius:10px;background:rgba(14,165,233,0.1);border:1px solid rgba(56,189,248,0.28);font-size:12.5px;color:#cbd5e1}
+.settings-visitor-box b{color:#38bdf8}
+@media (max-width:720px){
+  #statsCorner .visitor-stat{font-size:11px}
+}
