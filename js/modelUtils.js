@@ -1,10 +1,21 @@
 import * as THREE from 'three';
 
 const geoCache = new Map(), matCache = new Map();
-export const geo = (key, make) => { if (!geoCache.has(key)) geoCache.set(key, make()); return geoCache.get(key); };
+export const geo = (key, make) => {
+  if (!geoCache.has(key)) {
+    const g = make();
+    g.userData = { ...(g.userData || {}), shared: true };
+    geoCache.set(key, g);
+  }
+  return geoCache.get(key);
+};
 export const mat = (color, opts = {}) => {
   const k = color + JSON.stringify(opts);
-  if (!matCache.has(k)) matCache.set(k, new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05, ...opts }));
+  if (!matCache.has(k)) {
+    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05, ...opts });
+    m.userData = { ...(m.userData || {}), shared: true };
+    matCache.set(k, m);
+  }
   return matCache.get(k);
 };
 

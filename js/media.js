@@ -10,6 +10,8 @@ let player = null,
   isMuted = false,
   lastAdBypassAt = 0,
   initStarted = false,
+  ytContainerId = 'yt',
+  apiScriptLoaded = false,
   webKey = '';
 
 export function parseYouTube(input) {
@@ -151,17 +153,34 @@ export function bypassAdNow() {
   }
 }
 
+function ensureYouTubeApi() {
+  if (player || apiScriptLoaded) return;
+  if (window.YT?.Player) {
+    apiScriptLoaded = true;
+    create(ytContainerId);
+    return;
+  }
+  apiScriptLoaded = true;
+  const prev = window.onYouTubeIframeAPIReady;
+  window.onYouTubeIframeAPIReady = () => {
+    prev?.();
+    create(ytContainerId);
+  };
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  tag.async = true;
+  document.head.appendChild(tag);
+}
+
 export function initPlayer(containerId, onTrackEnded, onStateChange) {
   endedCb = onTrackEnded;
   stateChangeCb = onStateChange;
-  // Create the YouTube iframe only once (re-creating it on every room join left a zombie player playing audio)
+  ytContainerId = containerId || ytContainerId || 'yt';
   if (initStarted) return;
   initStarted = true;
-  if (window.YT?.Player) return create(containerId);
-  const tag = document.createElement('script');
-  tag.src = 'https://www.youtube.com/iframe_api';
-  document.head.appendChild(tag);
-  window.onYouTubeIframeAPIReady = () => create(containerId);
+  if (pending?.vid) {
+    ensureYouTubeApi();
+  }
 }
 
 function create(id) {
@@ -294,6 +313,7 @@ export function apply(media, force = false) {
     return;
   }
   setSurface('yt');
+  ensureYouTubeApi();
 
   if (!ready || !player) {
     pending = media;

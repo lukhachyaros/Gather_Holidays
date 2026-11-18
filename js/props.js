@@ -20,6 +20,7 @@ export function emojiTexture(e) {
     x.fillText(e, 64, 70);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
+    t.userData = { shared: true };
     texCache.set(e, t);
   }
   return texCache.get(e);
